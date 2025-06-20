@@ -1,66 +1,59 @@
 :root {
     /* Primary Brand Color */
-    --color-primary: #0d6efd;        /* Biru utama - Total Saldo */
+    --color-primary: #0d6efd; /* Biru utama - Total Saldo */
     --color-primary-light: #e7f1ff;
-  
+
     /* Success - Pemasukan */
-    --color-income: #198754;         /* Hijau - Pendapatan */
+    --color-income: #198754; /* Hijau - Pendapatan */
     --color-income-light: #d1e7dd;
-  
+
     /* Danger - Pengeluaran */
-    --color-expense: #dc3545;        /* Merah - Pengeluaran */
+    --color-expense: #dc3545; /* Merah - Pengeluaran */
     --color-expense-light: #f8d7da;
-  
+
     /* Warning - Laba / Laba Rugi */
-    --color-profit: #ffc107;         /* Kuning - Laba */
+    --color-profit: #ffc107; /* Kuning - Laba */
     --color-profit-light: #fff3cd;
-  
+
     /* Secondary / Rugi / Netral */
-    --color-neutral: #6c757d;        /* Abu - Rugi / info umum */
+    --color-neutral: #6c757d; /* Abu - Rugi / info umum */
     --color-neutral-light: #f1f3f5;
-  
+
     /* Info / Tambahan */
     --color-info: #0dcaf0;
     --color-info-light: #cff4fc;
-  
+
     /* Background & Text Base */
     --color-background: #f8f9fa;
     --color-text: #212529;
 }
-  
 
-body{
+body {
     margin: 0;
 }
 
 .card-income {
-background-color: var(--color-income);
-color: white;
+    background-color: var(--color-income);
+    color: white;
 }
 .card-expense {
-background-color: var(--color-expense);
-color: white;
+    background-color: var(--color-expense);
+    color: white;
 }
 .card-profit {
-background-color: var(--color-profit);
-color: white;
+    background-color: var(--color-profit);
+    color: white;
 }
 .card-total {
-background-color: var(--color-primary);
-color: white;
+    background-color: var(--color-primary);
+    color: white;
 }
-  
 
-
-
-#header{
+#header {
     background-color: #001f3f;
-   /* border-bottom: 1px solid #dee2e6;
+    /* border-bottom: 1px solid #dee2e6;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);*/
 }
-
-
-  
 
 .invoice-header-border {
     border-bottom: 3px solid #000000;
@@ -68,22 +61,21 @@ color: white;
     margin-bottom: 20px;
 }
 
-.navbar{
-    background-color: #F3F3F3;
+.navbar {
+    background-color: #f3f3f3;
     border-bottom: 1px solid #dee2e6;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.logo{
+.logo {
     width: 150px;
 }
 
-#app .breadcrumb{
+#app .breadcrumb {
     list-style: none;
 }
 
-#app .breadcrumb .breadcrumb-item a{
-   color: #6B8D21;
-   text-decoration: none;
+#app .breadcrumb .breadcrumb-item a {
+    color: #6b8d21;
+    text-decoration: none;
 }
-
