@@ -1,8 +1,3 @@
-import { renderBreadcrumb } from "../../components/breadcrumb.js";
-import { authService } from "../../services/authService.js";
-import { showToast } from "../../utils/toast.js";
-import { clearAllErrors, showValidationErrors } from "../../utils/form.js";
-
 export function render(target, params, query = {}, labelOverride = null) {
     // Sembunyikan header untuk halaman login
     const header = document.getElementById("header");
@@ -16,30 +11,29 @@ export function render(target, params, query = {}, labelOverride = null) {
                         <div class="row g-0">
                             <!-- Sisi Kiri - Empty Image Blank -->
                             <div class="col-md-6 d-flex align-items-center justify-content-center" style="min-height: 500px;">
-                            // Img Blank
                             </div>
                             
                             <!-- Sisi Kanan - Login Form -->
                             <div class="col-md-6 d-flex align-items-center">
                                 <div class="p-4 p-lg-5 w-100">
-                                    <div class="mb-4">
+                                    <div class="mb-3">
                                         <h2 class="fw-semibold mb-2">Please sign in</h2>
                                     </div>
                                     
                                     <form id="loginForm">
-                                        <div class="mb-3">
+                                        <div>
                                             <div>
-                                                <input type="email" class="form-control" id="email" name="email" placeholder="Email address" required>
+                                                <input type="email" class="border rounded-top border-bottom-0 w-75" style="padding: 11px;" id="email" name="email" placeholder="Email address" required>
                                             </div>
                                         </div>
                                         
-                                        <div class="mb-3">
+                                        <div class="mb-2">
                                             <div>
-                                                <input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
+                                                <input type="password" class="border rounded-bottom w-75" style="padding: 11px;" id="password" name="password" placeholder="Password" required>
                                             </div>
                                         </div>
                                         
-                                        <button type="submit" class="btn w-100 mb-3 fw-semibold" style="background: #6366f1; color: white; border-radius: 8px;">
+                                        <button type="submit" class="btn w-75" style="background: #1e2b59; color: white; padding: 11px;">
                                             <span>Sign in</span>
                                         </button>
                                     </form>
