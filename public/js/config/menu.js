@@ -22,74 +22,37 @@ export const ownerMenu = [
         ],
     },
     {
-        label: "Transaksi Keuangan",
-        icon: "bi-cash-stack",
-        children: [
-            {
-                label: "Pemasukan",
-                icon: "bi-arrow-down-circle",
-                children: [
-                    {
-                        label: "Semua Pemasukan",
-                        path: "/incomes",
-                        icon: "bi-dot",
-                    },
-                    {
-                        label: "Pemasukan Proyek",
-                        path: "/incomes/projects",
-                        icon: "bi-dot",
-                    },
-                    {
-                        label: "Pemasukan Lainnya",
-                        path: "/incomes/others",
-                        icon: "bi-dot",
-                    },
-                ],
-            },
-            {
-                label: "Pengeluaran",
-                icon: "bi-arrow-up-circle",
-                children: [
-                    {
-                        label: "Semua Pengeluaran",
-                        path: "/expenses",
-                        icon: "bi-dot",
-                    },
-                    {
-                        label: "Operasional Kantor",
-                        path: "/expenses/operational",
-                        icon: "bi-dot",
-                    },
-                    {
-                        label: "Gaji & Freelance",
-                        path: "/expenses/payroll",
-                        icon: "bi-dot",
-                    },
-                    {
-                        label: "Pengeluaran Proyek",
-                        path: "/expenses/project",
-                        icon: "bi-dot",
-                    },
-                ],
-            },
-            {
-                label: "Master Transaksi",
-                icon: "bi-folder2",
-                children: [
-                    {
-                        label: "Kategori Transaksi",
-                        path: "/transaction-categories",
-                        icon: "bi-dot",
-                    },
-                    {
-                        label: "Metode Pembayaran",
-                        path: "/payment-methods",
-                        icon: "bi-dot",
-                    },
-                ],
-            },
-        ],
-    },
+      label: "Transaksi Keuangan",
+      icon: "bi-cash-stack",
+      children: [
+          // Pemasukan
+          {
+              label: "Pemasukan",
+              path: "/incomes",
+              icon: "bi-arrow-down-circle",
+          },
+
+          // Pengeluaran
+          {
+              label: "Pengeluaran",
+              path: "/expenses",
+              icon: "bi-arrow-up-circle",
+          },
+          
+
+          // Master
+          {
+              label: "Kategori Transaksi",
+              path: "/transaction-categories",
+              icon: "bi-folder2",
+          },
+          {
+              label: "Metode Pembayaran",
+              path: "/payment-methods",
+              icon: "bi-folder2",
+          },
+      ],
+  },
     {
         label: "Kas & Rekening",
         icon: "bi-wallet2",
