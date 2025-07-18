@@ -265,4 +265,11 @@ export const routes = [
         label: "Login",
         component: () => import("../pages/auth/login.js"),
     },
+
+    // Profile
+    {
+        path: "/my-profile",
+        label: "My Profile",
+        component: () => import("../pages/profile/index.js"),
+    },
 ];

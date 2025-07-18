@@ -1,4 +1,4 @@
-import { renderNavbar } from './navbar.js';
+import { renderNavbar } from "./navbar.js";
 
 export function renderHeader(targetId = "header") {
     const container = document.getElementById(targetId);
@@ -24,7 +24,7 @@ export function renderHeader(targetId = "header") {
                                 <i class="bi bi-person-vcard"></i>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end">
-                                <li><a class="dropdown-item" href="#">Profil Saya</a></li>
+                                <li><a class="dropdown-item" href="/my-profile">Profil Saya</a></li>
                                 <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-box-arrow-right me-2"></i> Logout</a></li>
                             </ul>
                         </div>
