@@ -272,4 +272,16 @@ export const routes = [
         label: "My Profile",
         component: () => import("../pages/profile/index.js"),
     },
+
+    // Kol
+    {
+        path: "/kol",
+        label: "KOL",
+        component: () => import("../pages/kol/index.js"),
+    },
+    {
+        path: "/kol/registration",
+        label: "KOL Registration",
+        component: () => import("../pages/kol/registration.js"),
+    },
 ];

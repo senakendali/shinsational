@@ -28,8 +28,14 @@
     --color-text: #212529;
 }
 
+html {
+    scroll-behavior: smooth;
+}
+
 body {
     margin: 0;
+    padding: 0;
+    box-sizing: border-box;
 }
 
 .card-income {
@@ -78,4 +84,24 @@ body {
 #app .breadcrumb .breadcrumb-item a {
     color: #6b8d21;
     text-decoration: none;
+}
+
+.step-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background-color: #f8f9fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+.step-card {
+    height: 100%;
+    transition: all 0.3s ease;
+}
+.step-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
