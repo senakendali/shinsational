@@ -5,12 +5,12 @@ export function render(target, params, query = {}, labelOverride = null) {
 
     target.innerHTML = `
         <!-- Banner Section -->
-        <section class="min-vh-100 d-flex align-items-center bg-black">
+        <section class="min-vh-100 d-flex align-items-center bg-black" style="background-image: url('/images/hero-bg.png'); background-size: cover; background-position: center; height: 100vh;">
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-lg-5 col-md-8">
-                    <div class=" ">
-                        <h1 class="display-1 fw-bold text-light">Welcome Creator !</h1>
+                    <div class="text-center ">
+                        <h1 class="display-1 fw-bold text-light">Welcome &nbsp; &nbsp; Creator !</h1>
                     </div>
                 </div>
             </div>
@@ -29,7 +29,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                                 <div class="step-icon mx-auto mb-3">
                                     <i class="bi bi-box-arrow-in-left"></i>
                                 </div>
-                                <p class="card-text">Sign Up + Otorisasi Sosial Media</p>
+                                <p class="fw-medium">Sign Up + Otorisasi Sosial Media</p>
                             </div>
                         </div>
                     </div>
@@ -40,7 +40,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                                 <div class="step-icon mx-auto mb-3">
                                     <i class="bi bi-clipboard-check"></i>
                                 </div>
-                                <p class="card-text">Approval Registrasi oleh Client/Agency</p>
+                                <p class="fw-medium">Approval Registrasi oleh Client/Agency</p>
                             </div>
                         </div>
                     </div>
@@ -51,7 +51,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                                 <div class="step-icon mx-auto mb-3">
                                     <i class="bi bi-upload"></i>
                                 </div>
-                                <p class="card-text">Upload Draft Content</p>
+                                <p class="fw-medium">Upload Draft Content</p>
                             </div>
                         </div>
                     </div>
@@ -62,7 +62,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                                 <div class="step-icon mx-auto mb-3">
                                     <i class="bi bi-arrow-left-right"></i>
                                 </div>
-                                <p class="card-text">Feedback/Approval Draft</p>
+                                <p class="fw-medium">Feedback/Approval Draft</p>
                             </div>
                         </div>
                     </div>
@@ -73,7 +73,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                                 <div class="step-icon mx-auto mb-3">
                                     <i class="bi bi-file-earmark-arrow-up"></i>
                                 </div>
-                                <p class="card-text">Upload Final Content</p>
+                                <p class="fw-medium">Upload Final Content</p>
                             </div>
                         </div>
                     </div>
@@ -84,7 +84,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                                 <div class="step-icon mx-auto mb-3">
                                     <i class="bi bi-link"></i>
                                 </div>
-                                <p class="card-text">Upload Link Post + Bukti Tayang</p>
+                                <p class="fw-medium">Upload Link Post + Bukti Tayang</p>
                             </div>
                         </div>
                     </div>
@@ -95,7 +95,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                                 <div class="step-icon mx-auto mb-3">
                                     <i class="bi bi-receipt"></i>
                                 </div>
-                                <p class="card-text">Upload invoice pembelian + Bukti tayang R&R*</p>
+                                <p class="fw-medium">Upload invoice pembelian + Bukti tayang R&R*</p>
                             </div>
                         </div>
                     </div>
@@ -106,7 +106,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                                 <div class="step-icon mx-auto mb-3">
                                     <i class="bi bi-card-list"></i>
                                 </div>
-                                <p class="card-text">Monitor Report Personal</p>
+                                <p class="fw-medium">Monitor Report Personal</p>
                             </div>
                         </div>
                     </div>

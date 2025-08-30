@@ -3,11 +3,11 @@ export function renderHeaderKol(targetId = "header") {
     if (!container) return;
 
     container.innerHTML = `
-        <div class="fixed-top ">
-                <nav class="navbar navbar-expand-lg px-3 bg-black border-bottom border-black ">
+        <div class="fixed-top" ">
+                <nav class="navbar navbar-expand-lg px-3 bg-black border-bottom border-black" style="height: 160px;">
                     <!-- Logo on the left -->
                     <a class="navbar-brand" href="/">
-                        <img src="/images/loreal.png" alt="Logo" class=" align-text-top" style="height: 140px; width: 150px; ">
+                        <img src="/images/loreal-2.png" alt="Logo" >
                     </a>
                     
                     <!-- Mobile menu button -->
@@ -17,7 +17,7 @@ export function renderHeaderKol(targetId = "header") {
                     
                     <!-- Navigation links on the right -->
                     <div class="collapse navbar-collapse" id="kolNavbar">
-                        <ul class="navbar-nav ms-auto mb-2 mb-lg-0 fs-5 ">
+                        <ul class="navbar-nav ms-auto mb-2 mb-lg-0 fs-6 fw-semibold">
                             <li class="nav-item ">
                                 <a class="nav-link text-light" href="#guidelines" id="guidelines-link">Guidelines</a>
                             </li>
