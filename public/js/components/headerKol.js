@@ -4,7 +4,7 @@ export function renderHeaderKol(targetId = "header") {
 
     container.innerHTML = `
         <div class="fixed-top" ">
-                <nav class="navbar navbar-expand-lg px-3 bg-black border-bottom border-black" style="height: 160px;">
+                <nav class="navbar navbar-expand-lg px-3" id="mainNavbar" style="height: 160px;">
                     <!-- Logo on the left -->
                     <a class="navbar-brand" href="/">
                         <img src="/images/loreal-2.png" alt="Logo" >
@@ -44,6 +44,20 @@ export function renderHeaderKol(targetId = "header") {
                 </nav>
         </div>
     `;
+
+    const navbar = document.getElementById("mainNavbar");
+    const handleScroll = () => {
+        if (window.scrollY > 50) {
+            navbar.style.background = "#000";
+            navbar.style.borderBottom = "1px solid rgba(255, 255, 255, 0.1)";
+        } else {
+            navbar.style.background = "transparent";
+            navbar.style.borderBottom = "none";
+        }
+    };
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll);
 
     const guidelinesLink = document.getElementById("guidelines-link");
     if (guidelinesLink) {
