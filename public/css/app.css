@@ -101,6 +101,7 @@ body {
     box-sizing: border-box;
     font-family: "Campton", -apple-system, BlinkMacSystemFont, "Segoe UI",
         Roboto, sans-serif;
+    text-transform: uppercase;
 }
 
 .card-income {

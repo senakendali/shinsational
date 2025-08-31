@@ -12,6 +12,12 @@ export function render(target, params, query = {}, labelOverride = null) {
                     <div class="text-center ">
                         <h1 class="display-1 fw-bold text-light">Welcome &nbsp; &nbsp; Creator !</h1>
                     </div>
+                    <button type="submit" class="btn btn-lg w-100 py-2 mb-3" style="background-color: #FF0854; color: white;">
+                        <div class="d-flex justify-content-center align-items-center">
+                            <i class="bi bi-tiktok me-2"></i>
+                            <span class="fw-semibold fs-6">SIGN IN WITH TIKTOK</span>
+                        </div>
+                    </button>
                 </div>
             </div>
         </div>
