@@ -86,7 +86,7 @@ class TikTokAuthController extends Controller
         // ambil profil user
         $userResp = Http::withToken($tokenData['access_token'])
             ->get(self::USERINFO_URL, [
-                'fields' => 'open_id,username,display_name,avatar_url',
+                'fields' => 'open_id,display_name,avatar_url,profile_deep_link,bio_description',
             ]);
 
         if (!$userResp->ok()) {
