@@ -38,6 +38,15 @@ Route::get('/project-terms/{id}/download-invoice', [InvoiceController::class, 'd
 // Influencer Registration
 Route::post('/influencer-registrations', [InfluencerRegistrationController::class, 'store']);
 
+// TikTok
+Route::get('/me/tiktok', function (Request $request) {
+    return response()->json([
+        'tiktok_user_id' => session('tiktok_user_id'),
+        'tiktok_username' => session('tiktok_username'),
+        'tiktok_full_name' => session('tiktok_full_name'),
+    ]);
+});
+
 
 
 
