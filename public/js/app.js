@@ -1,6 +1,8 @@
-import { renderHeader } from './components/header.js';
+//import { renderHeader } from './components/header.js';
 import { routes } from './config/routes.js';
 import { showLoader, hideLoader } from './components/loader.js';
+import { installNavbarBackgroundController, applyNavbarBackgroundNow } from './components/headerScroll.js';
+
 
 function adjustAppPadding() {
   const header = document.querySelector(".shrinkable-navbar");
@@ -36,8 +38,10 @@ function matchRoute(pathname) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  renderHeader();
+  //renderHeader();
   setTimeout(() => requestAnimationFrame(adjustAppPadding), 50);
+
+  installNavbarBackgroundController();
 
   const content = document.getElementById("app");
 
@@ -70,6 +74,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
   
       requestAnimationFrame(adjustAppPadding);
+
+      applyNavbarBackgroundNow();
     } catch (err) {
       console.error("[SPA] Gagal load halaman:", path, err);
       alert(`❌ Gagal load halaman: ${path}\n\n${err}`);

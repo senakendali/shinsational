@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ClientController;
 use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectTermController;
 use App\Http\Controllers\Api\InvoiceController;
+use App\Http\Controllers\Api\InfluencerRegistrationController;
 
 
 // Client
@@ -32,6 +33,10 @@ Route::delete('/project-terms/{id}', [ProjectTermController::class, 'destroy']);
 
 // Invoice
 Route::get('/project-terms/{id}/download-invoice', [InvoiceController::class, 'download']);
+
+
+// Influencer Registration
+Route::post('/influencer-registrations', [InfluencerRegistrationController::class, 'store']);
 
 
 

@@ -1,4 +1,5 @@
 import { renderHeaderKol } from "../../components/headerKol.js";
+import { renderFooterKol } from "../../components/footerKol.js";
 
 export function render(target, params, query = {}, labelOverride = null) {
     renderHeaderKol("header");
@@ -8,16 +9,23 @@ export function render(target, params, query = {}, labelOverride = null) {
         <section class="min-vh-100 d-flex align-items-center bg-black" style="background-image: url('/images/hero-bg.png'); background-size: cover; background-position: center; height: 100vh;">
         <div class="container">
             <div class="row justify-content-center">
-                <div class="col-lg-5 col-md-8">
+                <div class="col-lg-8 col-md-8">
                     <div class="text-center ">
-                        <h1 class="display-1 fw-bold text-light">Welcome &nbsp; &nbsp; Creator !</h1>
+                        <h1 class="display-1 fw-bold text-light text-uppercase">
+                        <span>Welcome</span> 
+                        <span>Creator</span>
+                        </h1>
+                        
+                        <p class="text-light">Connect your TikTok account to start tracking your post performance<br/> and monitor views, likes, and comments in real time.</p>
                     </div>
-                    <button type="submit" class="btn btn-lg w-100 py-2 mb-3" style="background-color: #FF0854; color: white;">
-                        <div class="d-flex justify-content-center align-items-center">
-                            <i class="bi bi-tiktok me-2"></i>
-                            <span class="fw-semibold fs-6">SIGN IN WITH TIKTOK</span>
-                        </div>
-                    </button>
+                    <div class="d-flex justify-content-center align-items-center mt-2">
+                        <button type="submit" class="btn btn-lg py-2 mb-3" style="background-color: #FF0854; color: white;">
+                            <div class="d-flex justify-content-center align-items-center">
+                                <i class="bi bi-tiktok me-2"></i>
+                                <span class="fw-semibold fs-6">SIGN IN WITH TIKTOK</span>
+                            </div>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -120,4 +128,6 @@ export function render(target, params, query = {}, labelOverride = null) {
             </div>
         </section>
     `;
+
+   renderFooterKol();
 }
