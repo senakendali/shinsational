@@ -1,4 +1,4 @@
-// services/... (file page kamu)
+// pages/registration.js
 import { renderHeaderKol } from "../../components/headerKol.js";
 import { renderFooterKol } from "../../components/footerKol.js";
 
@@ -23,7 +23,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                 <form id="registerForm" class="needs-validation w-100" novalidate>
                   <div class="d-flex flex-column gap-3">
 
-                    <input type="hidden" name="tiktok_user_id" id="tiktok_user_id" value="050385">
+                    <input type="hidden" name="tiktok_user_id" id="tiktok_user_id" value="">
 
                     <div class="form-group">
                       <input type="text" class="form-control form-control-lg" id="full_name" name="full_name" placeholder="Full Name" required>
@@ -35,7 +35,6 @@ export function render(target, params, query = {}, labelOverride = null) {
                       <div class="invalid-feedback"></div>
                     </div>
 
-                    <!-- saran: gunakan type="tel" agar +62 tidak dipotong; tetap ikutin tipe kamu jika perlu -->
                     <div class="form-group">
                       <input type="tel" class="form-control form-control-lg" id="phone" name="phone" placeholder="Phone Number" required>
                       <div class="invalid-feedback"></div>
@@ -67,12 +66,14 @@ export function render(target, params, query = {}, labelOverride = null) {
 
   renderFooterKol();
 
-  // ------- handler form ----------
   const form = document.getElementById('registerForm');
+  const tiktokIdEl = document.getElementById('tiktok_user_id');
+  const fullNameEl = document.getElementById('full_name');
+  const usernameEl = document.getElementById('tiktok_username');
 
   const clearErrors = () => {
     form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
-    form.querySelectorAll('.invalid-feedback').forEach(el => el.textContent = '');
+    form.querySelectorAll('.invalid-feedback').forEach(el => (el.textContent = ''));
   };
 
   const showErrors = (errors = {}) => {
@@ -85,6 +86,29 @@ export function render(target, params, query = {}, labelOverride = null) {
     });
   };
 
+  // Prefill dari session TikTok (hasil OAuth callback)
+  (async () => {
+    try {
+      const res = await fetch('/api/me/tiktok', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      if (data?.tiktok_user_id) {
+        tiktokIdEl.value = data.tiktok_user_id;
+      }
+      if (data?.tiktok_username) {
+        usernameEl.value = data.tiktok_username;
+        usernameEl.readOnly = true; // biar gak diubah manual
+      }
+      if (data?.tiktok_full_name) {
+        fullNameEl.value = data.tiktok_full_name;
+      }
+    } catch (e) {
+      console.warn('Prefill TikTok session failed:', e);
+    }
+  })();
+
+  // Submit handler
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     clearErrors();
@@ -99,10 +123,8 @@ export function render(target, params, query = {}, labelOverride = null) {
       hideLoader();
       showToast('success', resp.message || 'Registrasi berhasil disimpan.');
       form.reset();
-
     } catch (err) {
       hideLoader();
-      // err: { status, message, errors }
       if (err.status === 422 && err.errors) {
         showErrors(err.errors);
       } else {
