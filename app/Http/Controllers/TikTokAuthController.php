@@ -114,6 +114,8 @@ class TikTokAuthController extends Controller
 
         $data = $userResp->json()['data'] ?? [];
         $user = $data['user'] ?? $data;
+        
+        return json_encode($user);
 
         // 3) Simpan ke session untuk prefill frontend
         session([
