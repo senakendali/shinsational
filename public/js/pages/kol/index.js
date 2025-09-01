@@ -19,13 +19,13 @@ export function render(target, params, query = {}, labelOverride = null) {
                         <p class="text-light">Connect your TikTok account to start tracking your post performance<br/> and monitor views, likes, and comments in real time.</p>
                     </div>
                     <div class="d-flex justify-content-center align-items-center mt-2">
-                        <button type="submit" class="btn btn-lg py-2 mb-3" style="background-color: #FF0854; color: white;">
+                        <a href="/auth/tiktok/redirect" class="btn btn-lg py-2 mb-3" style="background-color: #FF0854; color: white;">
                             <div class="d-flex justify-content-center align-items-center">
                                 <i class="bi bi-tiktok me-2"></i>
                                 <span class="fw-semibold fs-6">SIGN IN WITH TIKTOK</span>
                             </div>
-                        </button>
-                    </div>
+                        </a>
+                    </div> 
                 </div>
             </div>
         </div>
