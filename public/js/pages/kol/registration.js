@@ -89,7 +89,7 @@ export function render(target, params, query = {}, labelOverride = null) {
   // Prefill dari session TikTok (hasil OAuth callback)
   (async () => {
     try {
-      const res = await fetch('/api/me/tiktok', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+      const res = await fetch('/me/tiktok', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
       if (!res.ok) return;
 
       const data = await res.json();
