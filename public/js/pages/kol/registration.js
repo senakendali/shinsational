@@ -96,10 +96,7 @@ export function render(target, params, query = {}, labelOverride = null) {
       if (data?.tiktok_user_id) {
         tiktokIdEl.value = data.tiktok_user_id;
       }
-      if (data?.tiktok_username) {
-        usernameEl.value = data.tiktok_username;
-        usernameEl.readOnly = true; // biar gak diubah manual
-      }
+      
       if (data?.tiktok_full_name) {
         fullNameEl.value = data.tiktok_full_name;
       }
