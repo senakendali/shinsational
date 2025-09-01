@@ -5,8 +5,8 @@ export function render(target, params, query = {}, labelOverride = null) {
     renderHeaderKol("header");
 
     target.innerHTML = `
-        <!-- Banner Section -->
-        <section class="min-vh-100 d-flex align-items-center bg-black" style="background-image: url('/images/hero-bg.png'); background-size: cover; background-position: center; height: 100vh;">
+        <!-- Hero Section -->
+        <section class=" min-vh-100 py-5 py-lg-0 d-flex align-items-center bg-black" style="background-image: url('/images/hero-bg.png'); background-size: cover; background-position: center;">
         <div class="container">
             <div class="row justify-content-center">
                 <div class="col-lg-8 col-md-8">
@@ -29,98 +29,102 @@ export function render(target, params, query = {}, labelOverride = null) {
                 </div>
             </div>
         </div>
-    </section>
+        </section>
 
         <!-- Guidelines Section -->
-        <section class="min-vh-100 d-flex align-items-center bg-light" >
+        <section class="py-5 py-lg-4 mt-lg-2 d-flex align-items-center bg-light" >
             <div class="container pt-5">
-                <h2 class="text-center mb-5" >How It Works</h2>
-                <div class="row g-4">
-                    <div class="col-md-3" id="guidelines">
-                        <div class="card h-100 border-0 shadow-sm step-card">
-                            <div class="card-body text-center p-4">
-                                <p class="card-title fw-semibold">Step 1</p>
-                                <div class="step-icon mx-auto mb-3">
-                                    <i class="bi bi-box-arrow-in-left"></i>
+                <h2 class="text-center mb-5">How It Works</h2>
+                <div class="row">
+                    <div class="col-12">
+                        <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4">
+                            <div class="col">
+                                <div class="card h-100 border-0 shadow-sm step-card">
+                                    <div class="card-body text-center p-4">
+                                        <p class="card-title fw-semibold">Step 1</p>
+                                        <div class="step-icon mx-auto mb-3">
+                                            <i class="bi bi-box-arrow-in-left"></i>
+                                        </div>
+                                        <p class="fw-medium">Sign Up + Otorisasi Sosial Media</p>
+                                    </div>
                                 </div>
-                                <p class="fw-medium">Sign Up + Otorisasi Sosial Media</p>
                             </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card h-100 border-0 shadow-sm step-card">
-                            <div class="card-body text-center p-4">
-                                <p class="card-title fw-semibold">Step 2</p>
-                                <div class="step-icon mx-auto mb-3">
-                                    <i class="bi bi-clipboard-check"></i>
+                            <div class="col">
+                                <div class="card h-100  border-0 shadow-sm step-card">
+                                    <div class="card-body text-center p-4">
+                                        <p class="card-title fw-semibold">Step 2</p>
+                                        <div class="step-icon mx-auto mb-3">
+                                            <i class="bi bi-clipboard-check"></i>
+                                        </div>
+                                        <p class="fw-medium">Approval Registrasi oleh Client/Agency</p>
+                                    </div>
                                 </div>
-                                <p class="fw-medium">Approval Registrasi oleh Client/Agency</p>
                             </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card h-100 border-0 shadow-sm step-card">
-                            <div class="card-body text-center p-4">
-                                <p class="card-title fw-semibold">Step 3</p>
-                                <div class="step-icon mx-auto mb-3">
-                                    <i class="bi bi-upload"></i>
+                            <div class="col">
+                                <div class="card h-100 border-0 shadow-sm step-card">
+                                    <div class="card-body text-center p-4">
+                                        <p class="card-title fw-semibold">Step 3</p>
+                                        <div class="step-icon mx-auto mb-3">
+                                            <i class="bi bi-upload"></i>
+                                        </div>
+                                        <p class="fw-medium">Upload Draft Content</p>
+                                    </div>
                                 </div>
-                                <p class="fw-medium">Upload Draft Content</p>
                             </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card h-100 border-0 shadow-sm step-card">
-                            <div class="card-body text-center p-4">
-                                <p class="card-title fw-semibold">Step 4</p>
-                                <div class="step-icon mx-auto mb-3">
-                                    <i class="bi bi-arrow-left-right"></i>
+                            <div class="col">
+                                <div class="card h-100 border-0 shadow-sm step-card">
+                                    <div class="card-body text-center p-4">
+                                        <p class="card-title fw-semibold">Step 4</p>
+                                        <div class="step-icon mx-auto mb-3">
+                                            <i class="bi bi-arrow-left-right"></i>
+                                        </div>
+                                        <p class="fw-medium">Feedback/Approval Draft</p>
+                                    </div>
                                 </div>
-                                <p class="fw-medium">Feedback/Approval Draft</p>
                             </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card h-100 border-0 shadow-sm step-card">
-                            <div class="card-body text-center p-4">
-                                <p class="card-title fw-semibold">Step 5</p>
-                                <div class="step-icon mx-auto mb-3">
-                                    <i class="bi bi-file-earmark-arrow-up"></i>
+                            <div class="col">
+                                <div class="card h-100 border-0 shadow-sm step-card">
+                                    <div class="card-body text-center p-4">
+                                        <p class="card-title fw-semibold">Step 5</p>
+                                        <div class="step-icon mx-auto mb-3">
+                                            <i class="bi bi-file-earmark-arrow-up"></i>
+                                        </div>
+                                        <p class="fw-medium">Upload Final Content</p>
+                                    </div>
                                 </div>
-                                <p class="fw-medium">Upload Final Content</p>
                             </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card h-100 border-0 shadow-sm step-card">
-                            <div class="card-body text-center p-4">
-                                <p class="card-title fw-semibold">Step 6</p>
-                                <div class="step-icon mx-auto mb-3">
-                                    <i class="bi bi-link"></i>
+                            <div class="col">
+                                <div class="card h-100 border-0 shadow-sm step-card">
+                                    <div class="card-body text-center p-4">
+                                        <p class="card-title fw-semibold">Step 6</p>
+                                        <div class="step-icon mx-auto mb-3">
+                                            <i class="bi bi-link"></i>
+                                        </div>
+                                        <p class="fw-medium">Upload Link Post + Bukti Tayang</p>
+                                    </div>
                                 </div>
-                                <p class="fw-medium">Upload Link Post + Bukti Tayang</p>
                             </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card h-100 border-0 shadow-sm step-card">
-                            <div class="card-body text-center p-4">
-                                <p class="card-title fw-semibold">Step 7</p>
-                                <div class="step-icon mx-auto mb-3">
-                                    <i class="bi bi-receipt"></i>
+                            <div class="col">
+                                <div class="card h-100 border-0 shadow-sm step-card">
+                                    <div class="card-body text-center p-4">
+                                        <p class="card-title fw-semibold">Step 7</p>
+                                        <div class="step-icon mx-auto mb-3">
+                                            <i class="bi bi-receipt"></i>
+                                        </div>
+                                        <p class="fw-medium">Upload invoice pembelian + Bukti tayang R&R*</p>
+                                    </div>
                                 </div>
-                                <p class="fw-medium">Upload invoice pembelian + Bukti tayang R&R*</p>
                             </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card h-100 border-0 shadow-sm step-card">
-                            <div class="card-body text-center p-4">
-                                <p class="card-title fw-semibold">Step 8</p>
-                                <div class="step-icon mx-auto mb-3">
-                                    <i class="bi bi-card-list"></i>
+                            <div class="col">
+                                <div class="card h-100 border-0 shadow-sm step-card">
+                                    <div class="card-body text-center p-4">
+                                        <p class="card-title fw-semibold">Step 8</p>
+                                        <div class="step-icon mx-auto mb-3">
+                                            <i class="bi bi-card-list"></i>
+                                        </div>
+                                        <p class="fw-medium">Monitor Report Personal</p>
+                                    </div>
                                 </div>
-                                <p class="fw-medium">Monitor Report Personal</p>
                             </div>
                         </div>
                     </div>
@@ -129,5 +133,5 @@ export function render(target, params, query = {}, labelOverride = null) {
         </section>
     `;
 
-   renderFooterKol();
+    renderFooterKol();
 }
