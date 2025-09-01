@@ -101,7 +101,7 @@ body {
     box-sizing: border-box;
     font-family: "Campton", -apple-system, BlinkMacSystemFont, "Segoe UI",
         Roboto, sans-serif;
-    text-transform: uppercase;
+    
 }
 
 .card-income {
@@ -123,9 +123,42 @@ body {
 
 #header {
     background-color: #001f3f;
+    text-transform: uppercase;
     /* border-bottom: 1px solid #dee2e6;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);*/
 }
+
+.page-section {
+    padding-top: 180px;
+}
+
+.page-section p{
+    font-size: 15px;
+}
+
+.page-section ul li{
+    font-size: 15px;
+}
+
+/* css */
+
+
+/* navbar state */
+.navbar.is-solid {
+  background: #000 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+}
+.navbar.is-transparent {
+  background: transparent !important;
+  border-bottom: none !important;
+}
+
+/* lock solid untuk non-/kol supaya nggak berubah saat scroll */
+.navbar.is-locked-solid {
+  background: #000 !important;
+  border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+}
+
 
 .invoice-header-border {
     border-bottom: 3px solid #000000;

@@ -10,7 +10,7 @@ export function showLoader() {
         loader.style.height = "5px";
         loader.style.zIndex = "9999";
         loader.style.transition = "width 0.4s ease-out";
-        loader.style.background = "linear-gradient(90deg, #001f3f, #002b5c , #002b5c)";
+        loader.style.background = "linear-gradient(to right, orange 30%, transparent 50%, orange 70%)";
         loader.style.backgroundSize = "200% 100%";
         loader.style.animation = "gradientShift 1s linear infinite";
         document.body.appendChild(loader);

@@ -6,6 +6,18 @@ export const routes = [
         component: () => import("../pages/dashboard.js"),
     },
 
+    {
+        path: "/terms-and-conditions",
+        label: "Term and Conditions",
+        component: () => import("../pages/terms/index.js"),
+    },
+
+    {
+        path: "/privacy-policy",
+        label: "Privacy Policy",
+        component: () => import("../pages/privacy/index.js"),
+    },
+
     // Proyek
     {
         path: "/projects",
@@ -280,7 +292,7 @@ export const routes = [
         component: () => import("../pages/kol/index.js"),
     },
     {
-        path: "/kol/registration",
+        path: "/registration",
         label: "KOL Registration",
         component: () => import("../pages/kol/registration.js"),
     },

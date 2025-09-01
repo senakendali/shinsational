@@ -19,15 +19,18 @@ export function renderHeaderKol(targetId = "header") {
                     <div class="collapse navbar-collapse" id="kolNavbar">
                         <ul class="navbar-nav ms-auto mb-2 mb-lg-0 fs-6 fw-semibold">
                             <li class="nav-item ">
+                                <a href="/kol" class="nav-link text-light app-link">Home</a>
+                            </li>
+                            <li class="nav-item ">
                                 <a class="nav-link text-light" href="#guidelines" id="guidelines-link">Guidelines</a>
                             </li>
-                            <li class="nav-item">
+                            <!--li class="nav-item">
                                 <a class="nav-link text-light" href="/kol/registration">Registration</a>
                             </li>
                             
                             <li class="nav-item dropdown">
                                 <a class="nav-link dropdown-toggle d-flex align-items-center text-light" href="#" id="profileDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="bi bi-person-circle me-1"></i>
+                                    
                                     <span>Profile</span>
                                 </a>
                                 <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
@@ -38,7 +41,7 @@ export function renderHeaderKol(targetId = "header") {
                                         <i class="bi bi-box-arrow-right me-2"></i>Logout
                                     </a></li>
                                 </ul>
-                            </li>
+                            </li-->
                         </ul>
                     </div>
                 </nav>
@@ -46,18 +49,37 @@ export function renderHeaderKol(targetId = "header") {
     `;
 
     const navbar = document.getElementById("mainNavbar");
-    const handleScroll = () => {
-        if (window.scrollY > 50) {
-            navbar.style.background = "#000";
-            navbar.style.borderBottom = "1px solid rgba(255, 255, 255, 0.1)";
-        } else {
-            navbar.style.background = "transparent";
-            navbar.style.borderBottom = "none";
-        }
-    };
 
-    handleScroll();
-    window.addEventListener("scroll", handleScroll);
+    
+
+    function setBlack() {
+        navbar.style.background = "#000";
+        navbar.style.borderBottom = "1px solid rgba(255, 255, 255, 0.1)";
+    }
+
+    function setTransparent() {
+        navbar.style.background = "transparent";
+        navbar.style.borderBottom = "none";
+    }
+
+    // Cek URL
+    if (location.pathname.startsWith("/kol")) {
+        // Mode KOL → transparan awal, berubah saat scroll
+        const handleScroll = () => {
+            if (window.scrollY > 50) {
+                setBlack();
+            } else {
+                setTransparent();
+            }
+        };
+
+        handleScroll();
+        window.addEventListener("scroll", handleScroll);
+    } else {
+        // Bukan halaman /kol → selalu hitam
+        setBlack();
+    }
+
 
     const guidelinesLink = document.getElementById("guidelines-link");
     if (guidelinesLink) {
