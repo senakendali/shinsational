@@ -55,12 +55,11 @@ class TikTokAuthController extends Controller
         $code  = $request->get('code');
         $state = $request->get('state');
 
-        // validasi state
         if ($state !== $request->session()->pull('tiktok_state')) {
             return response()->json(['error' => 'Invalid state'], 400);
         }
 
-        // tukar code -> access_token (redirect_uri HARUS SAMA persis dgn di redirect())
+        // 1) Exchange code -> token
         $tokenResp = Http::asForm()->post(self::TOKEN_URL, [
             'client_key'    => self::CLIENT_KEY,
             'client_secret' => self::CLIENT_SECRET,
@@ -70,11 +69,12 @@ class TikTokAuthController extends Controller
         ]);
 
         if (!$tokenResp->ok()) {
-            Log::error('tiktok_token_error', [
+            \Log::error('tiktok_token_error', [
                 'sent_redirect' => self::REDIRECT_URI,
                 'status'        => $tokenResp->status(),
                 'body'          => $tokenResp->json(),
             ]);
+
             return response()->json([
                 'error'   => 'Failed to exchange token',
                 'details' => $tokenResp->json(),
@@ -83,33 +83,55 @@ class TikTokAuthController extends Controller
 
         $tokenData = $tokenResp->json();
 
-        // ambil profil user
+        // (opsional) Cek apakah scope mengandung user.info.basic
+        $scopesStr = $tokenData['scope'] ?? '';
+        if (stripos($scopesStr, 'user.info.basic') === false) {
+            \Log::warning('tiktok_scope_missing_user_info_basic', ['scopes' => $scopesStr]);
+            return response()->json([
+                'error'   => 'Missing required scope: user.info.basic',
+                'details' => ['scopes' => $scopesStr],
+            ], 403);
+        }
+
+        // 2) Fetch user info (PASTIKAN fields valid, username TIDAK ada di v2)
         $userResp = Http::withToken($tokenData['access_token'])
+            ->withHeaders(['Accept' => 'application/json'])
             ->get(self::USERINFO_URL, [
                 'fields' => 'open_id,display_name,avatar_url,profile_deep_link,bio_description',
             ]);
 
         if (!$userResp->ok()) {
-            Log::error('tiktok_userinfo_error', [
+            $body = $userResp->json();
+            \Log::error('tiktok_userinfo_error', [
                 'status' => $userResp->status(),
-                'body'   => $userResp->json(),
+                'body'   => $body,
             ]);
-            return response()->json(['error' => 'Failed to fetch user info'], 500);
+
+            // Bikin pesan yang lebih informatif di front-end
+            $msg = $body['message']
+                ?? ($body['error']['message'] ?? 'Failed to fetch user info');
+
+            // Kalau 403, biasanya sandbox/whitelist atau scope
+            if ($userResp->status() === 403) {
+                $msg .= ' (403). Make sure the TikTok account is whitelisted for Sandbox and scope user.info.basic is granted.';
+            }
+
+            return response()->json(['error' => $msg, 'details' => $body], 500);
         }
 
-        $user = $userResp->json()['data'] ?? [];
+        $data = $userResp->json()['data'] ?? [];
+        // Struktur seringnya: ['data' => [ 'user' => { ... } ]] atau langsung di data
+        $user = $data['user'] ?? $data;
 
-        // simpan ke session untuk prefill di frontend
+        // Simpan ke session untuk prefill
         session([
             'tiktok_user_id'   => $user['open_id']      ?? null,
-            'tiktok_username'  => $user['username']     ?? null,
+            // NOTE: v2 tidak expose username → jangan diset dari user['username']
             'tiktok_full_name' => $user['display_name'] ?? null,
-            // kalau perlu simpan token:
-            // 'tiktok_access_token'  => $tokenData['access_token'] ?? null,
-            // 'tiktok_refresh_token' => $tokenData['refresh_token'] ?? null,
+            'tiktok_profile_link' => $user['profile_deep_link'] ?? null,
         ]);
 
-        // kembali ke SPA
         return redirect('/registration?connected=tiktok');
     }
+
 }
