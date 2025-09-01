@@ -5,108 +5,111 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class TikTokAuthController extends Controller
 {
+    // === KONSTAN (langsung di controller) ===
+    private const CLIENT_KEY     = 'sbaw61e5w3i3r6tlbj';
+    private const CLIENT_SECRET  = 'okcUviuPUQLzYmiNxc9CTCqfWExo0bAm';
+    private const REDIRECT_URI   = 'https://btlcpdtracker.senstech.id/auth/tiktok/callback';
+
+    private const AUTH_URL       = 'https://www.tiktok.com/v2/auth/authorize/';
+    private const TOKEN_URL      = 'https://open.tiktokapis.com/v2/oauth/token/';
+    private const USERINFO_URL   = 'https://open.tiktokapis.com/v2/user/info/';
+    private const SCOPES         = 'user.info.basic,video.list';
+
+    /**
+     * /auth/tiktok/redirect
+     */
     public function redirect(Request $request)
     {
-        $clientKey    = 'sbaw61e5w3i3r6tlbj';
-        $redirectUri  = urlencode(config('https://btlcpdtracker.senstech.id/auth/tiktok/callback'));
-        $state        = Str::random(16); // simpan ke session biar bisa divalidasi di callback
+        $state = Str::random(24);
+        $request->session()->put('tiktok_state', $state);
 
-        session(['tiktok_oauth_state' => $state]);
-
-        $scopes = 'user.info.basic,video.list';
-
-        $url = "https://www.tiktok.com/v2/auth/authorize/?" . http_build_query([
-            'client_key'    => $clientKey,
+        // NOTE: redirect_uri dikirim RAW (jangan urlencode manual)
+        $params = [
+            'client_key'    => self::CLIENT_KEY,
             'response_type' => 'code',
-            'scope'         => $scopes,
-            'redirect_uri'  => config('services.tiktok.redirect_uri'),
+            'scope'         => self::SCOPES,
+            'redirect_uri'  => self::REDIRECT_URI,
             'state'         => $state,
+        ];
+
+        $url = self::AUTH_URL . '?' . http_build_query($params);
+
+        // optional: bantu debug kalau mismatch
+        Log::info('tiktok_auth_url', [
+            'built_redirect' => self::REDIRECT_URI,
+            'full_url'       => $url,
         ]);
 
         return redirect()->away($url);
     }
 
-
-
+    /**
+     * /auth/tiktok/callback
+     */
     public function callback(Request $request)
     {
         $code  = $request->get('code');
         $state = $request->get('state');
 
-        if ($state !== session('tiktok_oauth_state')) {
+        // validasi state
+        if ($state !== $request->session()->pull('tiktok_state')) {
             return response()->json(['error' => 'Invalid state'], 400);
         }
 
-        // tukar code -> access_token
-        $response = Http::asForm()->post('https://open.tiktokapis.com/v2/oauth/token/', [
-            'client_key'    => 'sbaw61e5w3i3r6tlbj',
-            'client_secret' => 'okcUviuPUQLzYmiNxc9CTCqfWExo0bAm',
+        // tukar code -> access_token (redirect_uri HARUS SAMA persis dgn di redirect())
+        $tokenResp = Http::asForm()->post(self::TOKEN_URL, [
+            'client_key'    => self::CLIENT_KEY,
+            'client_secret' => self::CLIENT_SECRET,
             'code'          => $code,
             'grant_type'    => 'authorization_code',
-            'redirect_uri'  => 'https://btlcpdtracker.senstech.id/auth/tiktok/callback',
+            'redirect_uri'  => self::REDIRECT_URI,
         ]);
 
-        if (!$response->ok()) {
-            return response()->json(['error' => 'Failed to fetch access token', 'details' => $response->json()], 500);
+        if (!$tokenResp->ok()) {
+            Log::error('tiktok_token_error', [
+                'sent_redirect' => self::REDIRECT_URI,
+                'status'        => $tokenResp->status(),
+                'body'          => $tokenResp->json(),
+            ]);
+            return response()->json([
+                'error'   => 'Failed to exchange token',
+                'details' => $tokenResp->json(),
+            ], 500);
         }
 
-        $tokenData = $response->json();
+        $tokenData = $tokenResp->json();
 
         // ambil profil user
         $userResp = Http::withToken($tokenData['access_token'])
-            ->get('https://open.tiktokapis.com/v2/user/info/', [
-                'fields' => 'open_id,username,display_name',
+            ->get(self::USERINFO_URL, [
+                'fields' => 'open_id,username,display_name,avatar_url',
             ]);
 
         if (!$userResp->ok()) {
+            Log::error('tiktok_userinfo_error', [
+                'status' => $userResp->status(),
+                'body'   => $userResp->json(),
+            ]);
             return response()->json(['error' => 'Failed to fetch user info'], 500);
         }
 
-        $user = $userResp->json()['data'];
+        $user = $userResp->json()['data'] ?? [];
 
-        // simpan ke session
+        // simpan ke session untuk prefill di frontend
         session([
-            'tiktok_user_id' => $user['open_id'] ?? null,
-            'tiktok_username' => $user['username'] ?? null,
+            'tiktok_user_id'   => $user['open_id']      ?? null,
+            'tiktok_username'  => $user['username']     ?? null,
             'tiktok_full_name' => $user['display_name'] ?? null,
+            // kalau perlu simpan token:
+            // 'tiktok_access_token'  => $tokenData['access_token'] ?? null,
+            // 'tiktok_refresh_token' => $tokenData['refresh_token'] ?? null,
         ]);
 
-        // redirect balik ke SPA
-        return redirect('/registration');
-    }
-
-    public function callback__(Request $request)
-    {
-        $code  = $request->get('code');
-        $state = $request->get('state');
-
-        // validate state
-        if ($state !== session('tiktok_oauth_state')) {
-            return response()->json(['error' => 'Invalid state'], 400);
-        }
-
-        // tukar code -> access_token
-        $response = Http::asForm()->post('https://open.tiktokapis.com/v2/oauth/token/', [
-            'client_key'    => 'sbaw61e5w3i3r6tlbj',
-            'client_secret' => 'okcUviuPUQLzYmiNxc9CTCqfWExo0bAm',
-            'code'          => $code,
-            'grant_type'    => 'authorization_code',
-            'redirect_uri'  => 'https://btlcpdtracker.senstech.id/auth/tiktok/callback',
-        ]);
-
-        if (!$response->ok()) {
-            return response()->json(['error' => 'Failed to fetch access token', 'details' => $response->json()], 500);
-        }
-
-        $data = $response->json();
-
-        // simpan token, misalnya ke DB atau session
-        // session(['tiktok_access_token' => $data['access_token']]);
-
-        // redirect balik ke SPA (frontend)
+        // kembali ke SPA
         return redirect('/registration?connected=tiktok');
     }
 }
