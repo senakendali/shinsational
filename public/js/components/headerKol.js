@@ -9,8 +9,8 @@ export function renderHeaderKol(targetId = "header") {
                         <div class="w-100 d-flex justify-content-between align-items-center">
                             <!-- Logo on the left -->
                             
-                            <a class="navbar-brand mx-auto mx-lg-0" href="/">
-                                <img src="/images/loreal-2.png" alt="Logo" class="img-fluid" style="max-height: 160px;">
+                            <a class="navbar-brand mx-auto mx-lg-0 app-link p-2" href="/kol">
+                                <img src="/images/logo-white.png" alt="Logo" class="img-fluid" style="max-height: 120px;">
                             </a>
                             
                             <!-- Mobile menu button -->
