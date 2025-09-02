@@ -1,8 +1,11 @@
-//import { renderHeader } from './components/header.js';
-import { routes } from './config/routes.js';
+// import { renderHeader } from './components/header.js'; // tetap off
+// HAPUS import routes statis
+// import { routes } from './config/routes.js';
+
 import { showLoader, hideLoader } from './components/loader.js';
 import { installNavbarBackgroundController, applyNavbarBackgroundNow } from './components/headerScroll.js';
 
+let routes = []; // akan diisi setelah dynamic import
 
 function adjustAppPadding() {
   const header = document.querySelector(".shrinkable-navbar");
@@ -37,44 +40,57 @@ function matchRoute(pathname) {
   return null;
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  //renderHeader();
+document.addEventListener("DOMContentLoaded", async () => {
+  // renderHeader();
   setTimeout(() => requestAnimationFrame(adjustAppPadding), 50);
 
   installNavbarBackgroundController();
 
   const content = document.getElementById("app");
+  const v = window.BUILD_VERSION || Date.now();
+
+  // 🔥 Dynamic import untuk routes.js dengan version
+  try {
+    const mod = await import(`/js/config/routes.js?v=${v}`);
+    // Expect `export const routes = [...]` dari routes.js
+    routes = mod.routes || [];
+  } catch (err) {
+    console.error("[SPA] Gagal load routes.js:", err);
+    content.innerHTML = `<h4>Gagal memuat konfigurasi routes</h4>`;
+    return;
+  }
 
   async function loadPage(path) {
     showLoader();
-  
+
     const url = new URL(path, location.origin);
     const pathname = url.pathname;
     const query = Object.fromEntries(url.searchParams.entries());
     const match = matchRoute(pathname) || matchRoute("/dashboard");
-  
+
     const content = document.getElementById("app");
     content.innerHTML = ""; // reset agar tidak nimbun form/index
-  
+
     if (!match) {
       content.innerHTML = `<h4>404 - Halaman <code>${path}</code> tidak ditemukan</h4>`;
       return hideLoader();
     }
-  
+
     const { route, params } = match;
-  
+
     try {
-      const module = await route.component();
-      
-      // ⬇️ Berikan label ke render (biar renderBreadcrumb bisa pakai)
+      // ⬇️ route.component sebaiknya melakukan dynamic import page dengan `?v=${v}` di dalam routes.js
+      // Di sini kita pass `v` kalau route.component ingin memakainya
+      const module = await route.component(v);
+
+      // Berikan label ke render (biar renderBreadcrumb bisa pakai)
       await module.render(content, params, query, route.label);
-  
+
       if (location.pathname + location.search !== path) {
         history.pushState({}, "", path);
       }
-  
-      requestAnimationFrame(adjustAppPadding);
 
+      requestAnimationFrame(adjustAppPadding);
       applyNavbarBackgroundNow();
     } catch (err) {
       console.error("[SPA] Gagal load halaman:", path, err);
@@ -84,9 +100,6 @@ document.addEventListener("DOMContentLoaded", () => {
       hideLoader();
     }
   }
-  
-  
-  
 
   // Untuk back/forward
   window.addEventListener("popstate", () => {

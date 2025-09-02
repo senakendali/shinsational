@@ -1,9 +1,9 @@
-// /js/pages/kol/home.js
+// /js/pages/kol/index.js
 export function render(target, params, query = {}, labelOverride = null) {
   const v = window.BUILD_VERSION || Date.now();
-  console.log('[Page render] v=', v);
+  console.log('[kol/index render] v=', v);
 
-  // Render konten dulu (boleh sebelum import komponen)
+  // Render konten dulu
   target.innerHTML = `
     <!-- Hero Section -->
     <section class="min-vh-100 py-5 py-lg-0 d-flex align-items-center bg-black"
@@ -127,19 +127,19 @@ export function render(target, params, query = {}, labelOverride = null) {
     </section>
   `;
 
-  // Import komponen TANPA await
+  // Import komponen TANPA await (biar router nggak perlu async)
   Promise.all([
     import(`/js/components/headerKol.js?v=${v}`),
     import(`/js/components/footerKol.js?v=${v}`)
   ])
-  .then(([headerMod, footerMod]) => {
-    const { renderHeaderKol } = headerMod;
-    const { renderFooterKol } = footerMod;
+    .then(([headerMod, footerMod]) => {
+      const { renderHeaderKol } = headerMod;
+      const { renderFooterKol } = footerMod;
 
-    renderHeaderKol('header');
-    renderFooterKol();
-  })
-  .catch(err => {
-    console.error('[Import components failed]', err);
-  });
+      renderHeaderKol('header');
+      renderFooterKol();
+    })
+    .catch(err => {
+      console.error('[Import components failed]', err);
+    });
 }

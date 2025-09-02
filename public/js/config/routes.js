@@ -1,4 +1,4 @@
-const BUILD_ID = window.APP_BUILD_ID || Date.now();
+const BUILD_ID = window.BUILD_VERSION || Date.now();
 export const routes = [
     // Dashboard
     {
