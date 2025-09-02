@@ -1,10 +1,10 @@
 // /js/pages/kol/index.js
 export function render(target, params, query = {}, labelOverride = null) {
-  const v = window.BUILD_VERSION || Date.now();
-  console.log('[kol/index render] v=', v);
+    const v = window.BUILD_VERSION || Date.now();
+    console.log("[kol/index render] v=", v);
 
-  // Render konten dulu
-  target.innerHTML = `
+    // Render konten dulu
+    target.innerHTML = `
     <!-- Hero Section -->
     <section class="min-vh-100 py-5 py-lg-0 d-flex align-items-center bg-black"
              style="background-image: url('/images/hero-bg.png?v=${v}'); background-size: cover; background-position: center;">
@@ -36,8 +36,8 @@ export function render(target, params, query = {}, labelOverride = null) {
 
     <!-- Guidelines Section -->
     <section class="py-5 py-lg-4 mt-lg-2 d-flex align-items-center bg-light">
-      <div class="container pt-5" id="guidelines">
-        <h2 class="text-center mb-5">How It Works</h2>
+      <div class="container pt-5" >
+        <h2 class="text-center mb-5" id="guidelines">How It Works</h2>
         <div class="row">
           <div class="col-12">
             <div class="row row-cols-1 row-cols-md-2 row-cols-lg-4 g-4">
@@ -127,19 +127,19 @@ export function render(target, params, query = {}, labelOverride = null) {
     </section>
   `;
 
-  // Import komponen TANPA await (biar router nggak perlu async)
-  Promise.all([
-    import(`/js/components/headerKol.js?v=${v}`),
-    import(`/js/components/footerKol.js?v=${v}`)
-  ])
-    .then(([headerMod, footerMod]) => {
-      const { renderHeaderKol } = headerMod;
-      const { renderFooterKol } = footerMod;
+    // Import komponen TANPA await (biar router nggak perlu async)
+    Promise.all([
+        import(`/js/components/headerKol.js?v=${v}`),
+        import(`/js/components/footerKol.js?v=${v}`),
+    ])
+        .then(([headerMod, footerMod]) => {
+            const { renderHeaderKol } = headerMod;
+            const { renderFooterKol } = footerMod;
 
-      renderHeaderKol('header');
-      renderFooterKol();
-    })
-    .catch(err => {
-      console.error('[Import components failed]', err);
-    });
+            renderHeaderKol("header");
+            renderFooterKol();
+        })
+        .catch((err) => {
+            console.error("[Import components failed]", err);
+        });
 }
