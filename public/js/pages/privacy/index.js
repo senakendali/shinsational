@@ -1,5 +1,8 @@
-import { renderHeaderKol } from "../../components/headerKol.js";
-import { renderFooterKol } from "../../components/footerKol.js";
+const v = window.BUILD_VERSION;
+
+const { renderHeaderKol }  = await import(`../../components/headerKol.js?v=${v}`);
+const { renderFooterKol }  = await import(`../../components/footerKol.js?v=${v}`);
+
 
 export function render(target, params, query = {}, labelOverride = null) {
     renderHeaderKol("header");

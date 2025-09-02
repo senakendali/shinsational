@@ -1,8 +1,10 @@
-// pages/registration.js
-import { renderHeaderKol } from "../../components/headerKol.js";
-import { renderFooterKol } from "../../components/footerKol.js";
+const v = window.BUILD_VERSION;
 
-import { influencerService } from '../../services/influencerRegistrationService.js';
+const { renderHeaderKol }  = await import(`../../components/headerKol.js?v=${v}`);
+const { renderFooterKol }  = await import(`../../components/footerKol.js?v=${v}`);
+
+
+import { influencerService } from '../../services/influencerRegistrationService.js?v=${v}';
 import { showLoader, hideLoader } from '../../components/loader.js';
 import { showToast } from '../../utils/toast.js';
 
