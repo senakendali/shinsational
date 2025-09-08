@@ -61,13 +61,52 @@ export function renderHeaderKol(targetId = "header") {
     if (guidelinesLink) {
         guidelinesLink.addEventListener("click", (e) => {
             e.preventDefault();
+
+            // If not on the /kol page, navigate there first with hash
+            if (!window.location.pathname.endsWith("/kol")) {
+                window.location.href = "/kol#guidelines";
+                return;
+            }
+
+            // If already on /kol page, just scroll to the section
             const targetElement = document.getElementById("guidelines");
             if (targetElement) {
                 window.scrollTo({
                     top: targetElement.offsetTop - 200,
                     behavior: "smooth",
                 });
+                // Update URL without page reload
+                history.pushState(null, "", "#guidelines");
             }
         });
+    }
+
+    // Handle page load with hash
+    const handleHashNavigation = () => {
+        if (
+            window.location.hash === "#guidelines" &&
+            (window.location.pathname === "/kol" ||
+                window.location.pathname === "/kol/")
+        ) {
+            const targetElement = document.getElementById("guidelines");
+            if (targetElement) {
+                // Small delay to ensure the page is fully rendered
+                setTimeout(() => {
+                    window.scrollTo({
+                        top: targetElement.offsetTop - 200,
+                        behavior: "smooth",
+                    });
+                }, 100);
+            }
+        }
+    };
+
+    // Check if document is already loaded
+    if (document.readyState === "loading") {
+        // Still loading, wait for DOMContentLoaded
+        document.addEventListener("DOMContentLoaded", handleHashNavigation);
+    } else {
+        // DOM is already ready
+        handleHashNavigation();
     }
 }
