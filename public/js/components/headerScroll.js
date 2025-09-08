@@ -2,15 +2,15 @@
 let _navbarScrollInstalled = false;
 
 function getNavbar() {
-  return document.getElementById("mainNavbar");
+    return document.getElementById("mainNavbar");
 }
 function solid(nav) {
-  nav.classList.add("is-solid");
-  nav.classList.remove("is-transparent");
+    nav.classList.add("is-solid");
+    nav.classList.remove("is-transparent");
 }
 function transparent(nav) {
-  nav.classList.add("is-transparent");
-  nav.classList.remove("is-solid");
+    nav.classList.add("is-transparent");
+    nav.classList.remove("is-solid");
 }
 
 /**
@@ -19,23 +19,23 @@ function transparent(nav) {
  * - selain : selalu hitam (lock)
  */
 export function applyNavbarBackgroundNow() {
-  const nav = getNavbar();
-  if (!nav) return;
+    const nav = getNavbar();
+    if (!nav) return;
 
-  const isKol = location.pathname.startsWith("/kol");
+    const isKol = location.pathname === "/kol";
 
-  // Bersihkan lock dulu, nanti dipasang lagi bila non-/kol
-  nav.classList.remove("is-locked-solid");
+    // Bersihkan lock dulu, nanti dipasang lagi bila non-/kol
+    nav.classList.remove("is-locked-solid");
 
-  if (isKol) {
-    // /kol → tergantung scroll
-    if (window.scrollY > 50) solid(nav);
-    else transparent(nav);
-  } else {
-    // Non-/kol → selalu hitam + lock
-    nav.classList.add("is-locked-solid");
-    solid(nav);
-  }
+    if (isKol) {
+        // /kol → tergantung scroll
+        if (window.scrollY > 50) solid(nav);
+        else transparent(nav);
+    } else {
+        // Non-/kol → selalu hitam + lock
+        nav.classList.add("is-locked-solid");
+        solid(nav);
+    }
 }
 
 /**
@@ -43,34 +43,34 @@ export function applyNavbarBackgroundNow() {
  * Listener ini selalu cek path saat scroll, jadi aman walau route berganti.
  */
 export function installNavbarBackgroundController() {
-  if (_navbarScrollInstalled) return;
-  _navbarScrollInstalled = true;
+    if (_navbarScrollInstalled) return;
+    _navbarScrollInstalled = true;
 
-  window.addEventListener(
-    "scroll",
-    () => {
-      const nav = getNavbar();
-      if (!nav) return;
+    window.addEventListener(
+        "scroll",
+        () => {
+            const nav = getNavbar();
+            if (!nav) return;
 
-      // Jika sedang di-lock (non-/kol), paksa tetap solid
-      if (nav.classList.contains("is-locked-solid")) {
-        solid(nav);
-        return;
-      }
+            // Jika sedang di-lock (non-/kol), paksa tetap solid
+            if (nav.classList.contains("is-locked-solid")) {
+                solid(nav);
+                return;
+            }
 
-      // Mode /kol → toggle berdasarkan scroll
-      if (location.pathname.startsWith("/kol")) {
-        if (window.scrollY > 50) solid(nav);
-        else transparent(nav);
-      } else {
-        // Safety net: non-/kol tetap solid
-        nav.classList.add("is-locked-solid");
-        solid(nav);
-      }
-    },
-    { passive: true }
-  );
+            // Mode /kol → toggle berdasarkan scroll
+            if (location.pathname.startsWith("/kol")) {
+                if (window.scrollY > 50) solid(nav);
+                else transparent(nav);
+            } else {
+                // Safety net: non-/kol tetap solid
+                nav.classList.add("is-locked-solid");
+                solid(nav);
+            }
+        },
+        { passive: true }
+    );
 
-  // Apply state awal
-  applyNavbarBackgroundNow();
+    // Apply state awal
+    applyNavbarBackgroundNow();
 }

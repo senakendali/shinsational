@@ -38,7 +38,8 @@ export const routes = [
     {
         path: "/project-terms",
         label: "Project Terms",
-        component: () => import("../pages/project-terms/index.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/project-terms/index.js?v=" + BUILD_ID),
     },
     {
         path: "/project-terms/create",
@@ -53,7 +54,8 @@ export const routes = [
     {
         path: "/project-terms/:id/invoice",
         label: "Invoice",
-        component: () => import("../pages/project-terms/invoice.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/project-terms/invoice.js?v=" + BUILD_ID),
     },
 
     // Klien
@@ -119,7 +121,8 @@ export const routes = [
     {
         path: "/expenses/operational",
         label: "Operational Expenses",
-        component: () => import("../pages/expenses/operational.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/expenses/operational.js?v=" + BUILD_ID),
     },
     {
         path: "/expenses/payroll",
@@ -136,34 +139,40 @@ export const routes = [
     {
         path: "/transaction-categories",
         label: "Transaction Categories",
-        component: () => import("../pages/transaction-categories/index.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/transaction-categories/index.js?v=" + BUILD_ID),
     },
     {
         path: "/transaction-categories/create",
         label: "Create Transaction Category",
-        component: () => import("../pages/transaction-categories/form.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/transaction-categories/form.js?v=" + BUILD_ID),
     },
     {
         path: "/transaction-categories/:id/edit",
         label: "Edit Transaction Category",
-        component: () => import("../pages/transaction-categories/form.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/transaction-categories/form.js?v=" + BUILD_ID),
     },
 
     // Metode Pembayaran
     {
         path: "/payment-methods",
         label: "Payment Methods",
-        component: () => import("../pages/payment-methods/index.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/payment-methods/index.js?v=" + BUILD_ID),
     },
     {
         path: "/payment-methods/create",
         label: "Create Payment Method",
-        component: () => import("../pages/payment-methods/form.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/payment-methods/form.js?v=" + BUILD_ID),
     },
     {
         path: "/payment-methods/:id/edit",
         label: "Edit Payment Method",
-        component: () => import("../pages/payment-methods/form.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/payment-methods/form.js?v=" + BUILD_ID),
     },
 
     // Rekening & Mutasi
@@ -197,7 +206,8 @@ export const routes = [
     {
         path: "/reports/profit-loss",
         label: "Profit & Loss Report",
-        component: () => import("../pages/reports/profit-loss.js?v=" + BUILD_ID),
+        component: () =>
+            import("../pages/reports/profit-loss.js?v=" + BUILD_ID),
     },
     {
         path: "/reports/cashflow",
@@ -296,5 +306,10 @@ export const routes = [
         path: "/registration",
         label: "KOL Registration",
         component: () => import("../pages/kol/registration.js?v=" + BUILD_ID),
+    },
+    {
+        path: "/kol/my-profile/:id",
+        label: "KOL Profile",
+        component: () => import("../pages/kol/profile.js?v=" + BUILD_ID),
     },
 ];
