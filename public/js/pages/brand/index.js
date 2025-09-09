@@ -26,7 +26,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   // Tambah → ke form create
   const addBtn = document.getElementById('addNew');
   addBtn.addEventListener('click', () => {
-    history.pushState(null, '', '/brands/create');
+    history.pushState(null, '', '/admin/brands/create');
     window.dispatchEvent(new PopStateEvent('popstate'));
   });
 

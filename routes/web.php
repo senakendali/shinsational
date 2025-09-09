@@ -29,3 +29,13 @@ Route::get('/me/tiktok', function (Request $request) {
 // ==== Catch-all SPA (tetap paling bawah) ====
 Route::get('/{any}', [AppController::class, 'index'])
     ->where('any', '^(?!api|js|css|images|fonts|storage|vendor).*$');
+
+
+
+    // Admin SPA (prefix /admin)
+Route::get('/admin/{any?}', [AppController::class, 'admin'])
+    ->where('any', '^(?!api|js|css|images|fonts|storage|vendor).*$');
+
+// KOL SPA (root)
+Route::get('/{any?}', [AppController::class, 'index'])
+    ->where('any', '^(?!api|js|css|images|fonts|storage|vendor|admin).*$');

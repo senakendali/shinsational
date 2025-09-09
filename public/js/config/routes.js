@@ -7,24 +7,24 @@ export const routes = [
     },
     // Dashboard
     {
-        path: "/dashboard",
+        path: "/admin/dashboard",
         label: "Dashboard",
         component: () => import("../pages/dashboard.js?v=" + BUILD_ID),
     },
 
     // Klien
     {
-        path: "/brands",
+        path: "/admin/brands",
         label: "Brand",
         component: () => import("../pages/brand/index.js?v=" + BUILD_ID),
     },
     {
-        path: "/brands/create",
+        path: "/admin/brands/create",
         label: "Add Brand",
         component: () => import("../pages/brand/form.js?v=" + BUILD_ID),
     },
     {
-        path: "/brands/:id/edit",
+        path: "/admin/brands/:id/edit",
         label: "Edit Brand",
         component: () => import("../pages/brand/form.js?v=" + BUILD_ID),
     },

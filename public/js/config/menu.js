@@ -10,7 +10,7 @@ export const ownerMenu = [
         children: [
             {
                 label: "Brand",
-                path: "/brands",
+                path: "/admin/brands",
                 icon: "bi-list-check",
             },
             {

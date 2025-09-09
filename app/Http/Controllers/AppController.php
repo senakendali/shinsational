@@ -10,6 +10,13 @@ class AppController extends Controller
 {
     public function index()
     {
-        return view('layouts.app');
+        return view('layouts.kol');
     }
+
+    public function admin()
+    {
+        return view('admin'); // layout admin
+    }
+
+    
 }
