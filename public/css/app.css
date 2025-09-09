@@ -108,6 +108,11 @@ body {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+.navbar-expand-lg .navbar-nav .nav-link{
+    font-size:14px;
+    color:#FFFFFF;
+}
+
 #header.app-header .navbar-brand{
     
     height: 100px;
