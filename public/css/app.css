@@ -59,11 +59,10 @@ body {
 }
 
 #header {
-    background-color: #FFFFFF;
-   border-top:10px solid #000000;
+    background-color: #000000;
+    border-top:10px solid #000000;
     text-transform: uppercase;
-    /* border-bottom: 1px solid #dee2e6;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);*/
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .page-section {
@@ -104,13 +103,16 @@ body {
 
 .navbar {
     background-color: #000000;
-    border-bottom: 1px solid #dee2e6;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    
 }
 
 .navbar-expand-lg .navbar-nav .nav-link{
     font-size:14px;
     color:#FFFFFF;
+}
+
+.dropdown-item{
+    font-size: 14px;
 }
 
 #header.app-header .navbar-brand{

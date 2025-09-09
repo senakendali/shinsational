@@ -1,10 +1,32 @@
 const BUILD_ID = window.BUILD_VERSION || Date.now();
 export const routes = [
+    {
+        path: "/",
+        label: "Home",
+        component: () => import("../pages/kol/index.js?v=" + BUILD_ID),
+    },
     // Dashboard
     {
         path: "/dashboard",
         label: "Dashboard",
         component: () => import("../pages/dashboard.js?v=" + BUILD_ID),
+    },
+
+    // Klien
+    {
+        path: "/brands",
+        label: "Brand",
+        component: () => import("../pages/brand/index.js?v=" + BUILD_ID),
+    },
+    {
+        path: "/brands/create",
+        label: "Add Brand",
+        component: () => import("../pages/brand/form.js?v=" + BUILD_ID),
+    },
+    {
+        path: "/brands/:id/edit",
+        label: "Edit Brand",
+        component: () => import("../pages/brand/form.js?v=" + BUILD_ID),
     },
 
     {

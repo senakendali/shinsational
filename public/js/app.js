@@ -1,7 +1,4 @@
 // import { renderHeader } from './components/header.js'; // tetap off
-// HAPUS import routes statis
-// import { routes } from './config/routes.js';
-
 import { showLoader, hideLoader } from './components/loader.js';
 import { installNavbarBackgroundController, applyNavbarBackgroundNow } from './components/headerScroll.js';
 
@@ -12,47 +9,40 @@ function adjustAppPadding() {
   const app = document.getElementById("app");
   if (header && app) {
     const headerHeight = header.offsetHeight;
-    app.style.paddingTop = `${headerHeight}px`;
+    app.style.paddingTop = `15px`;
   }
 }
 
 function matchRoute(pathname) {
   for (const route of routes) {
+    // exact
     if (route.path === pathname) return { route, params: {} };
 
+    // dynamic segments: /path/:id
     const routeParts = route.path.split('/');
     const pathParts = pathname.split('/');
-
     if (routeParts.length !== pathParts.length) continue;
 
-    let params = {};
-    let isMatch = routeParts.every((part, i) => {
-      if (part.startsWith(':')) {
-        params[part.slice(1)] = pathParts[i];
-        return true;
-      }
+    const params = {};
+    const isMatch = routeParts.every((part, i) => {
+      if (part.startsWith(':')) { params[part.slice(1)] = pathParts[i]; return true; }
       return part === pathParts[i];
     });
-
     if (isMatch) return { route, params };
   }
-
   return null;
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // renderHeader();
   setTimeout(() => requestAnimationFrame(adjustAppPadding), 50);
-
   installNavbarBackgroundController();
 
   const content = document.getElementById("app");
   const v = window.BUILD_VERSION || Date.now();
 
-  // 🔥 Dynamic import untuk routes.js dengan version
+  // 🔥 dynamic import routes.js
   try {
     const mod = await import(`/js/config/routes.js?v=${v}`);
-    // Expect `export const routes = [...]` dari routes.js
     routes = mod.routes || [];
   } catch (err) {
     console.error("[SPA] Gagal load routes.js:", err);
@@ -66,24 +56,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     const url = new URL(path, location.origin);
     const pathname = url.pathname;
     const query = Object.fromEntries(url.searchParams.entries());
-    const match = matchRoute(pathname) || matchRoute("/dashboard");
 
-    const content = document.getElementById("app");
-    content.innerHTML = ""; // reset agar tidak nimbun form/index
+    // ❌ HAPUS fallback ke /dashboard
+    // ✅ cari match apa adanya; kalau tidak ada dan bukan root, fallback ke root (home/KOL)
+    let match = matchRoute(pathname);
+    if (!match && pathname !== "/") {
+      match = matchRoute("/"); // fallback ke home
+    }
+
+    content.innerHTML = ""; // reset konten
 
     if (!match) {
+      hideLoader();
       content.innerHTML = `<h4>404 - Halaman <code>${path}</code> tidak ditemukan</h4>`;
-      return hideLoader();
+      return;
     }
 
     const { route, params } = match;
 
     try {
-      // ⬇️ route.component sebaiknya melakukan dynamic import page dengan `?v=${v}` di dalam routes.js
-      // Di sini kita pass `v` kalau route.component ingin memakainya
+      // route.component harus fungsi yang mengembalikan import() module
       const module = await route.component(v);
-
-      // Berikan label ke render (biar renderBreadcrumb bisa pakai)
       await module.render(content, params, query, route.label);
 
       if (location.pathname + location.search !== path) {
@@ -101,23 +94,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // Untuk back/forward
+  // back/forward
   window.addEventListener("popstate", () => {
     loadPage(location.pathname + location.search);
   });
 
-  // Delegated link handler (semua elemen .app-link)
+  // Tangkap klik anchor internal (logo/menu), ga perlu class .app-link
   document.body.addEventListener("click", function (e) {
-    const link = e.target.closest(".app-link");
-    if (link) {
-      e.preventDefault();
-      const href = new URL(link.href).pathname + link.search;
-      loadPage(href);
-    }
+    const a = e.target.closest('a[href^="/"]');
+    if (!a) return;
+
+    // biarkan external style
+    if (a.target === "_blank" || a.hasAttribute("data-external")) return;
+
+    e.preventDefault();
+    const hrefUrl = new URL(a.href);
+    const href = hrefUrl.pathname + hrefUrl.search;
+    loadPage(href);
   });
 
+  // ✅ INIT: biarkan "/" tetap ke halaman KOL
   const initialPath = location.pathname + location.search;
-  loadPage(initialPath === "/" ? "/dashboard" : initialPath);
+  loadPage(initialPath);
 });
 
 window.addEventListener("resize", adjustAppPadding);

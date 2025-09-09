@@ -5,7 +5,11 @@ use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\ProjectTermController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\InfluencerRegistrationController;
+use App\Http\Controllers\Api\BrandController;
 
+
+// Brand
+Route::apiResource('brands', BrandController::class);
 
 // Client
 Route::get('/clients', [ClientController::class, 'index']);
