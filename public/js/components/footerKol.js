@@ -40,7 +40,7 @@ export function renderFooterKol(targetId = "footer") {
 
                 <!-- Bottom bar -->
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-center small">
-                    <span>© ${new Date().getFullYear()} YourCompany. All rights reserved.</span>
+                    <span>© ${new Date().getFullYear()} Beauty Tech Lab by Group M. All rights reserved.</span>
                     <div class="mt-2 mt-md-0">
                         <a href="/terms-and-conditions" class="text-light text-decoration-none app-link me-3">Terms of Service</a>
                         <a href="/privacy-policy" class="text-light text-decoration-none app-link">Privacy Policy</a>

@@ -5,17 +5,17 @@ export function renderHeader(targetId = "header") {
     if (!container) return;
 
     container.innerHTML = `
-        <div class="fixed-top shrinkable-navbar">
+        <div class="shrinkable-navbar app-header">
             <!-- Bar Atas -->
-            <div class="bg-white border-bottom py-2 px-3">
+            <div class="border-bottom py-2 px-3">
                 <div class="container-fluid d-flex justify-content-between align-items-center">
                     <div class="d-flex align-items-center gap-4">
                         <a class="navbar-brand" href="#">
-                            <img src="/images/logo.png" alt="Logo" class="d-inline-block align-text-top logo">
+                            <img src="/images/beauty-tech-logo-1.png" alt="Logo" class="d-inline-block align-text-top logo">
                         </a>
                     </div>
                     <div class="d-flex align-items-center gap-3 flex-grow-1 justify-content-end">
-                        <form class="d-flex flex-grow-1" role="search" style="max-width: 500px;">
+                        <!--form class="d-flex flex-grow-1" role="search" style="max-width: 500px;">
                             <input class="form-control" type="search" placeholder="Search" aria-label="Search">
                         </form>
                        
@@ -27,7 +27,7 @@ export function renderHeader(targetId = "header") {
                                 <li><a class="dropdown-item" href="/my-profile">Profil Saya</a></li>
                                 <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-box-arrow-right me-2"></i> Logout</a></li>
                             </ul>
-                        </div>
+                        </div-->
                     </div>
                 </div>
             </div>
@@ -39,7 +39,7 @@ export function renderHeader(targetId = "header") {
                         <span class="navbar-toggler-icon"></span>
                     </button>
                     <div class="collapse navbar-collapse" id="navbarNav">
-                        <ul class="navbar-nav ms-auto" id="navbar-menu">
+                        <ul class="navbar-nav ms-start" id="navbar-menu">
                             <!-- akan di-render oleh navbar.js -->
                         </ul>
                     </div>

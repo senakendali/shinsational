@@ -8,14 +8,15 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
 
     <link rel="stylesheet" href="{{ asset('css/app.css?v=' . time()) }}">
+    <link rel="stylesheet" href="{{ asset('css/button.css?v=' . time()) }}">
     <link rel="stylesheet" href="{{ asset('css/toast.css?v=' . time()) }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
 
 </head>
 <body class="bg-light">
-    <div id="header"></div>
-    <main id="app" class="p-0 m-0" ></main>
+    <div id="header" class="app-header"></div>
+    <main id="app" class="main container-fluid"></main>
     <div id="footer"></div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>

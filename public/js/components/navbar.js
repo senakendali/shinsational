@@ -69,7 +69,7 @@ export function renderNavbar(containerId = "navbar-menu", pathOverride = null) {
     const logoutLi = document.createElement("li");
     logoutLi.className = "nav-item";
     logoutLi.innerHTML = `
-    <a class="nav-link text-danger d-flex align-items-center gap-2" href="#">
+    <a class="nav-link d-flex align-items-center gap-2" href="#">
       <i class="bi bi-box-arrow-right"></i> Logout
     </a>
   `;

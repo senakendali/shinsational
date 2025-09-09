@@ -5,20 +5,20 @@ export const ownerMenu = [
         icon: "bi-speedometer2",
     },
     {
-        label: "Setup",
-        icon: "bi-gear",
+        label: "Proyek",
+        icon: "bi-briefcase",
         children: [
             {
-                label: "Brand",
-                path: "/brands",
+                label: "Daftar Proyek",
+                path: "/projects",
                 icon: "bi-list-check",
             },
             {
-                label: "Campaign",
-                path: "/campaigns",
+                label: "Termin Pembayaran",
+                path: "/project-terms",
                 icon: "bi-calendar2-week",
             },
-            { label: "Kol", path: "/kol-list", icon: "bi-person-badge" },
+            { label: "Klien", path: "/clients", icon: "bi-person-badge" },
         ],
     },
     {
