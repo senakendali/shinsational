@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 
 class TikTokAuthController extends Controller
 {
-    // === KONSTAN (langsung di controller) ===
+    // === KONSTAN (bisa tetap, atau pakai config('services.tiktok.*'))
     private const CLIENT_KEY     = 'sbaw61e5w3i3r6tlbj';
     private const CLIENT_SECRET  = 'okcUviuPUQLzYmiNxc9CTCqfWExo0bAm';
     private const REDIRECT_URI   = 'https://btlcpdtracker.senstech.id/auth/tiktok/callback';
@@ -17,7 +17,6 @@ class TikTokAuthController extends Controller
     private const AUTH_URL       = 'https://www.tiktok.com/v2/auth/authorize/';
     private const TOKEN_URL      = 'https://open.tiktokapis.com/v2/oauth/token/';
     private const USERINFO_URL   = 'https://open.tiktokapis.com/v2/user/info/';
-    // ✅ Scope minimal sesuai kebutuhan sekarang
     private const SCOPES         = 'user.info.basic,video.list';
 
     /**
@@ -27,6 +26,22 @@ class TikTokAuthController extends Controller
     {
         $state = Str::random(24);
         $request->session()->put('tiktok_state', $state);
+
+        // --- Ambil campaign dari query ---
+        $campaignId   = $request->query('campaign_id');
+        $campaignSlug = $request->query('campaign');
+
+        // Fallback format lama: /register?<slug> (tanpa key)
+        if (!$campaignId && !$campaignSlug) {
+            $raw = $request->getQueryString();
+            if ($raw && !str_contains($raw, '=')) {
+                $campaignSlug = $raw;
+            }
+        }
+
+        // Simpan di session untuk dipakai di callback()
+        $request->session()->put('pending_campaign_id', $campaignId);
+        $request->session()->put('pending_campaign_slug', $campaignSlug);
 
         $params = [
             'client_key'    => self::CLIENT_KEY,
@@ -41,6 +56,8 @@ class TikTokAuthController extends Controller
         Log::info('tiktok_auth_url', [
             'built_redirect' => self::REDIRECT_URI,
             'full_url'       => $url,
+            'campaign_id'    => $campaignId,
+            'campaign_slug'  => $campaignSlug,
         ]);
 
         return redirect()->away($url);
@@ -65,7 +82,7 @@ class TikTokAuthController extends Controller
             'client_secret' => self::CLIENT_SECRET,
             'code'          => $code,
             'grant_type'    => 'authorization_code',
-            'redirect_uri'  => self::REDIRECT_URI, // harus identik dengan di redirect()
+            'redirect_uri'  => self::REDIRECT_URI,
         ]);
 
         if (!$tokenResp->ok()) {
@@ -83,8 +100,7 @@ class TikTokAuthController extends Controller
         $tokenData = $tokenResp->json();
 
         // (opsional) cek scope yang benar2 diberikan
-        $scopesStr = $tokenData['scope'] ?? '';
-        $granted   = preg_split('/[\s,]+/', trim($scopesStr));
+        $granted   = preg_split('/[\s,]+/', trim($tokenData['scope'] ?? ''));
         $need      = ['user.info.basic', 'video.list'];
         $missing   = array_diff($need, $granted ?? []);
         if (!empty($missing)) {
@@ -92,7 +108,7 @@ class TikTokAuthController extends Controller
             return redirect('/auth/tiktok/redirect?reason=missing_scopes');
         }
 
-        // 2) Ambil profil user (HANYA fields basic → tidak butuh user.info.profile)
+        // 2) Ambil profil user (minta avatar_url untuk profile pic)
         $userResp = Http::withToken($tokenData['access_token'])
             ->withHeaders(['Accept' => 'application/json'])
             ->get(self::USERINFO_URL, [
@@ -114,18 +130,25 @@ class TikTokAuthController extends Controller
 
         $data = $userResp->json()['data'] ?? [];
         $user = $data['user'] ?? $data;
-        
-       // return json_encode($user);
 
-        // 3) Simpan ke session untuk prefill frontend
+        // 3) Simpan ke session untuk prefill frontend (tambah avatar URL)
         session([
-            'tiktok_user_id'   => $user['open_id']      ?? null,
-            // v2 tidak expose username → biarkan user isi manual bila diperlukan
-            'tiktok_full_name' => $user['display_name'] ?? null,
-            // 'tiktok_profile_link' di-skip karena butuh user.info.profile
+            'tiktok_user_id'     => $user['open_id']      ?? null,
+            'tiktok_full_name'   => $user['display_name'] ?? null,
+            'tiktok_avatar_url'  => $user['avatar_url']   ?? null,
         ]);
 
-        // 4) Kembali ke SPA
-        return redirect('/registration?connected=tiktok');
+        // 4) Ambil kembali campaign dari session & redirect ke SPA dengan query
+        $campaignId   = $request->session()->pull('pending_campaign_id');
+        $campaignSlug = $request->session()->pull('pending_campaign_slug');
+
+        // Bangun query redirect
+        $qs = ['connected' => 'tiktok'];
+        if ($campaignId)   $qs['campaign_id'] = $campaignId;
+        if ($campaignSlug) $qs['campaign']    = $campaignSlug;
+
+        $redirectUrl = '/registration' . '?' . http_build_query($qs);
+
+        return redirect($redirectUrl);
     }
 }

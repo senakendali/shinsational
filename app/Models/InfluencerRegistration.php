@@ -13,9 +13,12 @@ class InfluencerRegistration extends Model
         'phone',
         'address',
         'birth_date',
+        'profile_pic_url',
+        'campaign_id',
     ];
 
-    protected $casts = [
-        'birth_date' => 'date',
-    ];
+    public function campaign()
+    {
+        return $this->belongsTo(Campaign::class);
+    }
 }

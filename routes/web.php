@@ -20,11 +20,12 @@ Route::get('/auth/tiktok/callback', [TikTokAuthController::class, 'callback']);
 
 Route::get('/me/tiktok', function (Request $request) {
     return response()->json([
-        'tiktok_user_id'   => session('tiktok_user_id'),
-        // 'tiktok_username' => session('tiktok_username'),
-        'tiktok_full_name' => session('tiktok_full_name'),
+        'tiktok_user_id'    => session('tiktok_user_id'),
+        'tiktok_full_name'  => session('tiktok_full_name'),
+        'tiktok_avatar_url' => session('tiktok_avatar_url'), // ← tambahin ini
     ]);
 });
+
 
 // ==== Catch-all SPA (tetap paling bawah) ====
 
