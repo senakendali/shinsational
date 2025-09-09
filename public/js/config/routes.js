@@ -329,11 +329,11 @@ export const routes = [
     },
 
     // Profile
-    {
+   /* {
         path: "/my-profile",
         label: "My Profile",
         component: () => import("../pages/profile/index.js?v=" + BUILD_ID),
-    },
+    },*/
 
     // Kol
     {
@@ -347,8 +347,8 @@ export const routes = [
         component: () => import("../pages/kol/registration.js?v=" + BUILD_ID),
     },
     {
-        path: "/kol/my-profile/:id",
-        label: "KOL Profile",
+        path: "/my-profile/:id",
+        label: "My Profile",
         component: () => import("../pages/kol/profile.js?v=" + BUILD_ID),
     },
 ];
