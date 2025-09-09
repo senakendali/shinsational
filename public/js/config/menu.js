@@ -1,7 +1,7 @@
 export const ownerMenu = [
     {
         label: "Dashboard",
-        path: "/dashboard",
+        path: "/admin/dashboard",
         icon: "bi-speedometer2",
     },
     {
@@ -15,10 +15,21 @@ export const ownerMenu = [
             },
             {
                 label: "Campaign",
-                path: "/campaigns",
+                path: "/admin/campaigns",
                 icon: "bi-calendar2-week",
             },
-            { label: "Kol", path: "/kol-list", icon: "bi-person-badge" },
+            
+        ],
+    },
+    {
+        label: "Data",
+        icon: "bi-file-earmark-bar-graph",
+        children: [
+            { 
+                label: "Kol", 
+                path: "/kol-list", 
+                icon: "bi-person-badge" 
+            },
         ],
     },
     

@@ -71,7 +71,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
             <td>${website}</td>
             <td>${statusBadge}</td>
             <td>
-              <button class="btn btn-sm btn-outline-primary me-2 app-link" data-href="/brands/${brand.id}/edit">
+              <button class="btn btn-sm btn-outline-primary me-2 app-link" data-href="/admin/brands/${brand.id}/edit">
                 <i class="bi bi-pencil"></i> Edit
               </button>
               <button class="btn btn-sm btn-outline-danger" 

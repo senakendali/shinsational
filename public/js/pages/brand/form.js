@@ -61,7 +61,7 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
 
   // Cancel → balik ke list brands
   document.getElementById('cancelBtn').addEventListener('click', () => {
-    history.pushState(null, '', '/brands');
+    history.pushState(null, '', '/admin/brands');
     window.dispatchEvent(new PopStateEvent('popstate'));
   });
 
@@ -130,7 +130,7 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
         showToast('Brand berhasil ditambahkan');
       }
 
-      history.pushState(null, '', '/brands');
+      history.pushState(null, '', '/admin/brands');
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (err) {
       showToast('Gagal menyimpan brand.', 'error');

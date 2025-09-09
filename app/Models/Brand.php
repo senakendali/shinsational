@@ -23,4 +23,11 @@ class Brand extends Model
         'is_active' => 'boolean',
         'socials'   => 'array',
     ];
+
+    
+    public function campaigns()
+    {
+        return $this->hasMany(Campaign::class);
+    }
+
 }

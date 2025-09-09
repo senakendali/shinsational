@@ -6,10 +6,14 @@ use App\Http\Controllers\Api\ProjectTermController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\InfluencerRegistrationController;
 use App\Http\Controllers\Api\BrandController;
+use App\Http\Controllers\Api\CampaignController;
 
 
 // Brand
 Route::apiResource('brands', BrandController::class);
+
+// Campaign
+Route::apiResource('campaigns', CampaignController::class);
 
 // Client
 Route::get('/clients', [ClientController::class, 'index']);

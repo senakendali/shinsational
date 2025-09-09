@@ -15,7 +15,7 @@ class AppController extends Controller
 
     public function admin()
     {
-        return view('admin'); // layout admin
+        return view('layouts.admin'); // layout admin
     }
 
     

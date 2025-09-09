@@ -12,7 +12,7 @@ export const routes = [
         component: () => import("../pages/dashboard.js?v=" + BUILD_ID),
     },
 
-    // Klien
+    // Brand
     {
         path: "/admin/brands",
         label: "Brand",
@@ -27,6 +27,23 @@ export const routes = [
         path: "/admin/brands/:id/edit",
         label: "Edit Brand",
         component: () => import("../pages/brand/form.js?v=" + BUILD_ID),
+    },
+
+    // Campaign
+    {
+        path: "/admin/campaigns",
+        label: "Campaign",
+        component: () => import("../pages/campaign/index.js?v=" + BUILD_ID),
+    },
+    {
+        path: "/admin/campaigns/create",
+        label: "Add Campaign",
+        component: () => import("../pages/campaign/form.js?v=" + BUILD_ID),
+    },
+    {
+        path: "/admin/campaigns/:id/edit",
+        label: "Edit Campaign",
+        component: () => import("../pages/campaign/form.js?v=" + BUILD_ID),
     },
 
     {
