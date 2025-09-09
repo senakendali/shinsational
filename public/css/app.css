@@ -122,7 +122,8 @@ body {
 }
 
 #header {
-    background-color: #001f3f;
+    background-color: #FFFFFF;
+   border-top:10px solid #000000;
     text-transform: uppercase;
     /* border-bottom: 1px solid #dee2e6;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);*/
@@ -159,6 +160,11 @@ body {
   border-bottom: 1px solid rgba(255,255,255,0.1) !important;
 }
 
+.navbar-expand-lg .navbar-nav .nav-link{
+    font-size: 14px;
+    color:#FFFFFF;
+}
+
 
 .invoice-header-border {
     border-bottom: 3px solid #000000;
@@ -167,13 +173,24 @@ body {
 }
 
 .navbar {
-    background-color: #f3f3f3;
+    background-color: #000000;
     border-bottom: 1px solid #dee2e6;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
+#header.app-header .navbar-brand{
+    
+    height: 100px;
+    display: flex;
+    align-items: center;
+}
+
+.main{
+    padding-top: 15px;
+}
+
 .logo {
-    width: 150px;
+    width: 300px;
 }
 
 #app .breadcrumb {
@@ -184,6 +201,11 @@ body {
     color: #6b8d21;
     text-decoration: none;
 }
+
+.fixed-top.app-header {
+    background-color: #FFFFFF;
+}
+
 
 .step-icon {
     width: 80px;
@@ -203,4 +225,9 @@ body {
 .step-card:hover {
     transform: translateY(-10px);
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+}
+
+.login-input{
+    padding: 11px; 
+    width: 320px;
 }

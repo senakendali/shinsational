@@ -3,28 +3,29 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AppController;
 use App\Http\Controllers\TikTokAuthController;
+use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 
+// ==== CSRF refresh untuk SPA (dipakai utils/csrf.js) ====
+Route::get('/refresh-csrf', fn () => response()->json(['token' => csrf_token()]));
+
+// ==== Auth (SPA) ====
+Route::post('/login',  [AuthController::class, 'login'])->name('login');
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+Route::get('/me',      [AuthController::class, 'me'])->name('me'); // optional untuk cek sesi
+
+// ==== TikTok ====
 Route::get('/auth/tiktok/redirect', [TikTokAuthController::class, 'redirect']);
 Route::get('/auth/tiktok/callback', [TikTokAuthController::class, 'callback']);
 
-// TikTok
 Route::get('/me/tiktok', function (Request $request) {
     return response()->json([
-        'tiktok_user_id' => session('tiktok_user_id'),
-        //'tiktok_username' => session('tiktok_username'),
+        'tiktok_user_id'   => session('tiktok_user_id'),
+        // 'tiktok_username' => session('tiktok_username'),
         'tiktok_full_name' => session('tiktok_full_name'),
     ]);
 });
 
+// ==== Catch-all SPA (tetap paling bawah) ====
 Route::get('/{any}', [AppController::class, 'index'])
     ->where('any', '^(?!api|js|css|images|fonts|storage|vendor).*$');
-
-
-Route::get('/refresh-csrf', function () {
-    return response()->json([
-        'token' => csrf_token(),
-    ]);
-});
-
-

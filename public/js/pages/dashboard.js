@@ -1,107 +1,128 @@
-import { renderBreadcrumb } from '../components/breadcrumb.js';
+
 
 export function render(target, path, query = {}, labelOverride = null) {
+    
+    const v = window.BUILD_VERSION || Date.now();
+
     target.innerHTML = "";
-    renderBreadcrumb(target, path, labelOverride);
+    
 
     // Konten utama dashboard keuangan
     target.innerHTML += `
         <!-- Ringkasan Keuangan -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card text-white bg-success mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Total Saldo</h5>
-                        <p class="card-text fs-3">Rp 52.300.000</p>
+        <div class="container-fluid">
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card text-white bg-success mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Total Saldo</h5>
+                            <p class="card-text fs-3">Rp 52.300.000</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-primary mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Pendapatan Bulan Ini</h5>
+                            <p class="card-text fs-3">Rp 18.500.000</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-danger mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Pengeluaran Bulan Ini</h5>
+                            <p class="card-text fs-3">Rp 7.200.000</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-warning mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Laba / Rugi</h5>
+                            <p class="card-text fs-3">Rp 11.300.000</p>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-primary mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Pendapatan Bulan Ini</h5>
-                        <p class="card-text fs-3">Rp 18.500.000</p>
-                    </div>
+
+            <!-- Grafik Arus Kas -->
+            <div class="mb-5">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">Grafik Arus Kas per Bulan</h5>
+                    <select id="yearFilter" class="form-select w-auto">
+                        <option value="2025" selected>2025</option>
+                        <option value="2024">2024</option>
+                        <option value="2023">2023</option>
+                    </select>
                 </div>
+                <canvas id="cashflowChart" height="120"></canvas>
             </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-danger mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Pengeluaran Bulan Ini</h5>
-                        <p class="card-text fs-3">Rp 7.200.000</p>
-                    </div>
-                </div>
+
+            <!-- Proyek Aktif -->
+            <div class="mb-5">
+                <h5 class="mb-3">Proyek Aktif Saat Ini</h5>
+                <ul class="list-group">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Website BUMN <span class="badge bg-success">Berjalan</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Sistem E-Voting Pemilu <span class="badge bg-success">Berjalan</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Aplikasi Kepegawaian <span class="badge bg-warning">Pending</span>
+                    </li>
+                </ul>
             </div>
-            <div class="col-md-3">
-                <div class="card text-white bg-warning mb-3">
-                    <div class="card-body">
-                        <h5 class="card-title">Laba / Rugi</h5>
-                        <p class="card-text fs-3">Rp 11.300.000</p>
-                    </div>
-                </div>
+
+            <!-- Pengeluaran Terbesar -->
+            <div class="mb-5">
+                <h5 class="mb-3">Top 3 Pengeluaran Bulan Ini</h5>
+                <ol class="list-group list-group-numbered">
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Gaji Tim Dev
+                        <span class="badge bg-danger rounded-pill">Rp 5.000.000</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Hosting & Cloud Server
+                        <span class="badge bg-danger rounded-pill">Rp 1.500.000</span>
+                    </li>
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Internet Kantor
+                        <span class="badge bg-danger rounded-pill">Rp 700.000</span>
+                    </li>
+                </ol>
             </div>
-        </div>
 
-        <!-- Grafik Arus Kas -->
-        <div class="mb-5">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0">Grafik Arus Kas per Bulan</h5>
-                <select id="yearFilter" class="form-select w-auto">
-                    <option value="2025" selected>2025</option>
-                    <option value="2024">2024</option>
-                    <option value="2023">2023</option>
-                </select>
+            <!-- Aktivitas Keuangan Terbaru -->
+            <div class="mb-5">
+                <h5 class="mb-3">Aktivitas Keuangan Terbaru</h5>
+                <ul class="list-group">
+                    <li class="list-group-item">20 Apr 2025 - Terima pembayaran proyek "Sistem Pemilu" Rp 12.000.000</li>
+                    <li class="list-group-item">19 Apr 2025 - Bayar gaji freelancer backend Rp 2.500.000</li>
+                    <li class="list-group-item">18 Apr 2025 - Pembayaran hosting AWS Rp 1.000.000</li>
+                </ul>
             </div>
-            <canvas id="cashflowChart" height="120"></canvas>
-        </div>
-
-        <!-- Proyek Aktif -->
-        <div class="mb-5">
-            <h5 class="mb-3">Proyek Aktif Saat Ini</h5>
-            <ul class="list-group">
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    Website BUMN <span class="badge bg-success">Berjalan</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    Sistem E-Voting Pemilu <span class="badge bg-success">Berjalan</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    Aplikasi Kepegawaian <span class="badge bg-warning">Pending</span>
-                </li>
-            </ul>
-        </div>
-
-        <!-- Pengeluaran Terbesar -->
-        <div class="mb-5">
-            <h5 class="mb-3">Top 3 Pengeluaran Bulan Ini</h5>
-            <ol class="list-group list-group-numbered">
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    Gaji Tim Dev
-                    <span class="badge bg-danger rounded-pill">Rp 5.000.000</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    Hosting & Cloud Server
-                    <span class="badge bg-danger rounded-pill">Rp 1.500.000</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between align-items-center">
-                    Internet Kantor
-                    <span class="badge bg-danger rounded-pill">Rp 700.000</span>
-                </li>
-            </ol>
-        </div>
-
-        <!-- Aktivitas Keuangan Terbaru -->
-        <div class="mb-5">
-            <h5 class="mb-3">Aktivitas Keuangan Terbaru</h5>
-            <ul class="list-group">
-                <li class="list-group-item">20 Apr 2025 - Terima pembayaran proyek "Sistem Pemilu" Rp 12.000.000</li>
-                <li class="list-group-item">19 Apr 2025 - Bayar gaji freelancer backend Rp 2.500.000</li>
-                <li class="list-group-item">18 Apr 2025 - Pembayaran hosting AWS Rp 1.000.000</li>
-            </ul>
         </div>
     `;
 
     setupCashflowChart();
+
+    Promise.all([
+        import(`/js/components/header.js?v=${v}`),
+        import(`/js/components/breadcrumb.js?v=${v}`), 
+    ])
+        .then(([headerAdmin, breadcrumb]) => {
+            const { renderHeader } = headerAdmin;
+            const { renderBreadcrumb } = breadcrumb;
+
+            renderHeader("header");
+            renderBreadcrumb(target, path, labelOverride);
+           
+        })
+        .catch((err) => {
+            console.error("[Import components failed]", err);
+        });
 }
 
 function setupCashflowChart() {
@@ -176,4 +197,6 @@ function setupCashflowChart() {
 
     // Ganti tahun → render ulang chart
     yearSelect.addEventListener('change', (e) => renderChart(e.target.value));
+
+   
 }

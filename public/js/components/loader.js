@@ -7,7 +7,7 @@ export function showLoader() {
         loader.style.top = "0";
         loader.style.left = "0";
         loader.style.width = "0%";
-        loader.style.height = "5px";
+        loader.style.height = "10px";
         loader.style.zIndex = "9999";
         loader.style.transition = "width 0.4s ease-out";
         loader.style.background = "linear-gradient(to right, orange 30%, transparent 50%, orange 70%)";
