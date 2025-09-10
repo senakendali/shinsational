@@ -55,6 +55,9 @@ Route::get('/influencers/{tiktok_user_id}/campaigns', [InfluencerRegistrationCon
 // (opsional) pakai session: /api/me/campaigns
 Route::get('/me/campaigns', [InfluencerRegistrationController::class, 'myCampaigns']);
 
+// Ambil daftar campaign yang diikuti oleh TikTok user tertentu
+Route::get('/influencer-registrations/check', [InfluencerRegistrationController::class, 'check']);
+
 
 
 

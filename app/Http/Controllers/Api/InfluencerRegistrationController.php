@@ -180,4 +180,36 @@ class InfluencerRegistrationController extends Controller
             'data'    => $reg->load('campaign:id,name,slug'),
         ], 201);
     }
+
+    public function check(Request $request)
+    {
+        $validated = $request->validate([
+            'tiktok_user_id' => ['required','string','max:100'],
+            'campaign_id'    => ['nullable','integer','exists:campaigns,id'],
+            'campaign'       => ['nullable','string','max:160'], // slug
+        ]);
+
+        $campaignId = $validated['campaign_id'] ?? null;
+
+        // Kalau tidak ada campaign_id tapi ada slug → resolve
+        if (!$campaignId && !empty($validated['campaign'])) {
+            $c = Campaign::where('slug', $validated['campaign'])->first();
+            if ($c) $campaignId = $c->id;
+        }
+
+        $q = InfluencerRegistration::query()
+            ->where('tiktok_user_id', $validated['tiktok_user_id']);
+
+        if (!is_null($campaignId)) {
+            $q->where('campaign_id', $campaignId);
+        }
+
+        $reg = $q->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])->first();
+
+        return response()->json([
+            'exists'      => (bool) $reg,
+            'data'        => $reg,
+            'campaign_id' => $campaignId,
+        ]);
+    }
 }
