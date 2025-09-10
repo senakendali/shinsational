@@ -12,7 +12,7 @@ class TikTokAuthController extends Controller
     // === KONSTAN (bisa tetap, atau pakai config('services.tiktok.*'))
     private const CLIENT_KEY     = 'sbawru1jwiig13smtm';
     private const CLIENT_SECRET  = 'm7IRftc8Lpu6CUFmgzezQxWO8HJYyKf3';
-    private const REDIRECT_URI   = 'https://btlcpdtracker.senstech.id/auth/tiktok/callback';
+    private const REDIRECT_URI   = 'https://dreamxbtladvocacy.com/auth/tiktok/callback';
 
     private const AUTH_URL       = 'https://www.tiktok.com/v2/auth/authorize/';
     private const TOKEN_URL      = 'https://open.tiktokapis.com/v2/oauth/token/';
