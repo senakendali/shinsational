@@ -10,8 +10,8 @@ use Illuminate\Support\Facades\Log;
 class TikTokAuthController extends Controller
 {
     // === KONSTAN (bisa tetap, atau pakai config('services.tiktok.*'))
-    private const CLIENT_KEY     = 'sbaw61e5w3i3r6tlbj';
-    private const CLIENT_SECRET  = 'okcUviuPUQLzYmiNxc9CTCqfWExo0bAm';
+    private const CLIENT_KEY     = 'sbawru1jwiig13smtm';
+    private const CLIENT_SECRET  = 'm7IRftc8Lpu6CUFmgzezQxWO8HJYyKf3';
     private const REDIRECT_URI   = 'https://btlcpdtracker.senstech.id/auth/tiktok/callback';
 
     private const AUTH_URL       = 'https://www.tiktok.com/v2/auth/authorize/';
