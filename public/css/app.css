@@ -38,7 +38,6 @@ body {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    text-transform: uppercase;
 }
 
 .card-income {
@@ -60,7 +59,7 @@ body {
 
 #header {
     background-color: #000000;
-    border-top:10px solid #000000;
+    border-top: 10px solid #000000;
     text-transform: uppercase;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
@@ -103,26 +102,24 @@ body {
 
 .navbar {
     background-color: #000000;
-    
 }
 
-.navbar-expand-lg .navbar-nav .nav-link{
-    font-size:14px;
-    color:#FFFFFF;
+.navbar-expand-lg .navbar-nav .nav-link {
+    font-size: 14px;
+    color: #ffffff;
 }
 
-.dropdown-item{
+.dropdown-item {
     font-size: 14px;
 }
 
-#header.app-header .navbar-brand{
-    
+#header.app-header .navbar-brand {
     height: 100px;
     display: flex;
     align-items: center;
 }
 
-.main{
+.main {
     padding-top: 15px;
 }
 
@@ -140,9 +137,8 @@ body {
 }
 
 .fixed-top.app-header {
-    background-color: #FFFFFF;
+    background-color: #ffffff;
 }
-
 
 .step-icon {
     width: 80px;
@@ -164,7 +160,7 @@ body {
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
 }
 
-.login-input{
-    padding: 11px; 
+.login-input {
+    padding: 11px;
     width: 320px;
 }
