@@ -24,6 +24,7 @@
     
     <script>
     window.BUILD_VERSION = "{{ now()->timestamp }}";
+    window.APP_URL = "{{ url('/') }}"; // <— penting
     </script>
     <script type="module" src="{{ asset('js/app.js?v=' . time()) }}"></script>
 
