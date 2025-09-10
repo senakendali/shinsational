@@ -1,10 +1,8 @@
-import { authService } from '../../services/authService.js';
-import { showLoader, hideLoader } from '../../components/loader.js';
-import { showToast } from '../../utils/toast.js';
-import { showValidationErrors, clearAllErrors } from '../../utils/form.js';
-
+// /js/pages/auth/login.js
 export function render(target, params, query = {}, labelOverride = null) {
   const v = window.BUILD_VERSION || Date.now();
+  const BASE = (window.APP_URL || window.location.origin).replace(/\/+$/, '');
+  const bgUrl = `${BASE}/images/login-bg.png?v=${v}`;
 
   // Reset body biar full
   document.body.style.margin = "0";
@@ -12,7 +10,8 @@ export function render(target, params, query = {}, labelOverride = null) {
   document.body.style.overflow = "hidden";
 
   target.innerHTML = `
-    <div class="vh-100 bg-light d-flex align-items-center" style="margin:0;padding:0;background-image:url('/images/login-bg.png?v=${v}');background-size:cover;background-position:center;">
+    <div class="vh-100 bg-light d-flex align-items-center"
+         style="margin:0;padding:0;background-image:url('${bgUrl}');background-size:cover;background-position:center;">
       <div class="container-fluid">
         <div class="row g-0">
           <!-- Left side (empty) -->
@@ -49,42 +48,59 @@ export function render(target, params, query = {}, labelOverride = null) {
     </div>
   `;
 
-  // ✅ FIX: define form dulu baru addEventListener
-  const form = document.getElementById('loginForm');
-  if (!form) {
-    console.error('Login form not found');
-    return;
-  }
+  // Dynamic imports ala kol/index.js
+  Promise.all([
+    import(`/js/services/authService.js?v=${v}`),
+    import(`/js/components/loader.js?v=${v}`),
+    import(`/js/utils/toast.js?v=${v}`),
+    import(`/js/utils/form.js?v=${v}`),
+  ])
+    .then(([authMod, loaderMod, toastMod, formMod]) => {
+      const { authService } = authMod;
+      const { showLoader, hideLoader } = loaderMod;
+      const { showToast } = toastMod;
+      const { showValidationErrors, clearAllErrors } = formMod;
 
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    showLoader();
-    clearAllErrors();
+      // ✅ define form dulu baru addEventListener
+      const form = document.getElementById('loginForm');
+      if (!form) {
+        console.error('Login form not found');
+        return;
+      }
 
-    const submitBtn = form.querySelector('button[type="submit"]');
-    const originalHtml = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Mengirim...`;
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoader();
+        clearAllErrors();
 
-    try {
-      const fd = new FormData(form);
-      // contoh remember:
-      // if (form.querySelector('#remember')?.checked) fd.append('remember', '1');
+        const submitBtn = form.querySelector('button[type="submit"]');
+        const originalHtml = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Mengirim...`;
 
-      await authService.login(fd);
-      showToast('Login berhasil');
+        try {
+          const fd = new FormData(form);
+          // contoh remember:
+          // if (form.querySelector('#remember')?.checked) fd.append('remember', '1');
 
-      const next = (query && query.redirect) ? query.redirect : '/admin/dashboard';
-      history.pushState(null, '', next);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-    } catch (err) {
-      if (err?.errors) showValidationErrors(err.errors);
-      showToast(err?.message || 'Login gagal.', 'error');
-      if (err?.status === 419) showToast('Sesi kadaluarsa, refresh dulu ya.', 'error');
-    } finally {
-      hideLoader();
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = originalHtml;
-    }
-  });
+          await authService.login(fd);
+          showToast('Login berhasil');
+
+          const next = (query && query.redirect) ? query.redirect : '/admin/dashboard';
+          history.pushState(null, '', next);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        } catch (err) {
+          if (err?.errors) showValidationErrors(err.errors);
+          showToast(err?.message || 'Login gagal.', 'error');
+          if (err?.status === 419) showToast('Sesi kadaluarsa, refresh dulu ya.', 'error');
+        } finally {
+          hideLoader();
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalHtml;
+        }
+      });
+    })
+    .catch((err) => {
+      console.error('[login] Failed to import modules', err);
+    });
 }
