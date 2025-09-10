@@ -74,7 +74,7 @@ export function render(target, params, query = {}, labelOverride = null) {
       await authService.login(fd);
       showToast('Login berhasil');
 
-      const next = (query && query.redirect) ? query.redirect : '/';
+      const next = (query && query.redirect) ? query.redirect : '/admin/dashboard';
       history.pushState(null, '', next);
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (err) {
