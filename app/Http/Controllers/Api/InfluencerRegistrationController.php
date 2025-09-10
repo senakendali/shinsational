@@ -204,7 +204,10 @@ class InfluencerRegistrationController extends Controller
             $q->where('campaign_id', $campaignId);
         }
 
-        $reg = $q->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])->first();
+        //$reg = $q->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])->first();
+        $reg = $q->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])
+         ->latest() // ambil registrasi terbaru untuk open_id tsb
+         ->first();
 
         return response()->json([
             'exists'      => (bool) $reg,
