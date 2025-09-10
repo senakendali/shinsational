@@ -17,10 +17,6 @@ export function render(target, params, query = {}, labelOverride = null) {
                        style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,.12);">
                 </div>
 
-                <!--div class="text-center mb-4">
-                  <h2 class="fw-semibold mb-3 fs-4">Please Fill Your Information</h2>
-                </div-->
-
                 <form id="registerForm" class="needs-validation w-100" novalidate>
                   <!-- Hidden -->
                   <input type="hidden" name="tiktok_user_id" id="tiktok_user_id" value="">
@@ -43,6 +39,10 @@ export function render(target, params, query = {}, labelOverride = null) {
 
                   <div id="alreadyBox" class="alert alert-success d-none" role="alert">
                     You are already registered for this campaign. Your data has been loaded.
+                  </div>
+
+                  <div id="prefilledBox" class="alert alert-info d-none" role="alert">
+                    We prefilled your information from your previous registration. Please review and submit.
                   </div>
 
                   <div class="d-flex flex-column gap-3">
@@ -131,6 +131,7 @@ export function render(target, params, query = {}, labelOverride = null) {
     const connectBox = document.getElementById('tiktokConnectBox');
     const connectBtn = document.getElementById('connectTiktokBtn');
     const alreadyBox = document.getElementById('alreadyBox');
+    const prefilledBox = document.getElementById('prefilledBox');
 
     const clearErrors = () => {
       form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
@@ -188,12 +189,11 @@ export function render(target, params, query = {}, labelOverride = null) {
       if (cId)   campaignIdEl.value = cId;
       if (cSlug) campaignSlugEl.value = cSlug;
 
-      // Link connect bawa campaign
+      // Link connect bawa campaign & full navigation
       const qs = new URLSearchParams();
       if (cId)   qs.set('campaign_id', cId);
       if (cSlug) qs.set('campaign', cSlug);
       connectBtn.href = `/auth/tiktok/redirect${qs.toString() ? '?' + qs.toString() : ''}`;
-      // pastikan bukan SPA
       connectBtn.addEventListener('click', (e) => {
         e.preventDefault();
         window.location.assign(connectBtn.href);
@@ -238,7 +238,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         const data = await res.json();
 
         if (data.exists) {
-          // Sudah terdaftar di campaign ini → kunci
+          // Sudah terdaftar di campaign ini → lock
           fillForm(data.data);
           setReadonly(true);
           // avatar fallback dari DB
@@ -255,13 +255,13 @@ export function render(target, params, query = {}, labelOverride = null) {
       }
     }
 
-    // === PREFILL SAAT TIDAK ADA CAMPAIGN ===
-    async function prefillFromAnyRegistrationIfNoCampaign() {
+    // === PREFILL fallback dari registrasi manapun (bahkan jika campaign ada tapi belum terdaftar) ===
+    async function prefillFromAnyRegistration() {
       const openId = tiktokIdEl.value?.trim();
-      const hasCampaign = !!(campaignIdEl.value?.trim() || campaignSlugEl.value?.trim());
-      if (!openId || hasCampaign) return;
+      if (!openId) return;
 
       try {
+        // panggil check TANPA campaign filter → API mengembalikan satu registrasi terakhir
         const q = new URLSearchParams({ tiktok_user_id: openId });
         const res = await fetch(`/api/influencer-registrations/check?${q.toString()}`, {
           headers: { 'Accept': 'application/json' },
@@ -270,21 +270,22 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (!res.ok) return;
         const data = await res.json();
         if (data.exists && data.data) {
-          // Prefill saja (tetap editable & tombol Register tetap ada)
           fillForm(data.data);
+          // editable, bukan lock
           setReadonly(false);
+          prefilledBox.classList.remove('d-none');
         }
       } catch {
         // ignore
       }
     }
 
-    // Urutan cek:
-    // 1) Jika ada campaign → cek apakah sudah terdaftar (lock).
+    // Urutan:
+    // 1) Cek per-campaign
     const campaignCheck = await checkAlreadyRegisteredForCampaign();
-    // 2) Jika TIDAK ada campaign → prefill dari salah satu registrasi existing (editable).
+    // 2) Kalau TIDAK terdaftar di campaign itu → prefill dari campaign lain (jika ada)
     if (!campaignCheck.exists) {
-      await prefillFromAnyRegistrationIfNoCampaign();
+      await prefillFromAnyRegistration();
     }
 
     // Submit
