@@ -48,28 +48,46 @@ export function render(target, params, query = {}, labelOverride = null) {
             <form id="submissionForm" class="needs-validation" novalidate>
               <div class="row g-3">
 
-                <!-- Postingan 1 + Screenshot -->
-                <div class="col-md-6">
-                  <label for="link-1" class="form-label text-muted">Link Postingan 1</label>
-                  <input type="url" class="form-control" id="link-1" placeholder="https://www.tiktok.com/..." required>
-                  <div class="invalid-feedback">Please enter a valid link.</div>
-                </div>
-                <div class="col-md-6">
-                  <label for="screenshot_1" class="form-label text-muted">Upload Screenshot Postingan 1</label>
-                  <input type="file" class="form-control" id="screenshot_1" accept="image/*">
-                  <small class="text-muted">JPG/PNG, opsional</small>
+                <!-- BARIS 1: Postingan 1 (Link, Tanggal, Screenshot) -->
+                <div class="col-12">
+                  <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                      <label for="link-1" class="form-label text-muted">Link Postingan 1</label>
+                      <input type="url" class="form-control" id="link-1" placeholder="https://www.tiktok.com/..." required>
+                      <div class="invalid-feedback">Link Postingan 1 wajib diisi (URL valid).</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="post_date_1" class="form-label text-muted">Tanggal Postingan 1</label>
+                      <input type="date" class="form-control" id="post_date_1" required>
+                      <div class="invalid-feedback">Tanggal Postingan 1 wajib diisi.</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="screenshot_1" class="form-label text-muted">Screenshot Postingan 1</label>
+                      <input type="file" class="form-control" id="screenshot_1" accept="image/*">
+                      <!--small class="text-muted">JPG/PNG, opsional</small-->
+                    </div>
+                  </div>
                 </div>
 
-                <!-- Postingan 2 + Screenshot -->
-                <div class="col-md-6">
-                  <label for="link-2" class="form-label text-muted">Link Postingan 2</label>
-                  <input type="url" class="form-control" id="link-2" placeholder="https://www.tiktok.com/..." required>
-                  <div class="invalid-feedback">Please enter a valid link.</div>
-                </div>
-                <div class="col-md-6">
-                  <label for="screenshot_2" class="form-label text-muted">Upload Screenshot Postingan 2</label>
-                  <input type="file" class="form-control" id="screenshot_2" accept="image/*">
-                  <small class="text-muted">JPG/PNG, opsional</small>
+                <!-- BARIS 2: Postingan 2 (Link, Tanggal, Screenshot) -->
+                <div class="col-12">
+                  <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                      <label for="link-2" class="form-label text-muted">Link Postingan 2</label>
+                      <input type="url" class="form-control" id="link-2" placeholder="https://www.tiktok.com/..." required>
+                      <div class="invalid-feedback">Link Postingan 2 wajib diisi (URL valid).</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2</label>
+                      <input type="date" class="form-control" id="post_date_2" required>
+                      <div class="invalid-feedback">Tanggal Postingan 2 wajib diisi.</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2</label>
+                      <input type="file" class="form-control" id="screenshot_2" accept="image/*">
+                      <!--small class="text-muted">JPG/PNG, opsional</small-->
+                    </div>
+                  </div>
                 </div>
 
                 <!-- Beli di mana -->
@@ -135,8 +153,11 @@ export function render(target, params, query = {}, labelOverride = null) {
 
       // UI helpers
       const disableForm = (flag) => {
-        ["link-1","link-2","screenshot_1","screenshot_2","purchase_platform","invoice_file","review_proof_file","submitBtn"]
-          .forEach(id => { const el = $("#"+id); if (el) el.disabled = flag; });
+        [
+          "link-1","post_date_1","screenshot_1",
+          "link-2","post_date_2","screenshot_2",
+          "purchase_platform","invoice_file","review_proof_file","submitBtn"
+        ].forEach(id => { const el = $("#"+id); if (el) el.disabled = flag; });
       };
       const setTitle = (txt) => { $("#mainCampaignTitle").textContent = txt || 'My Campaign'; };
 
@@ -200,7 +221,13 @@ export function render(target, params, query = {}, labelOverride = null) {
         fd.set('link_1', $("#link-1").value.trim());
         fd.set('link_2', $("#link-2").value.trim());
 
-        // NEW: files & dropdown
+        // tanggal per link
+        const pd1 = $("#post_date_1")?.value || '';
+        const pd2 = $("#post_date_2")?.value || '';
+        if (pd1) fd.set('post_date_1', pd1);
+        if (pd2) fd.set('post_date_2', pd2);
+
+        // Files & dropdown
         const sc1 = $("#screenshot_1")?.files?.[0];
         const sc2 = $("#screenshot_2")?.files?.[0];
         const inv = $("#invoice_file")?.files?.[0];

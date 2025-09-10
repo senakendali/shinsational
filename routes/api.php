@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\InfluencerRegistrationController;
 use App\Http\Controllers\Api\BrandController;
 use App\Http\Controllers\Api\CampaignController;
+use App\Http\Controllers\Api\InfluencerSubmissionController;
 
 
 // Brand
@@ -57,6 +58,25 @@ Route::get('/me/campaigns', [InfluencerRegistrationController::class, 'myCampaig
 
 // Ambil daftar campaign yang diikuti oleh TikTok user tertentu
 Route::get('/influencer-registrations/check', [InfluencerRegistrationController::class, 'check']);
+
+
+/*
+|--------------------------------------------------------------------------
+| Influencer Submissions (upload link + bukti, invoice, dsb.)
+|--------------------------------------------------------------------------
+| - index   : list submission (filter by tiktok_user_id, campaign_id) — opsional untuk admin/history
+| - store   : submit baru (FormData + file: proof_1, proof_2, invoice_file, review_proof_file)
+| - show    : detail submission (opsional)
+| - update  : revisi submission (pakai POST biar konsisten)
+| - destroy : hapus (opsional)
+*/
+
+Route::get('/influencer-submissions',          [InfluencerSubmissionController::class, 'index']);
+Route::post('/influencer-submissions',         [InfluencerSubmissionController::class, 'store']);
+
+Route::get('/influencer-submissions/{id}',     [InfluencerSubmissionController::class, 'show'])->whereNumber('id');
+Route::post('/influencer-submissions/{id}',    [InfluencerSubmissionController::class, 'update'])->whereNumber('id'); // POST utk update
+Route::delete('/influencer-submissions/{id}',  [InfluencerSubmissionController::class, 'destroy'])->whereNumber('id');
 
 
 
