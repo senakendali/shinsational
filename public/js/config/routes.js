@@ -347,7 +347,7 @@ export const routes = [
         component: () => import("../pages/kol/registration.js?v=" + BUILD_ID),
     },
     {
-        path: "/my-profile/:id",
+        path: "/my-profile",
         label: "My Profile",
         component: () => import("../pages/kol/profile.js?v=" + BUILD_ID),
     },
