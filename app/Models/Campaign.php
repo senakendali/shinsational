@@ -103,4 +103,12 @@ class Campaign extends Model
         $endOk   = !$this->end_date   || $this->end_date->toDateString()   >= $today;
         return $startOk && endOk;
     }
+
+    public function influencerRegistrations()
+    {
+        return $this->hasMany(InfluencerRegistration::class);
+    }
+
+    
+
 }

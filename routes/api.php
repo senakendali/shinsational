@@ -46,6 +46,15 @@ Route::get('/project-terms/{id}/download-invoice', [InvoiceController::class, 'd
 // Influencer Registration
 Route::post('/influencer-registrations', [InfluencerRegistrationController::class, 'store']);
 
+// List registrations (dengan filter & include relasi campaign)
+Route::get('/influencer-registrations', [InfluencerRegistrationController::class, 'index']);
+
+// Ambil daftar campaign yang diikuti oleh TikTok user tertentu
+Route::get('/influencers/{tiktok_user_id}/campaigns', [InfluencerRegistrationController::class, 'campaignsByTiktok']);
+
+// (opsional) pakai session: /api/me/campaigns
+Route::get('/me/campaigns', [InfluencerRegistrationController::class, 'myCampaigns']);
+
 
 
 

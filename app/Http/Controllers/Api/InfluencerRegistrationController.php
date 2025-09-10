@@ -11,6 +11,92 @@ use Illuminate\Support\Carbon;
 
 class InfluencerRegistrationController extends Controller
 {
+    public function index(Request $request)
+    {
+        $perPage = (int) $request->input('per_page', 10);
+        $include = $request->input('include'); // contoh: "campaign" atau "campaign,brand"
+
+        $query = InfluencerRegistration::query();
+
+        if ($request->filled('tiktok_user_id')) {
+            $query->where('tiktok_user_id', $request->input('tiktok_user_id'));
+        }
+        if ($request->filled('campaign_id')) {
+            $query->where('campaign_id', $request->input('campaign_id'));
+        }
+
+        // Eager load relasi
+        if ($include) {
+            $parts = array_map('trim', explode(',', $include));
+
+            if (in_array('campaign', $parts, true)) {
+                // with brand sekalian jika diminta
+                if (in_array('brand', $parts, true)) {
+                    $query->with(['campaign' => function ($q) {
+                        $q->select('id','brand_id','name','slug','start_date','end_date','status','is_active','budget','currency');
+                        $q->with(['brand:id,name']);
+                    }]);
+                } else {
+                    $query->with(['campaign' => function ($q) {
+                        $q->select('id','brand_id','name','slug','start_date','end_date','status','is_active','budget','currency');
+                    }]);
+                }
+            }
+        }
+
+        $query->latest();
+
+        if ($perPage === 0) {
+            // ambil semua
+            $data = $query->get();
+            return response()->json($data);
+        }
+
+        return response()->json(
+            $query->paginate($perPage)
+        );
+    }
+
+    /**
+     * GET /api/influencers/{tiktok_user_id}/campaigns
+     * Mengembalikan daftar distinct campaign yang diikuti influencer tsb.
+     * Support per_page query untuk pagination, default 10, 0 = all
+     */
+    public function campaignsByTiktok(Request $request, string $tiktok_user_id)
+    {
+        $perPage = (int) $request->input('per_page', 10);
+
+        $query = Campaign::query()
+            ->select('campaigns.*')
+            ->join('influencer_registrations as ir', 'ir.campaign_id', '=', 'campaigns.id')
+            ->where('ir.tiktok_user_id', $tiktok_user_id)
+            ->with(['brand:id,name'])
+            ->distinct()
+            ->latest('campaigns.created_at');
+
+        if ($perPage === 0) {
+            $data = $query->get();
+            return response()->json($data);
+        }
+
+        return response()->json(
+            $query->paginate($perPage)
+        );
+    }
+
+    /**
+     * GET /api/me/campaigns
+     * (opsional) Ambil campaign berdasarkan session('tiktok_user_id')
+     */
+    public function myCampaigns(Request $request)
+    {
+        $openId = $request->session()->get('tiktok_user_id');
+        if (!$openId) {
+            return response()->json(['message' => 'Not connected to TikTok'], 401);
+        }
+        // Reuse logic di atas
+        return $this->campaignsByTiktok($request, $openId);
+    }
     /**
      * Store a newly created registration.
      */
