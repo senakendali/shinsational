@@ -64,28 +64,26 @@ export function render(target, params, query = {}, labelOverride = null) {
                     <div class="col-md-4">
                       <label for="screenshot_1" class="form-label text-muted">Screenshot Postingan 1</label>
                       <input type="file" class="form-control" id="screenshot_1" accept="image/*">
-                      <!--small class="text-muted">JPG/PNG, opsional</small-->
                     </div>
                   </div>
                 </div>
 
-                <!-- BARIS 2: Postingan 2 (Link, Tanggal, Screenshot) -->
+                <!-- BARIS 2: Postingan 2 (Link, Tanggal, Screenshot) - OPSIONAL -->
                 <div class="col-12">
                   <div class="row g-3 align-items-end">
                     <div class="col-md-4">
-                      <label for="link-2" class="form-label text-muted">Link Postingan 2</label>
-                      <input type="url" class="form-control" id="link-2" placeholder="https://www.tiktok.com/..." required>
-                      <div class="invalid-feedback">Link Postingan 2 wajib diisi (URL valid).</div>
+                      <label for="link-2" class="form-label text-muted">Link Postingan 2 (Opsional)</label>
+                      <input type="url" class="form-control" id="link-2" placeholder="https://www.tiktok.com/...">
+                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
                     </div>
                     <div class="col-md-4">
-                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2</label>
-                      <input type="date" class="form-control" id="post_date_2" required>
-                      <div class="invalid-feedback">Tanggal Postingan 2 wajib diisi.</div>
+                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2 (Opsional)</label>
+                      <input type="date" class="form-control" id="post_date_2">
+                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
                     </div>
                     <div class="col-md-4">
-                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2</label>
+                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2 (Opsional)</label>
                       <input type="file" class="form-control" id="screenshot_2" accept="image/*">
-                      <!--small class="text-muted">JPG/PNG, opsional</small-->
                     </div>
                   </div>
                 </div>
@@ -219,7 +217,10 @@ export function render(target, params, query = {}, labelOverride = null) {
         fd.set('tiktok_user_id', openId);
         fd.set('campaign_id', selectedCampaignId);
         fd.set('link_1', $("#link-1").value.trim());
-        fd.set('link_2', $("#link-2").value.trim());
+
+        // OPTIONAL: link_2 hanya dikirim jika diisi
+        const link2 = $("#link-2").value.trim();
+        if (link2) fd.set('link_2', link2);
 
         // tanggal per link
         const pd1 = $("#post_date_1")?.value || '';

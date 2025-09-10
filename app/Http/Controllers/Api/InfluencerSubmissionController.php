@@ -66,7 +66,7 @@ class InfluencerSubmissionController extends Controller
                 'post_date_1'     => ['nullable','date'],
                 'screenshot_1'    => ['nullable','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
-                'link_2'          => ['required','url','max:2048'],
+                'link_2'          => ['nullable','url','max:2048'],
                 'post_date_2'     => ['nullable','date'],
                 'screenshot_2'    => ['nullable','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
