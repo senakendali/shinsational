@@ -199,12 +199,18 @@ export function render(target, params, query = {}, labelOverride = null) {
       submitBtn.disabled = false;
 
       showToast(resp.message || 'Registrasi berhasil disimpan.', 'success');
-      form.reset();
 
-      // Bersihkan avatar preview (tetap disembunyikan sampai connect lagi)
-      avatarWrap.classList.add('d-none');
-      avatarImg.src = '';
-      avatarUrlEl.value = '';
+      // ➜ Redirect ke /my-profile (SPA-style)
+      const next = '/my-profile';
+      if (location.pathname !== next) {
+        history.pushState(null, '', next);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+        return; // stop eksekusi lanjutan setelah redirect
+      }
+
+      // (opsional) kalau tidak pakai SPA router, pakai:
+      // window.location.href = '/my-profile';
+
     } catch (err) {
       hideLoader();
       submitBtn.disabled = false;
@@ -216,4 +222,5 @@ export function render(target, params, query = {}, labelOverride = null) {
       }
     }
   });
+
 }
