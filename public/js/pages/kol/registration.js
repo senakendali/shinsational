@@ -1,15 +1,8 @@
-const v = window.BUILD_VERSION;
-
-const { renderHeaderKol }  = await import(`../../components/headerKol.js?v=${v}`);
-const { renderFooterKol }  = await import(`../../components/footerKol.js?v=${v}`);
-
-import { influencerService } from '../../services/influencerRegistrationService.js?v=${v}';
-import { showLoader, hideLoader } from '../../components/loader.js';
-import { showToast } from '../../utils/toast.js';
-
+// /js/pages/kol/register.js
 export function render(target, params, query = {}, labelOverride = null) {
-  renderHeaderKol("header");
+  const v = window.BUILD_VERSION || Date.now();
 
+  // Render markup dulu
   target.innerHTML = `
     <section class="page-section min-vh-100 d-flex align-items-center">
       <div class="container">
@@ -89,138 +82,160 @@ export function render(target, params, query = {}, labelOverride = null) {
     </section>
   `;
 
-  renderFooterKol();
+  // Dynamic imports ala index.js
+  Promise.all([
+    import(`/js/components/headerKol.js?v=${v}`),
+    import(`/js/components/footerKol.js?v=${v}`),
+    import(`/js/services/influencerRegistrationService.js?v=${v}`),
+    import(`/js/components/loader.js?v=${v}`),
+    import(`/js/utils/toast.js?v=${v}`),
+  ])
+    .then(([headerMod, footerMod, serviceMod, loaderMod, toastMod]) => {
+      const { renderHeaderKol } = headerMod;
+      const { renderFooterKol } = footerMod;
+      const { influencerService } = serviceMod;
+      const { showLoader, hideLoader } = loaderMod;
+      const { showToast } = toastMod;
 
-  const form = document.getElementById('registerForm');
-  const submitBtn = document.getElementById('submitBtn');
+      // Render header/footer
+      renderHeaderKol("header");
+      renderFooterKol();
 
-  // Hidden inputs
-  const tiktokIdEl   = document.getElementById('tiktok_user_id');
-  const avatarUrlEl  = document.getElementById('profile_pic_url');
-  const campaignIdEl = document.getElementById('campaign_id');
-  const campaignSlugEl = document.getElementById('campaign');
+      const form = document.getElementById('registerForm');
+      const submitBtn = document.getElementById('submitBtn');
 
-  // Visible inputs
-  const fullNameEl = document.getElementById('full_name');
-  const usernameEl = document.getElementById('tiktok_username');
+      // Hidden inputs
+      const tiktokIdEl   = document.getElementById('tiktok_user_id');
+      const avatarUrlEl  = document.getElementById('profile_pic_url');
+      const campaignIdEl = document.getElementById('campaign_id');
+      const campaignSlugEl = document.getElementById('campaign');
 
-  // Avatar preview & connect box
-  const avatarWrap = document.getElementById('avatarWrap');
-  const avatarImg  = document.getElementById('avatarImg');
-  const connectBox = document.getElementById('tiktokConnectBox');
-  const connectBtn = document.getElementById('connectTiktokBtn');
+      // Visible inputs
+      const fullNameEl = document.getElementById('full_name');
+      const usernameEl = document.getElementById('tiktok_username');
 
-  const clearErrors = () => {
-    form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
-    form.querySelectorAll('.invalid-feedback').forEach(el => (el.textContent = ''));
-  };
+      // Avatar preview & connect box
+      const avatarWrap = document.getElementById('avatarWrap');
+      const avatarImg  = document.getElementById('avatarImg');
+      const connectBox = document.getElementById('tiktokConnectBox');
+      const connectBtn = document.getElementById('connectTiktokBtn');
 
-  const showErrors = (errors = {}) => {
-    Object.entries(errors).forEach(([field, messages]) => {
-      const input = form.querySelector(`[name="${field}"]`);
-      if (!input) return;
-      input.classList.add('is-invalid');
-      const fb = input.closest('.form-group')?.querySelector('.invalid-feedback');
-      if (fb) fb.textContent = Array.isArray(messages) ? messages[0] : String(messages);
+      const clearErrors = () => {
+        form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        form.querySelectorAll('.invalid-feedback').forEach(el => (el.textContent = ''));
+      };
+
+      const showErrors = (errors = {}) => {
+        Object.entries(errors).forEach(([field, messages]) => {
+          const input = form.querySelector(`[name="${field}"]`);
+          if (!input) return;
+          input.classList.add('is-invalid');
+          const fb = input.closest('.form-group')?.querySelector('.invalid-feedback');
+          if (fb) fb.textContent = Array.isArray(messages) ? messages[0] : String(messages);
+        });
+      };
+
+      // --- Parse campaign dari query: ?campaign=<slug> atau format lama ?<slug> ---
+      (function applyCampaignFromQuery() {
+        const u = new URL(location.href);
+        let cId = u.searchParams.get('campaign_id');
+        let cSlug = u.searchParams.get('campaign');
+
+        if (!cId && !cSlug) {
+          // fallback format lama: ?my-campaign-slug (tanpa key)
+          const raw = u.search.replace(/^\?/, '');
+          if (raw && !raw.includes('=')) cSlug = raw;
+        }
+
+        if (cId)   campaignIdEl.value = cId;
+        if (cSlug) campaignSlugEl.value = cSlug;
+
+        // Siapkan link connect TikTok agar membawa campaign juga
+        const qs = new URLSearchParams();
+        if (cId)   qs.set('campaign_id', cId);
+        if (cSlug) qs.set('campaign', cSlug);
+        connectBtn.href = `/auth/tiktok/redirect${qs.toString() ? '?' + qs.toString() : ''}`;
+
+        // ⛔️ Pastikan BUKAN SPA: paksa full navigation
+        connectBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          window.location.assign(connectBtn.href);
+        });
+      })();
+
+      // Prefill dari session TikTok (hasil OAuth callback) + tampilkan avatar
+      (async () => {
+        try {
+          const res = await fetch('/me/tiktok', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+          if (!res.ok) return;
+
+          const data = await res.json();
+
+          if (data?.tiktok_user_id) {
+            tiktokIdEl.value = data.tiktok_user_id;
+          }
+
+          if (data?.tiktok_full_name && !fullNameEl.value) {
+            fullNameEl.value = data.tiktok_full_name;
+          }
+
+          if (data?.tiktok_avatar_url) {
+            avatarUrlEl.value = data.tiktok_avatar_url;
+            avatarImg.src = data.tiktok_avatar_url;
+            avatarWrap.classList.remove('d-none');
+          } else {
+            // belum connect → tampilkan box connect
+            connectBox.classList.remove('d-none');
+          }
+        } catch (e) {
+          console.warn('Prefill TikTok session failed:', e);
+          connectBox.classList.remove('d-none');
+        }
+      })();
+
+      // Submit handler
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        clearErrors();
+
+        if (!form.checkValidity()) {
+          form.classList.add('was-validated');
+          return;
+        }
+
+        const formData = new FormData(form);
+
+        try {
+          showLoader();
+          submitBtn.disabled = true;
+
+          const resp = await influencerService.create(formData);
+
+          hideLoader();
+          submitBtn.disabled = false;
+
+          showToast(resp.message || 'Registrasi berhasil disimpan.', 'success');
+
+          // ➜ Redirect ke /my-profile (SPA-style)
+          const next = '/my-profile';
+          if (location.pathname !== next) {
+            history.pushState(null, '', next);
+            window.dispatchEvent(new PopStateEvent('popstate'));
+            return;
+          }
+        } catch (err) {
+          hideLoader();
+          submitBtn.disabled = false;
+
+          if (err.status === 422 && err.errors) {
+            showErrors(err.errors);
+          } else {
+            showToast(err.message || 'Gagal menyimpan registrasi.', 'error');
+          }
+        }
+      });
+    })
+    .catch((err) => {
+      console.error('[register] Failed to import modules', err);
     });
-  };
-
-  // --- Parse campaign dari query: ?campaign=<slug> atau format lama ?<slug> ---
-  (function applyCampaignFromQuery() {
-    const u = new URL(location.href);
-    let cId = u.searchParams.get('campaign_id');
-    let cSlug = u.searchParams.get('campaign');
-
-    if (!cId && !cSlug) {
-      // fallback format lama: ?my-campaign-slug (tanpa key)
-      const raw = u.search.replace(/^\?/, '');
-      if (raw && !raw.includes('=')) cSlug = raw;
-    }
-
-    if (cId)   campaignIdEl.value = cId;
-    if (cSlug) campaignSlugEl.value = cSlug;
-
-    // Siapkan link connect TikTok agar membawa campaign juga
-    const qs = new URLSearchParams();
-    if (cId)   qs.set('campaign_id', cId);
-    if (cSlug) qs.set('campaign', cSlug);
-    connectBtn.href = `/auth/tiktok/redirect${qs.toString() ? '?' + qs.toString() : ''}`;
-  })();
-
-  // Prefill dari session TikTok (hasil OAuth callback) + tampilkan avatar
-  (async () => {
-    try {
-      const res = await fetch('/me/tiktok', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
-      if (!res.ok) return;
-
-      const data = await res.json();
-
-      if (data?.tiktok_user_id) {
-        tiktokIdEl.value = data.tiktok_user_id;
-      }
-
-      if (data?.tiktok_full_name && !fullNameEl.value) {
-        fullNameEl.value = data.tiktok_full_name;
-      }
-
-      if (data?.tiktok_avatar_url) {
-        avatarUrlEl.value = data.tiktok_avatar_url;
-        avatarImg.src = data.tiktok_avatar_url;
-        avatarWrap.classList.remove('d-none');
-      } else {
-        // belum connect → tampilkan box connect
-        connectBox.classList.remove('d-none');
-      }
-    } catch (e) {
-      console.warn('Prefill TikTok session failed:', e);
-      connectBox.classList.remove('d-none');
-    }
-  })();
-
-  // Submit handler
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    clearErrors();
-
-    if (!form.checkValidity()) {
-      form.classList.add('was-validated');
-      return;
-    }
-
-    const formData = new FormData(form);
-
-    try {
-      showLoader();
-      submitBtn.disabled = true;
-
-      const resp = await influencerService.create(formData);
-
-      hideLoader();
-      submitBtn.disabled = false;
-
-      showToast(resp.message || 'Registrasi berhasil disimpan.', 'success');
-
-      // ➜ Redirect ke /my-profile (SPA-style)
-      const next = '/my-profile';
-      if (location.pathname !== next) {
-        history.pushState(null, '', next);
-        window.dispatchEvent(new PopStateEvent('popstate'));
-        return; // stop eksekusi lanjutan setelah redirect
-      }
-
-      // (opsional) kalau tidak pakai SPA router, pakai:
-      // window.location.href = '/my-profile';
-
-    } catch (err) {
-      hideLoader();
-      submitBtn.disabled = false;
-
-      if (err.status === 422 && err.errors) {
-        showErrors(err.errors);
-      } else {
-        showToast(err.message || 'Gagal menyimpan registrasi.', 'error');
-      }
-    }
-  });
-
 }
