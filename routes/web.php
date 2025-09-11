@@ -21,6 +21,21 @@ Route::get('/storage/{path}', function (string $path) {
     return Storage::disk('public')->response($path); // set Content-Type otomatis
 })->where('path', '.*');
 
+Route::get('/files', function (Request $request) {
+    $p = $request->query('p');
+    if (!$p) abort(404);
+
+    // Keamanan basic
+    if (str_contains($p, '..')) abort(403);
+    // kalau semua upload kamu ada di folder "submissions", batasi di sana:
+    if (!str_starts_with($p, 'submissions/')) abort(403);
+
+    if (!Storage::disk('public')->exists($p)) abort(404);
+
+    // Stream ke browser dengan content-type yang tepat
+    return Storage::disk('public')->response($p);
+});
+
 // ==== Auth (SPA) ====
 Route::post('/login',  [AuthController::class, 'login'])->name('login');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
