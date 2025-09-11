@@ -151,82 +151,81 @@ class InfluencerSubmissionController extends Controller
         ], $submission->wasRecentlyCreated ? 201 : 200);
     }
 
-    public function update(Request $request, $id)
-    {
-        $submission = InfluencerSubmission::findOrFail($id);
+    // App\Http\Controllers\Api\InfluencerSubmissionController.php
 
-        // Validasi partial (semua 'sometimes')
-        $validated = $request->validate([
-            'tiktok_user_id'    => ['sometimes','string','max:100'],
-            'campaign_id'       => ['sometimes','integer','exists:campaigns,id'],
+public function update(Request $request, $id)
+{
+    $submission = InfluencerSubmission::findOrFail($id);
 
-            'link_1'            => ['sometimes','nullable','url','max:2048'],
-            'post_date_1'       => ['sometimes','nullable','date'],
-            'screenshot_1'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
+    $validated = $request->validate([
+        'tiktok_user_id'    => ['sometimes','string','max:100'],
+        'campaign_id'       => ['sometimes','integer','exists:campaigns,id'],
 
-            'link_2'            => ['sometimes','nullable','url','max:2048'],
-            'post_date_2'       => ['sometimes','nullable','date'],
-            'screenshot_2'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
+        'link_1'            => ['sometimes','nullable','url','max:2048'],
+        'post_date_1'       => ['sometimes','nullable','date'],
+        'screenshot_1'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
-            'purchase_platform' => ['sometimes','nullable', Rule::in(['tiktokshop','shopee'])],
-            'invoice_file'      => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
-            'review_proof_file' => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
+        'link_2'            => ['sometimes','nullable','url','max:2048'],
+        'post_date_2'       => ['sometimes','nullable','date'],
+        'screenshot_2'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
-            'yellow_cart'       => ['sometimes','nullable','integer','min:0'],
-            'product_sold'      => ['sometimes','nullable','integer','min:0'],
-            'gmv'               => ['sometimes','nullable','numeric','min:0'],
-        ]);
+        'purchase_platform' => ['sometimes','nullable', \Illuminate\Validation\Rule::in(['tiktokshop','shopee'])],
+        'invoice_file'      => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
+        'review_proof_file' => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
 
-        // Basis folder simpan: boleh berubah kalau campaign_id/tiktok_user_id ikut diupdate
-        $campaignId   = $validated['campaign_id']    ?? $submission->campaign_id;
-        $tiktokUserId = $validated['tiktok_user_id'] ?? $submission->tiktok_user_id;
-        $baseDir = "submissions/{$campaignId}/{$tiktokUserId}";
+        'yellow_cart'       => ['sometimes','nullable','integer','min:0'],
+        'product_sold'      => ['sometimes','nullable','integer','min:0'],
+        'gmv'               => ['sometimes','nullable','numeric','min:0'],
+    ]);
 
-        $saveFile = function (? \Illuminate\Http\UploadedFile $file, string $prefix) use ($baseDir) {
-            if (!$file) return null;
-            $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-            $name = $prefix . '_' . \Illuminate\Support\Str::uuid() . '.' . $ext;
-            return $file->storeAs($baseDir, $name, 'public');
-        };
+    $campaignId   = $validated['campaign_id']    ?? $submission->campaign_id;
+    $tiktokUserId = $validated['tiktok_user_id'] ?? $submission->tiktok_user_id;
+    $baseDir = "submissions/{$campaignId}/{$tiktokUserId}";
 
-        // Ganti file kalau ada upload baru (hapus lama)
-        if ($request->hasFile('screenshot_1')) {
-            if ($submission->screenshot_1_path) Storage::disk('public')->delete($submission->screenshot_1_path);
-            $submission->screenshot_1_path = $saveFile($request->file('screenshot_1'), 's1');
-        }
-        if ($request->hasFile('screenshot_2')) {
-            if ($submission->screenshot_2_path) Storage::disk('public')->delete($submission->screenshot_2_path);
-            $submission->screenshot_2_path = $saveFile($request->file('screenshot_2'), 's2');
-        }
-        if ($request->hasFile('invoice_file')) {
-            if ($submission->invoice_file_path) Storage::disk('public')->delete($submission->invoice_file_path);
-            $submission->invoice_file_path = $saveFile($request->file('invoice_file'), 'invoice');
-        }
-        if ($request->hasFile('review_proof_file')) {
-            if ($submission->review_proof_file_path) Storage::disk('public')->delete($submission->review_proof_file_path);
-            $submission->review_proof_file_path = $saveFile($request->file('review_proof_file'), 'review');
-        }
+    $saveFile = function (? \Illuminate\Http\UploadedFile $file, string $prefix) use ($baseDir) {
+        if (!$file) return null;
+        $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $name = $prefix . '_' . \Illuminate\Support\Str::uuid() . '.' . $ext;
+        return $file->storeAs($baseDir, $name, 'public');
+    };
 
-        // Update kolom kalau dikirim (pakai null coalesce untuk pertahankan nilai lama)
-        foreach ([
-            'tiktok_user_id','campaign_id',
-            'link_1','post_date_1',
-            'link_2','post_date_2',
-            'purchase_platform',
-            'yellow_cart','product_sold','gmv',
-        ] as $field) {
-            if (array_key_exists($field, $validated)) {
-                $submission->$field = $validated[$field];
-            }
-        }
-
-        $submission->save();
-
-        return response()->json([
-            'message' => 'Submission berhasil diupdate.',
-            'data'    => $submission->fresh(),
-        ]);
+    if ($request->hasFile('screenshot_1')) {
+        if ($submission->screenshot_1_path) \Storage::disk('public')->delete($submission->screenshot_1_path);
+        $submission->screenshot_1_path = $saveFile($request->file('screenshot_1'), 's1');
     }
+    if ($request->hasFile('screenshot_2')) {
+        if ($submission->screenshot_2_path) \Storage::disk('public')->delete($submission->screenshot_2_path);
+        $submission->screenshot_2_path = $saveFile($request->file('screenshot_2'), 's2');
+    }
+    if ($request->hasFile('invoice_file')) {
+        if ($submission->invoice_file_path) \Storage::disk('public')->delete($submission->invoice_file_path);
+        $submission->invoice_file_path = $saveFile($request->file('invoice_file'), 'invoice');
+    }
+    if ($request->hasFile('review_proof_file')) {
+        if ($submission->review_proof_file_path) \Storage::disk('public')->delete($submission->review_proof_file_path);
+        $submission->review_proof_file_path = $saveFile($request->file('review_proof_file'), 'review');
+    }
+
+    foreach ([
+        'tiktok_user_id','campaign_id',
+        'link_1','post_date_1',
+        'link_2','post_date_2',
+        'purchase_platform',
+        'yellow_cart','product_sold','gmv',
+    ] as $field) {
+        if (array_key_exists($field, $validated)) {
+            $submission->$field = $validated[$field];
+        }
+    }
+
+    $submission->save();
+
+    return response()->json([
+        'message' => 'Submission berhasil diupdate.',
+        'data'    => $submission->fresh()->loadMissing(['campaign:id,name,slug,brand_id','campaign.brand:id,name']),
+    ]);
+}
+
 
 
     /**

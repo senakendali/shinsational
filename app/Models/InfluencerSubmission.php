@@ -19,4 +19,21 @@ class InfluencerSubmission extends Model
     {
         return $this->belongsTo(Campaign::class);
     }
+
+    public function getScreenshot1UrlAttribute()
+    {
+        return $this->screenshot_1_path ? Storage::disk('public')->url($this->screenshot_1_path) : null;
+    }
+    public function getScreenshot2UrlAttribute()
+    {
+        return $this->screenshot_2_path ? Storage::disk('public')->url($this->screenshot_2_path) : null;
+    }
+    public function getInvoiceFileUrlAttribute()
+    {
+        return $this->invoice_file_path ? Storage::disk('public')->url($this->invoice_file_path) : null;
+    }
+    public function getReviewProofFileUrlAttribute()
+    {
+        return $this->review_proof_file_path ? Storage::disk('public')->url($this->review_proof_file_path) : null;
+    }
 }
