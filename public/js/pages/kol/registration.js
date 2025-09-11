@@ -218,6 +218,35 @@ export function render(target, params, query = {}, labelOverride = null) {
       }
     })();
 
+    // --- Prefill dari query (hasil callback) ---
+  (function prefillFromQueryIdentity() {
+    const u = new URL(location.href);
+    const qOpenId = u.searchParams.get('open_id');
+    const qName   = u.searchParams.get('name');
+    const qAvatar = u.searchParams.get('avatar');
+
+    if (qOpenId) {
+      // set hidden untuk submit
+      tiktokIdEl.value = qOpenId;
+
+      // isi nama kalau belum ada
+      if (qName && !fullNameEl.value) {
+        fullNameEl.value = qName;
+      }
+
+      // tampilkan avatar
+      if (qAvatar) {
+        avatarUrlEl.value = qAvatar;
+        avatarImg.src = qAvatar;
+        avatarWrap.classList.remove('d-none');
+      }
+
+      // sudah terhubung → sembunyikan connect box
+      connectBox.classList.add('d-none');
+    }
+  })();
+
+
     // Prefill dari session TikTok
     let sessionTikTok = {};
     try {
@@ -234,7 +263,7 @@ export function render(target, params, query = {}, labelOverride = null) {
       avatarWrap.classList.remove('d-none');
     }
     // Tampilkan connect box kalau BELUM terhubung (tidak punya open_id)
-    connectBox.classList.toggle('d-none', !!sessionTikTok?.tiktok_user_id);
+    connectBox.classList.toggle('d-none', !!(tiktokIdEl.value || sessionTikTok?.tiktok_user_id));
 
     // === CEK: sudah terdaftar untuk campaign ini? ===
     async function checkAlreadyRegisteredForCampaign() {

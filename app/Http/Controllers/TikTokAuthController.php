@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Cache;
 
 
 
+
 class TikTokAuthController extends Controller
 {
     // ==== Pakai env/config kalau bisa. Constants ini hanya fallback. ====
@@ -87,11 +88,9 @@ class TikTokAuthController extends Controller
         $code  = (string) $request->query('code', '');
         $state = (string) $request->query('state', '');
 
-        // ambil & hapus state dari session (kalau ada)
-        $sessionState = $request->session()->pull('tiktok_state');
-
-        // fallback: metadata state dari cache (sekali pakai, di-pull juga)
-        $cacheMeta = Cache::pull("oauth:tiktok:state:{$state}");
+        // --- Validasi state: session + cache (fallback) ---
+        $sessionState = $request->session()->pull('tiktok_state');                 // sekali pakai
+        $cacheMeta    = Cache::pull("oauth:tiktok:state:{$state}");                // sekali pakai
 
         if ($state === '' || (!$sessionState && !$cacheMeta) || ($sessionState && $state !== $sessionState)) {
             Log::warning('tiktok_invalid_state', [
@@ -101,24 +100,135 @@ class TikTokAuthController extends Controller
             ]);
             return response()->json(['error' => 'Invalid state'], 400);
         }
-
         if (!$code) {
             return response()->json(['error' => 'Missing code'], 400);
         }
 
-        // … (LANJUTKAN kode tukar token, get profile, dsb persis patch sebelumnya) …
+        // --- 1) Tukar code -> token ---
+        $tokenResp = Http::asForm()->post(self::TOKEN_URL, [
+            'client_key'    => self::CLIENT_KEY,
+            'client_secret' => self::CLIENT_SECRET,
+            'code'          => $code,
+            'grant_type'    => 'authorization_code',
+            'redirect_uri'  => self::REDIRECT_URI,
+        ]);
 
-        // Gunakan campaign_id/slug dari session atau fallback dari cache
+        if (!$tokenResp->ok()) {
+            Log::error('tiktok_token_error', [
+                'sent_redirect' => self::REDIRECT_URI,
+                'status'        => $tokenResp->status(),
+                'body'          => $tokenResp->json(),
+            ]);
+            return response()->json([
+                'error'   => 'Failed to exchange token',
+                'details' => $tokenResp->json(),
+            ], 500);
+        }
+
+        $tokenData    = $tokenResp->json();
+        $accessToken  = $tokenData['access_token']  ?? null;
+        $refreshToken = $tokenData['refresh_token'] ?? null;
+        $expiresIn    = $tokenData['expires_in']    ?? null;   // seconds
+        $tokenType    = $tokenData['token_type']    ?? 'Bearer';
+        $granted      = preg_split('/[\s,]+/', trim($tokenData['scope'] ?? '')) ?: [];
+
+        if (!$accessToken) {
+            return response()->json(['error' => 'No access_token from TikTok'], 500);
+        }
+
+        // (opsional) cek scope
+        $need    = ['user.info.basic','user.info.profile','video.list'];
+        $missing = array_diff($need, $granted);
+        if ($missing) {
+            Log::warning('tiktok_missing_scopes', compact('granted','missing'));
+            // lanjutkan; username/avatar mungkin kosong bila scope kurang
+        }
+
+        // --- 2) Profil user ---
+        $userResp = Http::withToken($accessToken)
+            ->acceptJson()
+            ->get(self::USERINFO_URL, [
+                'fields' => 'open_id,username,display_name,avatar_url',
+            ]);
+
+        if (!$userResp->ok()) {
+            $body = $userResp->json();
+            Log::error('tiktok_userinfo_error', ['status'=>$userResp->status(),'body'=>$body]);
+            $msg = $body['message'] ?? ($body['error']['message'] ?? 'Failed to fetch user info');
+            return response()->json(['error' => $msg, 'details' => $body], 500);
+        }
+
+        $user     = data_get($userResp->json(), 'data.user', []);
+        $openId   = $user['open_id']      ?? null;
+        $username = $user['username']     ?? null;
+        $display  = $user['display_name'] ?? null;
+        $avatar   = $user['avatar_url']   ?? null;
+
+        if (!$openId) {
+            return response()->json(['error' => 'Missing open_id'], 400);
+        }
+
+        // --- 3) Simpan/Update akun terpusat ---
+        InfluencerAccount::updateOrCreate(
+            ['tiktok_user_id' => $openId],
+            [
+                'tiktok_username'    => $username,
+                'full_name'          => $display,
+                'avatar_url'         => $avatar,
+                'token_type'         => $tokenType,
+                'access_token'       => $accessToken,   // terenkripsi via casts (Laravel 10+)
+                'refresh_token'      => $refreshToken,  // terenkripsi via casts
+                'expires_at'         => $expiresIn ? now()->addSeconds((int)$expiresIn) : null,
+                'last_refreshed_at'  => now(),
+                'revoked_at'         => null,
+                'scopes'             => $granted,
+            ]
+        );
+
+        // --- 4) Session ringan untuk FE (prefill) ---
+        $request->session()->put('tiktok_user_id',    $openId);
+        $request->session()->put('tiktok_username',   $username);
+        $request->session()->put('tiktok_full_name',  $display);
+        $request->session()->put('tiktok_avatar_url', $avatar);
+
+        // --- 5) Build redirect + set cookie tkoid (fallback tanpa session) ---
         $campaignId   = $request->session()->pull('pending_campaign_id')   ?? data_get($cacheMeta, 'campaign_id');
         $campaignSlug = $request->session()->pull('pending_campaign_slug') ?? data_get($cacheMeta, 'campaign_slug');
 
-        // redirect balik
-        $qs = ['connected' => 'tiktok'];
+        $qs = [
+            'connected' => 'tiktok',
+            'open_id'   => $openId,
+            'name'      => $display,
+            'avatar'    => $avatar,
+        ];
         if ($campaignId)   $qs['campaign_id'] = $campaignId;
         if ($campaignSlug) $qs['campaign']    = $campaignSlug;
 
-        return redirect('/registration?'.http_build_query($qs));
+        $redirectUrl  = '/registration?' . http_build_query($qs);
+        $cookieDomain = $request->getHost();           // samakan domain dengan host yang dipakai
+        $secure       = $request->isSecure();          // true di https
+        $minutes      = 60 * 24 * 30;                  // 30 hari
+
+        Log::info('tiktok_callback_ok', [
+            'open_id'  => $openId,
+            'username' => $username,
+            'redirect' => $redirectUrl,
+        ]);
+
+        return redirect($redirectUrl)
+            ->cookie(
+                'tkoid',           // nama cookie
+                $openId,           // value
+                $minutes,          // minutes
+                '/',               // path
+                $cookieDomain,     // domain
+                $secure,           // secure
+                true,              // httpOnly
+                false,             // raw
+                'Lax'              // same-site
+            );
     }
+
 
 
 }

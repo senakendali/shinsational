@@ -6,6 +6,7 @@ use App\Http\Controllers\TikTokAuthController;
 use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use App\Models\InfluencerAccount;
 
 // ==== CSRF refresh untuk SPA (dipakai utils/csrf.js) ====
 Route::get('/refresh-csrf', fn () => response()->json(['token' => csrf_token()]));
@@ -47,13 +48,21 @@ Route::get('/auth/tiktok/callback', [TikTokAuthController::class, 'callback']);
 
 
 
-Route::get('/me/tiktok', function (Illuminate\Http\Request $request) {
+Route::get('/me/tiktok', function (Request $request) {
+    // urutan prioritas: session → cookie → null
+    $openId = $request->session()->get('tiktok_user_id') ?: $request->cookie('tkoid');
+
+    $acc = null;
+    if ($openId) {
+        $acc = InfluencerAccount::where('tiktok_user_id', $openId)->first();
+    }
+
     return response()->json([
-        'tiktok_user_id'    => $request->session()->get('tiktok_user_id'),
-        'tiktok_username'   => $request->session()->get('tiktok_username'),
-        'tiktok_full_name'  => $request->session()->get('tiktok_full_name'),
-        'tiktok_avatar_url' => $request->session()->get('tiktok_avatar_url'),
-        'connected'         => (bool) $request->session()->get('tiktok_user_id'),
+        'tiktok_user_id'    => $openId,
+        'tiktok_username'   => $acc->tiktok_username ?? $request->session()->get('tiktok_username'),
+        'tiktok_full_name'  => $acc->full_name       ?? $request->session()->get('tiktok_full_name'),
+        'tiktok_avatar_url' => $acc->avatar_url      ?? $request->session()->get('tiktok_avatar_url'),
+        'connected'         => (bool) $openId,
     ]);
 });
 
