@@ -45,15 +45,16 @@ export function render(target, params, query = {}, labelOverride = null) {
           <div class="p-4 flex-grow-1">
             <h4 class="mb-4" id="mainCampaignTitle">My Campaign</h4>
 
-            <!-- NEW: Notice jika sudah pernah submit -->
+            <!-- Notice existing -->
             <div id="existingNotice" class="alert alert-info d-none">
-              Kamu sudah mengirim data untuk campaign ini. Form di bawah dalam mode lihat.
+              Kamu sudah pernah mengirim data untuk campaign ini. Field yang sudah terisi dikunci.
+              Kamu bisa klik <strong>Edit</strong> untuk mengganti data, atau lengkapi bagian yang belum lengkap lalu tekan <strong>Update</strong>.
             </div>
 
             <form id="submissionForm" class="needs-validation" novalidate>
               <div class="row g-3">
 
-                <!-- BARIS 1: Postingan 1 (Link, Tanggal, Screenshot) -->
+                <!-- BARIS 1 -->
                 <div class="col-12">
                   <div class="row g-3 align-items-end">
                     <div class="col-md-4">
@@ -69,13 +70,12 @@ export function render(target, params, query = {}, labelOverride = null) {
                     <div class="col-md-4">
                       <label for="screenshot_1" class="form-label text-muted">Screenshot Postingan 1</label>
                       <input type="file" class="form-control" id="screenshot_1" accept="image/*">
-                      <!-- NEW: slot tombol view -->
-                      <a id="screenshot_1_view" href="#" target="_blank" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                      <a id="screenshot_1_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
                     </div>
                   </div>
                 </div>
 
-                <!-- BARIS 2: Postingan 2 (Link, Tanggal, Screenshot) - OPSIONAL -->
+                <!-- BARIS 2 (opsional) -->
                 <div class="col-12">
                   <div class="row g-3 align-items-end">
                     <div class="col-md-4">
@@ -91,8 +91,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                     <div class="col-md-4">
                       <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2 (Opsional)</label>
                       <input type="file" class="form-control" id="screenshot_2" accept="image/*">
-                      <!-- NEW: slot tombol view -->
-                      <a id="screenshot_2_view" href="#" target="_blank" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                      <a id="screenshot_2_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
                     </div>
                   </div>
                 </div>
@@ -112,19 +111,20 @@ export function render(target, params, query = {}, labelOverride = null) {
                   <label for="invoice_file" class="form-label text-muted">Upload Invoice Pembelian</label>
                   <input type="file" class="form-control" id="invoice_file" accept="application/pdf,image/*">
                   <small class="text-muted">PDF/JPG/PNG, opsional</small>
-                  <!-- NEW -->
-                  <a id="invoice_file_view" href="#" target="_blank" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat File</a>
+                  <a id="invoice_file_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat File</a>
                 </div>
 
                 <div class="col-md-6">
                   <label for="review_proof_file" class="form-label text-muted">Upload Bukti Review/Rate</label>
                   <input type="file" class="form-control" id="review_proof_file" accept="application/pdf,image/*">
                   <small class="text-muted">PDF/JPG/PNG, opsional</small>
-                  <!-- NEW -->
-                  <a id="review_proof_file_view" href="#" target="_blank" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat File</a>
+                  <a id="review_proof_file_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat File</a>
                 </div>
 
-                <div class="col-12 pt-2 d-flex justify-content-end">
+                <!-- Actions -->
+                <div class="col-12 pt-2 d-flex justify-content-end gap-2">
+                  <button type="button" class="btn btn-outline-secondary d-none" id="cancelEditBtn">Batal</button>
+                  <button type="button" class="btn btn-outline-dark d-none" id="editBtn">Edit</button>
                   <button type="submit" class="btn btn-dark px-4" id="submitBtn">Kirim</button>
                 </div>
               </div>
@@ -155,119 +155,194 @@ export function render(target, params, query = {}, labelOverride = null) {
       renderHeaderKol("header");
       renderFooterKol();
 
+      // ===== Helpers
       const $ = (sel) => document.querySelector(sel);
       const safe = (v, d = '') => (v == null ? d : v);
-
-      // State
-      let openId = null;
-      let selectedCampaignId = null;
-      let currentSubmission = null; // NEW
-
-      // UI helpers
-      const disableForm = (flag) => {
-        [
-          "link-1","post_date_1","screenshot_1",
-          "link-2","post_date_2","screenshot_2",
-          "purchase_platform","invoice_file","review_proof_file","submitBtn"
-        ].forEach(id => { const el = $("#"+id); if (el) el.disabled = flag; });
-      };
-      const setTitle = (txt) => { $("#mainCampaignTitle").textContent = txt || 'My Campaign'; };
-
-      // NEW: date → yyyy-mm-dd untuk input type=date
+      const hasVal = (v) => v !== undefined && v !== null && String(v).trim() !== '';
       const toInputDate = (val) => {
         if (!val) return '';
         const d = new Date(val);
         if (isNaN(d)) return String(val).slice(0,10);
-        // normalisasi offset agar tidak lompat hari
         const k = new Date(d.getTime() - d.getTimezoneOffset()*60000);
         return k.toISOString().slice(0,10);
       };
 
-      // NEW: ambil URL file dari berbagai kemungkinan field
-      const getFileUrl = (rec, key) => {
-        if (!rec) return '';
-        return rec[`${key}_url`] || rec[key] || '';
-      };
+      // ===== State
+      let openId = null;
+      let selectedCampaignId = null;
+      let currentSubmission = null;
+      let isEditing = false;
 
-      // NEW: toggle input file ⇄ tombol view
-      const setFileViewOrInput = (inputId, url, btnText = 'Lihat File') => {
+      // ===== UI helpers
+      const setTitle = (txt) => { $("#mainCampaignTitle").textContent = txt || 'My Campaign'; };
+
+      const getFileUrl = (rec, key) => rec?.[`${key}_url`] || rec?.[key] || '';
+
+      // mode view: kalau ada URL → input disembunyikan & tombol view muncul
+      // mode edit: input SELALU muncul; tombol view muncul jika ada URL
+      const setFileControls = (inputId, url, { editMode = false, btnText = 'Lihat File' } = {}) => {
         const input = $("#"+inputId);
         const viewBtn = $("#"+inputId+"_view");
         if (!input || !viewBtn) return;
 
-        if (url) {
-          input.classList.add('d-none');
+        // tombol view
+        if (hasVal(url)) {
           viewBtn.href = url;
-          viewBtn.textContent = btnText;
+          viewBtn.textContent = inputId.includes('screenshot') ? 'Lihat Gambar' : btnText;
           viewBtn.classList.remove('d-none');
         } else {
           viewBtn.classList.add('d-none');
           viewBtn.removeAttribute('href');
-          input.classList.remove('d-none');
-          input.value = ''; // reset jika sebelumnya hidden
+        }
+
+        // visibilitas input
+        if (editMode) {
+          input.classList.remove('d-none'); // selalu tampil saat edit
+        } else {
+          // view mode → sembunyikan jika sudah ada file
+          if (hasVal(url)) input.classList.add('d-none');
+          else input.classList.remove('d-none');
+        }
+
+        // reset file jika sebelumnya hidden
+        if (input.classList.contains('d-none')) input.value = '';
+      };
+
+      const isComplete = (rec) => hasVal(rec?.link_1) && hasVal(rec?.post_date_1);
+
+      const updateButtonsVisibility = () => {
+        const hasRecord = !!currentSubmission?.id;
+        const editBtn = $("#editBtn");
+        const cancelBtn = $("#cancelEditBtn");
+        const submitBtn = $("#submitBtn");
+
+        if (!hasRecord) {
+          // create mode
+          editBtn.classList.add('d-none');
+          cancelBtn.classList.add('d-none');
+          submitBtn.textContent = 'Kirim';
+          submitBtn.disabled = false;
+          return;
+        }
+
+        if (isEditing) {
+          editBtn.classList.add('d-none');
+          cancelBtn.classList.remove('d-none');
+          submitBtn.textContent = 'Simpan Perubahan';
+          submitBtn.disabled = false;
+        } else {
+          editBtn.classList.remove('d-none');
+          cancelBtn.classList.add('d-none');
+          submitBtn.textContent = isComplete(currentSubmission) ? 'Update' : 'Lengkapi & Update';
+          submitBtn.disabled = false;
         }
       };
 
-      // NEW: bersihkan form ke mode input baru
-      const clearSubmissionView = () => {
-        $("#existingNotice")?.classList.add('d-none');
-        currentSubmission = null;
-        $("#submissionForm").reset();
-        disableForm(false);
+      const applyViewMode = () => {
+        // field text/select: yang sudah ada → disable; yang kosong + required → required
+        const controls = [
+          { id: 'link-1',              key: 'link_1',            required: true  },
+          { id: 'post_date_1',         key: 'post_date_1',       required: true  },
+          { id: 'link-2',              key: 'link_2',            required: false },
+          { id: 'post_date_2',         key: 'post_date_2',       required: false },
+          { id: 'purchase_platform',   key: 'purchase_platform', required: false },
+        ];
+        controls.forEach(({ id, key, required }) => {
+          const el = $("#"+id);
+          if (!el) return;
+          const filled = hasVal(currentSubmission?.[key]);
+          el.disabled = filled;
+          if (!filled && required) el.setAttribute('required','required');
+          else el.removeAttribute('required');
+        });
 
-        // pastikan semua input file terlihat, tombol view disembunyikan
-        setFileViewOrInput('screenshot_1', '');
-        setFileViewOrInput('screenshot_2', '');
-        setFileViewOrInput('invoice_file', '');
-        setFileViewOrInput('review_proof_file', '');
+        // file controls
+        setFileControls('screenshot_1',     getFileUrl(currentSubmission, 'screenshot_1'),     { editMode: false });
+        setFileControls('screenshot_2',     getFileUrl(currentSubmission, 'screenshot_2'),     { editMode: false });
+        setFileControls('invoice_file',     getFileUrl(currentSubmission, 'invoice_file'),     { editMode: false, btnText: 'Lihat File' });
+        setFileControls('review_proof_file',getFileUrl(currentSubmission, 'review_proof_file'),{ editMode: false, btnText: 'Lihat File' });
+
+        $("#existingNotice")?.classList.remove('d-none');
+        updateButtonsVisibility();
       };
 
-      // NEW: isi form dengan submission yang ada dan kunci form (view)
-      const fillSubmission = (rec) => {
-        if (!rec) return clearSubmissionView();
-        currentSubmission = rec;
+      const applyEditMode = () => {
+        // semua field enable
+        ['link-1','post_date_1','link-2','post_date_2','purchase_platform'].forEach(id => {
+          const el = $("#"+id);
+          if (!el) return;
+          el.disabled = false;
+          // required hanya untuk minimal
+          if (id === 'link-1' || id === 'post_date_1') el.setAttribute('required','required');
+          else el.removeAttribute('required');
+        });
 
+        // file controls (input selalu tampil)
+        setFileControls('screenshot_1',     getFileUrl(currentSubmission, 'screenshot_1'),     { editMode: true });
+        setFileControls('screenshot_2',     getFileUrl(currentSubmission, 'screenshot_2'),     { editMode: true });
+        setFileControls('invoice_file',     getFileUrl(currentSubmission, 'invoice_file'),     { editMode: true, btnText: 'Lihat File' });
+        setFileControls('review_proof_file',getFileUrl(currentSubmission, 'review_proof_file'),{ editMode: true, btnText: 'Lihat File' });
+
+        $("#existingNotice")?.classList.remove('d-none');
+        updateButtonsVisibility();
+      };
+
+      const clearSubmissionView = () => {
+        currentSubmission = null;
+        isEditing = false;
+
+        $("#existingNotice")?.classList.add('d-none');
+        $("#submissionForm").reset();
+
+        ['link-1','post_date_1','link-2','post_date_2','purchase_platform'].forEach(id => {
+          const el = $("#"+id);
+          if (!el) return;
+          el.disabled = false;
+          if (id === 'link-1' || id === 'post_date_1') el.setAttribute('required','required');
+          else el.removeAttribute('required');
+        });
+
+        // file inputs visible, view hidden
+        setFileControls('screenshot_1', '', { editMode: true });
+        setFileControls('screenshot_2', '', { editMode: true });
+        setFileControls('invoice_file', '', { editMode: true });
+        setFileControls('review_proof_file', '', { editMode: true });
+
+        updateButtonsVisibility();
+      };
+
+      const fillSubmissionValues = (rec) => {
         $("#link-1").value = safe(rec.link_1, '');
         $("#link-2").value = safe(rec.link_2, '');
         $("#post_date_1").value = toInputDate(rec.post_date_1);
         $("#post_date_2").value = toInputDate(rec.post_date_2);
         $("#purchase_platform").value = safe(rec.purchase_platform, '');
-
-        setFileViewOrInput('screenshot_1', getFileUrl(rec, 'screenshot_1'), 'Lihat Gambar');
-        setFileViewOrInput('screenshot_2', getFileUrl(rec, 'screenshot_2'), 'Lihat Gambar');
-        setFileViewOrInput('invoice_file',  getFileUrl(rec, 'invoice_file'),  'Lihat File');
-        setFileViewOrInput('review_proof_file', getFileUrl(rec, 'review_proof_file'), 'Lihat File');
-
-        // kunci form (view-only)
-        disableForm(true);
-        // tapi izinkan pindah campaign, jadi cuma tombol submit yang dimatikan
-        $("#submitBtn").disabled = true;
-
-        $("#existingNotice")?.classList.remove('d-none');
       };
 
-      // NEW: ambil submission berdasarkan user+campaign
+      const enterEditMode = () => {
+        if (!currentSubmission?.id) return;
+        isEditing = true;
+        applyEditMode();
+      };
+
+      const exitEditMode = () => {
+        if (!currentSubmission?.id) return;
+        isEditing = false;
+        // balikin value dari record
+        fillSubmissionValues(currentSubmission);
+        applyViewMode();
+      };
+
+      // fetch existing submission
       const fetchSubmissionForCampaign = async ({ tiktok_user_id, campaign_id }) => {
-        // Coba lewat service kalau ada method pencarian/list
-        if (submissionService?.list) {
-          const res = await submissionService.list({
-            tiktok_user_id,
-            campaign_id,
-            per_page: 1,
-          });
+        if (typeof submissionService?.list === 'function') {
+          const res = await submissionService.list({ tiktok_user_id, campaign_id, per_page: 1 });
           const arr = Array.isArray(res) ? res : (res?.data || []);
           return arr[0] || null;
         }
-
-        // Fallback pakai fetch langsung
-        const qs = new URLSearchParams({
-          tiktok_user_id,
-          campaign_id,
-          per_page: '1',
-        }).toString();
-
+        const qs = new URLSearchParams({ tiktok_user_id, campaign_id, per_page: '1' }).toString();
         const r = await fetch(`/api/influencer-submissions?${qs}`, {
-          headers: { 'Accept': 'application/json' },
+          headers: { 'Accept':'application/json' },
           credentials: 'same-origin'
         });
         if (!r.ok) return null;
@@ -276,20 +351,20 @@ export function render(target, params, query = {}, labelOverride = null) {
         return arr[0] || null;
       };
 
-      // NEW: load submission ketika campaign dipilih
       const loadSubmissionForSelected = async () => {
-        if (!openId || !selectedCampaignId) {
-          clearSubmissionView();
-          return;
-        }
+        isEditing = false;
+        if (!openId || !selectedCampaignId) { clearSubmissionView(); return; }
         try {
           showLoader();
-          const rec = await fetchSubmissionForCampaign({
-            tiktok_user_id: openId,
-            campaign_id: selectedCampaignId
-          });
-          if (rec) fillSubmission(rec);
-          else clearSubmissionView();
+          const rec = await fetchSubmissionForCampaign({ tiktok_user_id: openId, campaign_id: selectedCampaignId });
+          currentSubmission = rec || null;
+
+          if (currentSubmission) {
+            fillSubmissionValues(currentSubmission);
+            applyViewMode();
+          } else {
+            clearSubmissionView();
+          }
         } catch (e) {
           console.warn('fetchSubmissionForCampaign error', e);
           clearSubmissionView();
@@ -303,7 +378,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (!Array.isArray(items) || items.length === 0) {
           listEl.innerHTML = `<div class="text-muted small">Belum ada campaign yang diikuti.</div>`;
           setTitle('My Campaign');
-          disableForm(true);
+          clearSubmissionView();
           return;
         }
 
@@ -323,7 +398,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (first) {
           selectedCampaignId = first.getAttribute('data-campaign-id');
           setTitle(first.textContent.trim());
-          disableForm(false);
         }
 
         // Click handlers
@@ -333,18 +407,23 @@ export function render(target, params, query = {}, labelOverride = null) {
             btn.classList.add('active');
             selectedCampaignId = btn.getAttribute('data-campaign-id');
             setTitle(btn.textContent.trim());
-            await loadSubmissionForSelected(); // NEW: load data submission campaign terpilih
+            await loadSubmissionForSelected();
           });
         });
 
-        // NEW: load submission untuk campaign pertama
+        // Load submission for first selected
         loadSubmissionForSelected();
       }
 
-      // Validation + submit (tetap sama, auto-create kalau belum ada data)
+      // Tombol Edit/Batal
+      $("#editBtn")?.addEventListener('click', enterEditMode);
+      $("#cancelEditBtn")?.addEventListener('click', exitEditMode);
+
+      // Submit handler (CREATE or UPDATE)
       const form = $("#submissionForm");
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
+
         if (!form.checkValidity()) {
           e.stopPropagation();
           form.classList.add("was-validated");
@@ -355,54 +434,69 @@ export function render(target, params, query = {}, labelOverride = null) {
           return;
         }
 
-        // Kalau sudah ada submission, kita lock sebagai view-only (submit dimatikan)
-        if (currentSubmission) {
-          showToast('Data sudah ada untuk campaign ini. Hubungi admin jika ingin mengubah.', 'warning');
-          return;
-        }
-
         const fd = new FormData();
         fd.set('tiktok_user_id', openId);
         fd.set('campaign_id', selectedCampaignId);
-        fd.set('link_1', $("#link-1").value.trim());
 
-        const link2 = $("#link-2").value.trim();
-        if (link2) fd.set('link_2', link2);
-
-        const pd1 = $("#post_date_1")?.value || '';
-        const pd2 = $("#post_date_2")?.value || '';
-        if (pd1) fd.set('post_date_1', pd1);
-        if (pd2) fd.set('post_date_2', pd2);
+        const addIfEnabled = (id, key = null) => {
+          const el = $("#"+id);
+          if (el && !el.disabled && hasVal(el.value)) {
+            fd.set(key || id.replace(/-/g,'_'), el.value.trim());
+          }
+        };
+        // saat edit mode, semua enabled — saat view mode hanya yang kosong & required enabled
+        addIfEnabled('link-1', 'link_1');
+        addIfEnabled('post_date_1', 'post_date_1');
+        addIfEnabled('link-2', 'link_2');
+        addIfEnabled('post_date_2', 'post_date_2');
+        addIfEnabled('purchase_platform', 'purchase_platform');
 
         const sc1 = $("#screenshot_1")?.files?.[0];
         const sc2 = $("#screenshot_2")?.files?.[0];
         const inv = $("#invoice_file")?.files?.[0];
         const rev = $("#review_proof_file")?.files?.[0];
-        const platform = $("#purchase_platform")?.value || '';
-
         if (sc1) fd.set('screenshot_1', sc1);
         if (sc2) fd.set('screenshot_2', sc2);
         if (inv) fd.set('invoice_file', inv);
         if (rev) fd.set('review_proof_file', rev);
-        if (platform) fd.set('purchase_platform', platform);
 
         try {
           showLoader();
-          $("#submitBtn").disabled = true;
-          const resp = await submissionService.create(fd);
-          showToast(resp.message || 'Data berhasil dikirim');
+          const btn = $("#submitBtn");
+          btn.disabled = true;
 
-          // Setelah submit sukses, ambil lagi & tampilkan sebagai view
-          await loadSubmissionForSelected();
+          let resp;
+          if (currentSubmission?.id) {
+            // UPDATE (PATCH)
+            if (typeof submissionService?.update === 'function') {
+              resp = await submissionService.update(currentSubmission.id, fd);
+            } else {
+              fd.set('_method', 'PATCH'); // Laravel-friendly
+              const r = await fetch(`/api/influencer-submissions/${currentSubmission.id}`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                body: fd
+              });
+              if (!r.ok) throw new Error('Gagal update');
+              resp = await r.json();
+            }
+            showToast(resp?.message || 'Data berhasil diupdate');
+          } else {
+            // CREATE
+            resp = await submissionService.create(fd);
+            showToast(resp?.message || 'Data berhasil dikirim');
+          }
+
+          await loadSubmissionForSelected(); // refresh tampilan (balik ke view mode)
         } catch (err) {
-          showToast(err.message || 'Gagal mengirim data', 'error');
+          showToast(err.message || 'Proses gagal', 'error');
           $("#submitBtn").disabled = false;
         } finally {
           hideLoader();
         }
       });
 
-      // Load profile + campaigns (tetap)
+      // Load profile + campaigns
       try {
         const res = await fetch('/me/tiktok', { headers: { 'Accept':'application/json' }, credentials: 'same-origin' });
         if (!res.ok) throw new Error('cannot fetch session');
@@ -410,6 +504,7 @@ export function render(target, params, query = {}, labelOverride = null) {
 
         openId = me.tiktok_user_id || null;
         $("#profileName").textContent = safe(me.tiktok_full_name, 'Creator');
+        $("#profileHandle").textContent = safe(me.tiktok_username ? '@'+me.tiktok_username : '', '');
 
         if (me.tiktok_avatar_url) {
           $("#profileAvatarIcon")?.classList.add('d-none');
@@ -419,7 +514,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         }
 
         if (openId) {
-          const result = await (await import(`/js/services/influencerRegistrationService.js?v=${v}`)).influencerService.getAll({
+          const result = await influencerService.getAll({
             tiktok_user_id: openId,
             include: 'campaign',
             per_page: 50,
