@@ -10,51 +10,16 @@ use Illuminate\Support\Facades\Storage;
 // ==== CSRF refresh untuk SPA (dipakai utils/csrf.js) ====
 Route::get('/refresh-csrf', fn () => response()->json(['token' => csrf_token()]));
 
-Route::get('/fs-info', function () {
-    $root = config('filesystems.disks.public.root');
-    $url  = config('filesystems.disks.public.url');
+Route::get('/storage/{path}', function (string $path) {
+    // keamanan minimal: batasi hanya folder tertentu
+    // if (!str_starts_with($path, 'submissions/')) abort(403);
 
-    // Coba tulis file test
-    $okPut = false; $urlTest = null;
-    try {
-        Storage::disk('public')->put('health.txt', 'ok');
-        $okPut = Storage::disk('public')->exists('health.txt');
-        $urlTest = Storage::disk('public')->url('health.txt');
-    } catch (\Throwable $e) {
-        $okPut = $e->getMessage();
+    if (!Storage::disk('public')->exists($path)) {
+        abort(404);
     }
-
-    return response()->json([
-        'public_path()' => public_path(),
-        'disk_public_root' => $root,
-        'disk_public_url'  => $url,
-        'can_write'        => $okPut,
-        'test_url'         => $urlTest,
-    ]);
-});
-
-Route::get('/one-time-move-uploads', function () {
-    $from = storage_path('app/public');                       // lama
-    $to   = public_path('storage');                           // baru
-
-    if (!is_dir($from)) return 'Source kosong';
-    @mkdir($to, 0755, true);
-
-    $it = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($from, FilesystemIterator::SKIP_DOTS),
-        RecursiveIteratorIterator::SELF_FIRST
-    );
-
-    foreach ($it as $item) {
-        $target = $to . DIRECTORY_SEPARATOR . $it->getSubPathName();
-        if ($item->isDir()) {
-            if (!is_dir($target)) @mkdir($target, 0755, true);
-        } else {
-            @rename($item->getPathname(), $target); // pindahkan file
-        }
-    }
-    return 'OK moved';
-});
+    // untuk gambar/file statis:
+    return Storage::disk('public')->response($path); // set Content-Type otomatis
+})->where('path', '.*');
 
 // ==== Auth (SPA) ====
 Route::post('/login',  [AuthController::class, 'login'])->name('login');
