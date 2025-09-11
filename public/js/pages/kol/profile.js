@@ -83,12 +83,12 @@ export function render(target, params, query = {}, labelOverride = null) {
                       <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
                     </div>
                     <div class="col-md-4">
-                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2 (Opsional)</label>
+                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2</label>
                       <input type="date" class="form-control" id="post_date_2">
                       <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
                     </div>
                     <div class="col-md-4">
-                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2 (Opsional)</label>
+                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2</label>
                       <input type="file" class="form-control" id="screenshot_2" accept="image/*">
                       <a id="screenshot_2_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
                     </div>
