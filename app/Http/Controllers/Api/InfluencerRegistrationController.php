@@ -10,6 +10,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
+use App\Models\InfluencerAccount;
 
 
 class InfluencerRegistrationController extends Controller
@@ -115,7 +116,7 @@ class InfluencerRegistrationController extends Controller
             $campaignId = Campaign::where('slug', $campaignSlug)->value('id');
         }
 
-        // (opsional) fallback format lama: ?my-campaign-slug (tanpa key) → biasanya dipakai di GET, bukan POST
+        // (opsional) fallback format lama: ?my-campaign-slug (tanpa key)
         if (!$campaignId && !$campaignSlug) {
             $raw = $request->getQueryString();
             if ($raw && !str_contains($raw, '=')) {
@@ -178,51 +179,28 @@ class InfluencerRegistrationController extends Controller
         // Simpan row baru
         $reg = InfluencerRegistration::create($validated);
 
-        // === 1) Coba copy token dari registrasi lain (tanpa butuh session) ===
-        $source = InfluencerRegistration::where('tiktok_user_id', $reg->tiktok_user_id)
-            ->where('id', '<>', $reg->id)
-            ->whereNotNull('access_token')
-            ->orderByDesc('last_refreshed_at')
-            ->orderByDesc('updated_at')
-            ->first();
-
-        if ($source) {
-            // pakai Eloquent agar casts 'encrypted' jalan
-            $reg->token_type        = $source->token_type ?: 'Bearer';
-            $reg->access_token      = $source->access_token;
-            $reg->refresh_token     = $source->refresh_token;
-            $reg->expires_at        = $source->expires_at;
-            $reg->last_refreshed_at = $source->last_refreshed_at ?: now();
-            $reg->revoked_at        = null;
-            $reg->scopes            = $source->scopes;
-            $reg->save();
-        } else {
-            // === 2) Fallback: kalau session tersedia, tempel dari session (tanpa $request->session()) ===
-            try {
-                $sessionOpenId = Session::get('tiktok_user_id');
-                $bundle        = Session::get('tiktok_token_bundle');
-
-                if ($sessionOpenId && $bundle && $reg->tiktok_user_id === $sessionOpenId) {
-                    $reg->token_type        = $bundle['token_type']    ?? ($reg->token_type ?: 'Bearer');
-                    $reg->access_token      = $bundle['access_token']  ?? $reg->access_token;
-                    $reg->refresh_token     = $bundle['refresh_token'] ?? $reg->refresh_token;
-                    $reg->expires_at        = isset($bundle['expires_at']) ? Carbon::parse($bundle['expires_at']) : $reg->expires_at;
-                    $reg->last_refreshed_at = isset($bundle['last_refreshed_at']) ? Carbon::parse($bundle['last_refreshed_at']) : ($reg->last_refreshed_at ?: now());
-                    $reg->revoked_at        = null;
-                    $reg->scopes            = $bundle['scopes'] ?? $reg->scopes;
-                    $reg->save();
-                }
-            } catch (\Throwable $e) {
-                Log::warning('attach_session_token_skipped', ['err' => $e->getMessage()]);
+        // === Ambil token dari tabel influencer_accounts (tanpa session) ===
+        if ($reg->tiktok_user_id) {
+            $acc = InfluencerAccount::where('tiktok_user_id', $reg->tiktok_user_id)->first();
+            if ($acc) {
+                // Pakai Eloquent biar casts 'encrypted' di model registrasi tetap jalan
+                $reg->token_type        = $acc->token_type ?: ($reg->token_type ?: 'Bearer');
+                $reg->access_token      = $acc->access_token;      // terenkripsi via cast (Laravel 10+)
+                $reg->refresh_token     = $acc->refresh_token;     // terenkripsi via cast
+                $reg->expires_at        = $acc->expires_at ? Carbon::parse($acc->expires_at) : null;
+                $reg->last_refreshed_at = $acc->last_refreshed_at ?: now();
+                $reg->revoked_at        = null;
+                $reg->scopes            = $acc->scopes ?? [];
+                $reg->save();
             }
         }
-
 
         return response()->json([
             'message' => 'Registrasi berhasil disimpan.',
             'data'    => $reg->load('campaign:id,name,slug'),
         ], 201);
     }
+
 
     /**
      * GET /api/influencer-registrations/check

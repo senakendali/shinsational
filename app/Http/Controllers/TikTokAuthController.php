@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use App\Models\InfluencerAccount;
+
 
 class TikTokAuthController extends Controller
 {
@@ -68,8 +70,8 @@ class TikTokAuthController extends Controller
      */
     public function callback(Request $request)
     {
-        $code  = $request->string('code');
-        $state = $request->string('state');
+        $code  = (string) $request->query('code', '');
+        $state = (string) $request->query('state', '');
 
         if ($state !== $request->session()->pull('tiktok_state')) {
             return response()->json(['error' => 'Invalid state'], 400);
@@ -111,7 +113,7 @@ class TikTokAuthController extends Controller
         $missing = array_diff($need, $granted);
         if ($missing) {
             Log::warning('tiktok_missing_scopes', compact('granted','missing'));
-            // boleh lanjut, tapi username/avatar mungkin kosong
+            // tetap lanjut; username/avatar bisa saja null
         }
 
         // 2) Ambil profil user → open_id, username, display_name, avatar_url
@@ -138,37 +140,34 @@ class TikTokAuthController extends Controller
             return response()->json(['error' => 'Missing open_id'], 400);
         }
 
-        // 3) Simpan token+profil ke SEMUA baris influencer_registrations milik open_id
-        //    Pakai Eloquent agar encrypted casts (di model) aktif.
-        $rows = InfluencerRegistration::where('tiktok_user_id', $openId)->get();
-        foreach ($rows as $row) {
-            // hanya overwrite profil jika TikTok kirim nilai
-            if ($username) $row->tiktok_username = $username;
-            if ($display)  $row->full_name       = $display;
-            if ($avatar)   $row->profile_pic_url = $avatar;
+        // 3) Simpan/Update ke tabel influencer_accounts (satu baris per tiktok_user_id)
+        InfluencerAccount::updateOrCreate(
+            ['tiktok_user_id' => $openId],
+            [
+                'tiktok_username'    => $username,
+                'full_name'          => $display,
+                'avatar_url'         => $avatar,
+                'token_type'         => $tokenType,
+                'access_token'       => $accessToken,   // terenkripsi via casts (Laravel 10+)
+                'refresh_token'      => $refreshToken,  // terenkripsi via casts
+                'expires_at'         => $expiresIn ? now()->addSeconds((int)$expiresIn) : null,
+                'last_refreshed_at'  => now(),
+                'revoked_at'         => null,
+                'scopes'             => $granted,
+            ]
+        );
 
-            $row->token_type        = $tokenType;
-            $row->access_token      = $accessToken;                       // terenkripsi oleh cast model
-            $row->refresh_token     = $refreshToken;                      // terenkripsi oleh cast model
-            $row->expires_at        = $expiresIn ? now()->addSeconds((int)$expiresIn) : null;
-            $row->last_refreshed_at = now();
-            $row->revoked_at        = null;
-            $row->scopes            = $granted;
-
-            $row->save();
-        }
-
-        // 4) Simpan juga di session (kalau user ini belum punya row; nanti tempel di store())
+        // 4) Simpan session untuk prefill FE (tidak dipakai sebagai sumber token lagi)
         $request->session()->put('tiktok_user_id',    $openId);
         $request->session()->put('tiktok_username',   $username);
         $request->session()->put('tiktok_full_name',  $display);
         $request->session()->put('tiktok_avatar_url', $avatar);
+
+        // (opsional) kalau masih mau: simpan bundle ringan di session (tidak wajib)
         $request->session()->put('tiktok_token_bundle', [
-            'token_type'    => $tokenType,
-            'access_token'  => $accessToken,
-            'refresh_token' => $refreshToken,
-            'expires_at'    => $expiresIn ? now()->addSeconds((int)$expiresIn)->toIso8601String() : null,
-            'scopes'        => $granted,
+            'token_type'        => $tokenType,
+            'expires_at'        => $expiresIn ? now()->addSeconds((int)$expiresIn)->toIso8601String() : null,
+            'scopes'            => $granted,
             'last_refreshed_at' => now()->toIso8601String(),
         ]);
 
@@ -182,4 +181,5 @@ class TikTokAuthController extends Controller
 
         return redirect('/registration?'.http_build_query($qs));
     }
+
 }
