@@ -47,7 +47,7 @@ Route::get('/auth/tiktok/callback', [TikTokAuthController::class, 'callback']);
 
 
 
-Route::get('/me/tiktok', function (Request $request) {
+Route::get('/me/tiktok', function (Illuminate\Http\Request $request) {
     return response()->json([
         'tiktok_user_id'    => $request->session()->get('tiktok_user_id'),
         'tiktok_username'   => $request->session()->get('tiktok_username'),
@@ -56,6 +56,7 @@ Route::get('/me/tiktok', function (Request $request) {
         'connected'         => (bool) $request->session()->get('tiktok_user_id'),
     ]);
 });
+
 
 
 // ==== Catch-all SPA (tetap paling bawah) ====

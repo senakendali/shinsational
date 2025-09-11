@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Session;
+
 
 class InfluencerRegistrationController extends Controller
 {
@@ -176,25 +178,45 @@ class InfluencerRegistrationController extends Controller
         // Simpan row baru
         $reg = InfluencerRegistration::create($validated);
 
-        // === Tempel token dari session kalau ada & open_id cocok ===
-        $sessionOpenId = $request->session()->get('tiktok_user_id');
-        $bundle        = $request->session()->get('tiktok_token_bundle'); // di-set di TikTokAuthController@callback
+        // === 1) Coba copy token dari registrasi lain (tanpa butuh session) ===
+        $source = InfluencerRegistration::where('tiktok_user_id', $reg->tiktok_user_id)
+            ->where('id', '<>', $reg->id)
+            ->whereNotNull('access_token')
+            ->orderByDesc('last_refreshed_at')
+            ->orderByDesc('updated_at')
+            ->first();
 
-        if ($sessionOpenId && $bundle && $reg->tiktok_user_id === $sessionOpenId) {
+        if ($source) {
+            // pakai Eloquent agar casts 'encrypted' jalan
+            $reg->token_type        = $source->token_type ?: 'Bearer';
+            $reg->access_token      = $source->access_token;
+            $reg->refresh_token     = $source->refresh_token;
+            $reg->expires_at        = $source->expires_at;
+            $reg->last_refreshed_at = $source->last_refreshed_at ?: now();
+            $reg->revoked_at        = null;
+            $reg->scopes            = $source->scopes;
+            $reg->save();
+        } else {
+            // === 2) Fallback: kalau session tersedia, tempel dari session (tanpa $request->session()) ===
             try {
-                $reg->token_type        = $bundle['token_type']    ?? ($reg->token_type ?: 'Bearer');
-                $reg->access_token      = $bundle['access_token']  ?? $reg->access_token;   // terenkripsi via cast (Laravel 10+)
-                $reg->refresh_token     = $bundle['refresh_token'] ?? $reg->refresh_token;  // terenkripsi via cast
-                $reg->expires_at        = isset($bundle['expires_at']) ? Carbon::parse($bundle['expires_at']) : $reg->expires_at;
-                $reg->last_refreshed_at = isset($bundle['last_refreshed_at']) ? Carbon::parse($bundle['last_refreshed_at']) : ($reg->last_refreshed_at ?: now());
-                $reg->revoked_at        = null;
-                $reg->scopes            = $bundle['scopes'] ?? $reg->scopes;
-                $reg->save();
+                $sessionOpenId = Session::get('tiktok_user_id');
+                $bundle        = Session::get('tiktok_token_bundle');
+
+                if ($sessionOpenId && $bundle && $reg->tiktok_user_id === $sessionOpenId) {
+                    $reg->token_type        = $bundle['token_type']    ?? ($reg->token_type ?: 'Bearer');
+                    $reg->access_token      = $bundle['access_token']  ?? $reg->access_token;
+                    $reg->refresh_token     = $bundle['refresh_token'] ?? $reg->refresh_token;
+                    $reg->expires_at        = isset($bundle['expires_at']) ? Carbon::parse($bundle['expires_at']) : $reg->expires_at;
+                    $reg->last_refreshed_at = isset($bundle['last_refreshed_at']) ? Carbon::parse($bundle['last_refreshed_at']) : ($reg->last_refreshed_at ?: now());
+                    $reg->revoked_at        = null;
+                    $reg->scopes            = $bundle['scopes'] ?? $reg->scopes;
+                    $reg->save();
+                }
             } catch (\Throwable $e) {
-                Log::warning('attach_session_token_failed', ['err' => $e->getMessage()]);
-                // lanjut tanpa gagal
+                Log::warning('attach_session_token_skipped', ['err' => $e->getMessage()]);
             }
         }
+
 
         return response()->json([
             'message' => 'Registrasi berhasil disimpan.',
