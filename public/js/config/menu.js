@@ -26,9 +26,9 @@ export const ownerMenu = [
         icon: "bi-file-earmark-bar-graph",
         children: [
             { 
-                label: "Kol", 
-                path: "/kol-list", 
-                icon: "bi-person-badge" 
+                label: "Submission", 
+                path: "/admin/submissions", 
+                icon: "bi-list-check" 
             },
         ],
     },
