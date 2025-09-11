@@ -35,7 +35,7 @@ export function render(target, params, query = {}, labelOverride = null) {
     </section>
 
     <!-- Guidelines Section -->
-    <section class="py-5 py-lg-4 mt-lg-2 d-flex align-items-center bg-light">
+    <section class="py-5 py-lg-4 mb-lg-3 d-flex align-items-center bg-light">
       <div class="container pt-5" >
         <h2 class="text-center mb-5" id="guidelines">How It Works</h2>
         <div class="row">
