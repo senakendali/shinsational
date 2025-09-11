@@ -32,6 +32,29 @@ Route::get('/fs-info', function () {
     ]);
 });
 
+Route::get('/one-time-move-uploads', function () {
+    $from = storage_path('app/public');                       // lama
+    $to   = public_path('storage');                           // baru
+
+    if (!is_dir($from)) return 'Source kosong';
+    @mkdir($to, 0755, true);
+
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($from, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+
+    foreach ($it as $item) {
+        $target = $to . DIRECTORY_SEPARATOR . $it->getSubPathName();
+        if ($item->isDir()) {
+            if (!is_dir($target)) @mkdir($target, 0755, true);
+        } else {
+            @rename($item->getPathname(), $target); // pindahkan file
+        }
+    }
+    return 'OK moved';
+});
+
 // ==== Auth (SPA) ====
 Route::post('/login',  [AuthController::class, 'login'])->name('login');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
