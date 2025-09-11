@@ -518,12 +518,15 @@ export function render(target, params, query = {}, labelOverride = null) {
           let resp;
           if (currentSubmission?.id) {
             // UPDATE via PATCH
+            // UPDATE via POST + _method=PATCH (aman untuk multipart)
+            fd.set('_method', 'PATCH');
             const r = await fetch(`/api/influencer-submissions/${currentSubmission.id}`, {
-              method: 'PATCH',
+              method: 'POST',
               credentials: 'same-origin',
               body: fd,
               cache: 'no-store'
             });
+
             if (!r.ok) throw new Error('Gagal update');
             resp = await r.json();
             showToast(resp?.message || 'Data berhasil diupdate');

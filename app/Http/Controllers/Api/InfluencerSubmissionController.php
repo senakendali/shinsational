@@ -155,6 +155,12 @@ class InfluencerSubmissionController extends Controller
 
     public function update(Request $request, $id)
     {
+        // sementara di awal update():
+        \Log::info('UPDATE payload', [
+        'all' => $request->all(),
+        'files' => array_map(fn($f) => $f?->getClientOriginalName(), $request->allFiles())
+        ]);
+
         $submission = InfluencerSubmission::findOrFail($id);
 
         // =======================
