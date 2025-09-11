@@ -75,6 +75,11 @@ Route::get('/influencer-submissions',          [InfluencerSubmissionController::
 Route::post('/influencer-submissions',         [InfluencerSubmissionController::class, 'store']);
 
 Route::get('/influencer-submissions/{id}',     [InfluencerSubmissionController::class, 'show'])->whereNumber('id');
+
+// Terima POST (legacy), PUT & PATCH untuk update
+Route::match(['POST','PUT','PATCH'], '/influencer-submissions/{id}', [InfluencerSubmissionController::class, 'update'])
+    ->whereNumber('id');
+    
 Route::post('/influencer-submissions/{id}',    [InfluencerSubmissionController::class, 'update'])->whereNumber('id'); // POST utk update
 Route::delete('/influencer-submissions/{id}',  [InfluencerSubmissionController::class, 'destroy'])->whereNumber('id');
 

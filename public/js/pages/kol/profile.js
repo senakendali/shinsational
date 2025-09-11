@@ -83,12 +83,12 @@ export function render(target, params, query = {}, labelOverride = null) {
                       <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
                     </div>
                     <div class="col-md-4">
-                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2 (Opsional)</label>
+                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2</label>
                       <input type="date" class="form-control" id="post_date_2">
                       <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
                     </div>
                     <div class="col-md-4">
-                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2 (Opsional)</label>
+                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2</label>
                       <input type="file" class="form-control" id="screenshot_2" accept="image/*">
                       <a id="screenshot_2_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
                     </div>
@@ -147,7 +147,7 @@ export function render(target, params, query = {}, labelOverride = null) {
       const { renderHeaderKol } = headerMod;
       const { renderFooterKol } = footerMod;
       const { influencerService } = regSvcMod;
-      const { submissionService } = subSvcMod;
+      const { submissionService } = subSvcMod; // masih dipakai utk create kalau mau
       const { showLoader, hideLoader } = loaderMod;
       const { showToast } = toastMod;
 
@@ -166,7 +166,18 @@ export function render(target, params, query = {}, labelOverride = null) {
         return k.toISOString().slice(0,10);
       };
 
-      // Ambil URL file dari banyak kemungkinan key
+      // Normalisasi path file menjadi URL bisa diklik
+      const toPublicUrl = (raw) => {
+        if (!hasVal(raw)) return '';
+        const s = String(raw);
+        if (/^(https?:)?\/\//i.test(s) || /^blob:|^data:/i.test(s)) return s; // sudah URL
+        // anggap path relatif di disk 'public' → map ke /storage/...
+        let path = s.replace(/^\/+/, '');
+        if (!/^storage\//i.test(path)) path = `storage/${path}`;
+        return `${location.origin}/${path}`;
+      };
+
+      // Ambil URL file dari berbagai kemungkinan key
       const getFileUrl = (rec, key) => {
         if (!rec) return '';
         const candidates = [
@@ -176,9 +187,9 @@ export function render(target, params, query = {}, labelOverride = null) {
           `${key}_path`, `${key}Path`,
         ];
         for (const k of candidates) {
-          if (hasVal(rec?.[k])) return rec[k];
+          if (hasVal(rec?.[k])) return toPublicUrl(rec[k]);
         }
-        if (rec?.files && hasVal(rec.files[key])) return rec.files[key];
+        if (rec?.files && hasVal(rec.files[key])) return toPublicUrl(rec.files[key]);
         return '';
       };
 
@@ -241,7 +252,6 @@ export function render(target, params, query = {}, labelOverride = null) {
 
       // ===== UI helpers
       const setTitle = (txt) => { $("#mainCampaignTitle").textContent = txt || 'My Campaign'; };
-
       const isComplete = (rec) => hasVal(rec?.link_1) && hasVal(rec?.post_date_1);
 
       const updateButtonsVisibility = () => {
@@ -362,6 +372,7 @@ export function render(target, params, query = {}, labelOverride = null) {
 
       // API: fetch existing submission
       const fetchSubmissionForCampaign = async ({ tiktok_user_id, campaign_id }) => {
+        // kalau ada service list, pakai; else fallback fetch
         if (typeof submissionService?.list === 'function') {
           const res = await submissionService.list({ tiktok_user_id, campaign_id, per_page: 1 });
           const arr = Array.isArray(res) ? res : (res?.data || []);
@@ -446,7 +457,7 @@ export function render(target, params, query = {}, labelOverride = null) {
       $("#editBtn")?.addEventListener('click', enterEditMode);
       $("#cancelEditBtn")?.addEventListener('click', exitEditMode);
 
-      // Submit handler (CREATE or UPDATE)
+      // Submit handler (CREATE atau UPDATE dgn PATCH)
       const form = $("#submissionForm");
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -493,23 +504,28 @@ export function render(target, params, query = {}, labelOverride = null) {
 
           let resp;
           if (currentSubmission?.id) {
-            // UPDATE (PATCH)
-            if (typeof submissionService?.update === 'function') {
-              resp = await submissionService.update(currentSubmission.id, fd);
+            // === UPDATE via PATCH (sesuai Opsi B) ===
+            const r = await fetch(`/api/influencer-submissions/${currentSubmission.id}`, {
+              method: 'PATCH',
+              credentials: 'same-origin',
+              body: fd
+            });
+            if (!r.ok) throw new Error('Gagal update');
+            resp = await r.json();
+            showToast(resp?.message || 'Data berhasil diupdate');
+          } else {
+            // CREATE (boleh lewat service atau fetch)
+            if (typeof submissionService?.create === 'function') {
+              resp = await submissionService.create(fd);
             } else {
-              fd.set('_method', 'PATCH'); // Laravel-friendly
-              const r = await fetch(`/api/influencer-submissions/${currentSubmission.id}`, {
+              const r = await fetch('/api/influencer-submissions', {
                 method: 'POST',
                 credentials: 'same-origin',
                 body: fd
               });
-              if (!r.ok) throw new Error('Gagal update');
+              if (!r.ok) throw new Error('Gagal kirim');
               resp = await r.json();
             }
-            showToast(resp?.message || 'Data berhasil diupdate');
-          } else {
-            // CREATE
-            resp = await submissionService.create(fd);
             showToast(resp?.message || 'Data berhasil dikirim');
           }
 
