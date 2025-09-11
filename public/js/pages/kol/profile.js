@@ -83,12 +83,12 @@ export function render(target, params, query = {}, labelOverride = null) {
                       <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
                     </div>
                     <div class="col-md-4">
-                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2</label>
+                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2 (Opsional)</label>
                       <input type="date" class="form-control" id="post_date_2">
                       <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
                     </div>
                     <div class="col-md-4">
-                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2</label>
+                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2 (Opsional)</label>
                       <input type="file" class="form-control" id="screenshot_2" accept="image/*">
                       <a id="screenshot_2_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
                     </div>
@@ -147,7 +147,7 @@ export function render(target, params, query = {}, labelOverride = null) {
       const { renderHeaderKol } = headerMod;
       const { renderFooterKol } = footerMod;
       const { influencerService } = regSvcMod;
-      const { submissionService } = subSvcMod; // masih dipakai utk create kalau mau
+      const { submissionService } = subSvcMod;
       const { showLoader, hideLoader } = loaderMod;
       const { showToast } = toastMod;
 
@@ -166,12 +166,11 @@ export function render(target, params, query = {}, labelOverride = null) {
         return k.toISOString().slice(0,10);
       };
 
-      // Normalisasi path file menjadi URL bisa diklik
+      // Map path 'public' → URL klikable
       const toPublicUrl = (raw) => {
         if (!hasVal(raw)) return '';
         const s = String(raw);
-        if (/^(https?:)?\/\//i.test(s) || /^blob:|^data:/i.test(s)) return s; // sudah URL
-        // anggap path relatif di disk 'public' → map ke /storage/...
+        if (/^(https?:)?\/\//i.test(s) || /^blob:|^data:/i.test(s)) return s;
         let path = s.replace(/^\/+/, '');
         if (!/^storage\//i.test(path)) path = `storage/${path}`;
         return `${location.origin}/${path}`;
@@ -193,8 +192,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         return '';
       };
 
-      // mode view: kalau ada URL → input disembunyikan & tombol view muncul
-      // mode edit: input SELALU tampil; tombol view muncul jika ada URL
+      // mode view vs edit untuk file controls
       const setFileControls = (inputId, remoteUrl, { editMode = false, btnText = 'Lihat File' } = {}) => {
         const input = $("#"+inputId);
         const viewBtn = $("#"+inputId+"_view");
@@ -221,7 +219,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (input.classList.contains('d-none')) input.value = '';
       };
 
-      // Preview lokal saat user pilih file
+      // Preview lokal saat pilih file
       const wirePreview = (inputId) => {
         const input = $("#"+inputId);
         const viewBtn = $("#"+inputId+"_view");
@@ -348,7 +346,6 @@ export function render(target, params, query = {}, labelOverride = null) {
           else el.removeAttribute('required');
         });
 
-        // mode create: input tampil, tombol view disembunyikan
         setFileControls('screenshot_1', '', { editMode: true });
         setFileControls('screenshot_2', '', { editMode: true });
         setFileControls('invoice_file', '', { editMode: true });
@@ -370,20 +367,22 @@ export function render(target, params, query = {}, labelOverride = null) {
         applyViewMode();
       };
 
-      // API: fetch existing submission
+      // API: fetch existing submission (cache-busted)
       const fetchSubmissionForCampaign = async ({ tiktok_user_id, campaign_id }) => {
-        // kalau ada service list, pakai; else fallback fetch
-        if (typeof submissionService?.list === 'function') {
-          const res = await submissionService.list({ tiktok_user_id, campaign_id, per_page: 1 });
-          const arr = Array.isArray(res) ? res : (res?.data || []);
-          return arr[0] || null;
-        }
-        const qs = new URLSearchParams({ tiktok_user_id, campaign_id, per_page: '1' }).toString();
+        const qs = new URLSearchParams({
+          tiktok_user_id,
+          campaign_id,
+          per_page: '1',
+          _: String(Date.now()) // cache bust
+        }).toString();
+
         const r = await fetch(`/api/influencer-submissions?${qs}`, {
           headers: { 'Accept':'application/json' },
-          credentials: 'same-origin'
+          credentials: 'same-origin',
+          cache: 'no-store'
         });
         if (!r.ok) return null;
+
         const json = await r.json();
         const arr = Array.isArray(json) ? json : (json?.data || []);
         return arr[0] || null;
@@ -431,14 +430,12 @@ export function render(target, params, query = {}, labelOverride = null) {
           `;
         }).join('');
 
-        // Auto-select first
         const first = listEl.querySelector('.campaign-item');
         if (first) {
           selectedCampaignId = first.getAttribute('data-campaign-id');
           setTitle(first.textContent.trim());
         }
 
-        // Click handlers
         listEl.querySelectorAll('.campaign-item').forEach(btn => {
           btn.addEventListener('click', async () => {
             listEl.querySelectorAll('.campaign-item').forEach(b => b.classList.remove('active'));
@@ -449,7 +446,6 @@ export function render(target, params, query = {}, labelOverride = null) {
           });
         });
 
-        // Load submission for first selected
         loadSubmissionForSelected();
       }
 
@@ -476,17 +472,22 @@ export function render(target, params, query = {}, labelOverride = null) {
         fd.set('tiktok_user_id', openId);
         fd.set('campaign_id', selectedCampaignId);
 
-        const addIfEnabled = (id, key = null) => {
+        // Kumpulkan field: di edit mode kirim SEMUA yang punya nilai; di view mode hanya yang enabled
+        const addField = (id, key = null, { force = false } = {}) => {
           const el = $("#"+id);
-          if (el && !el.disabled && hasVal(el.value)) {
-            fd.set(key || id.replace(/-/g,'_'), el.value.trim());
+          if (!el) return;
+          if (force) {
+            if (hasVal(el.value)) fd.set(key || id.replace(/-/g,'_'), el.value.trim());
+          } else {
+            if (!el.disabled && hasVal(el.value)) fd.set(key || id.replace(/-/g,'_'), el.value.trim());
           }
         };
-        addIfEnabled('link-1', 'link_1');
-        addIfEnabled('post_date_1', 'post_date_1');
-        addIfEnabled('link-2', 'link_2');
-        addIfEnabled('post_date_2', 'post_date_2');
-        addIfEnabled('purchase_platform', 'purchase_platform');
+        const forceAll = isEditing; // kirim semua saat edit mode
+        addField('link-1', 'link_1', { force: forceAll });
+        addField('post_date_1', 'post_date_1', { force: forceAll });
+        addField('link-2', 'link_2', { force: forceAll });
+        addField('post_date_2', 'post_date_2', { force: forceAll });
+        addField('purchase_platform', 'purchase_platform', { force: forceAll });
 
         const sc1 = $("#screenshot_1")?.files?.[0];
         const sc2 = $("#screenshot_2")?.files?.[0];
@@ -504,17 +505,26 @@ export function render(target, params, query = {}, labelOverride = null) {
 
           let resp;
           if (currentSubmission?.id) {
-            // === UPDATE via PATCH (sesuai Opsi B) ===
+            // UPDATE via PATCH
             const r = await fetch(`/api/influencer-submissions/${currentSubmission.id}`, {
               method: 'PATCH',
               credentials: 'same-origin',
-              body: fd
+              body: fd,
+              cache: 'no-store'
             });
             if (!r.ok) throw new Error('Gagal update');
             resp = await r.json();
             showToast(resp?.message || 'Data berhasil diupdate');
+
+            // Pakai data respon kalau ada (lebih fresh), lalu refresh dari server (cache-busted)
+            if (resp?.data) {
+              currentSubmission = resp.data;
+              fillSubmissionValues(currentSubmission);
+              applyViewMode();
+            }
+            await loadSubmissionForSelected();
           } else {
-            // CREATE (boleh lewat service atau fetch)
+            // CREATE
             if (typeof submissionService?.create === 'function') {
               resp = await submissionService.create(fd);
             } else {
@@ -527,9 +537,8 @@ export function render(target, params, query = {}, labelOverride = null) {
               resp = await r.json();
             }
             showToast(resp?.message || 'Data berhasil dikirim');
+            await loadSubmissionForSelected();
           }
-
-          await loadSubmissionForSelected(); // refresh tampilan
         } catch (err) {
           showToast(err.message || 'Proses gagal', 'error');
           $("#submitBtn").disabled = false;
