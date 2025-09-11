@@ -1,11 +1,7 @@
-
-
 export function render(target, path, query = {}, labelOverride = null) {
-    
     const v = window.BUILD_VERSION || Date.now();
 
     target.innerHTML = "";
-    
 
     // Konten utama dashboard keuangan
     target.innerHTML += `
@@ -13,104 +9,79 @@ export function render(target, path, query = {}, labelOverride = null) {
         <div class="container-fluid">
             <div class="row mb-4">
                 <div class="col-md-3">
-                    <div class="card text-white bg-success mb-3">
+                    <div class="card text-white text-center bg-success mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">Total Saldo</h5>
-                            <p class="card-text fs-3">Rp 52.300.000</p>
+                            <h5 class="card-title">Total Brand</h5>
+                            <p class="card-text fs-3">200</p>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="card text-white bg-primary mb-3">
+                    <div class="card text-white text-center bg-primary mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">Pendapatan Bulan Ini</h5>
-                            <p class="card-text fs-3">Rp 18.500.000</p>
+                            <h5 class="card-title">Total Campaign</h5>
+                            <p class="card-text fs-3">100</p>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="card text-white bg-danger mb-3">
+                    <div class="card text-white text-center bg-danger mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">Pengeluaran Bulan Ini</h5>
-                            <p class="card-text fs-3">Rp 7.200.000</p>
+                            <h5 class="card-title">Total KOL</h5>
+                            <p class="card-text fs-3">1000</p>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="card text-white bg-warning mb-3">
+                    <div class="card text-white text-center bg-warning mb-3">
                         <div class="card-body">
-                            <h5 class="card-title">Laba / Rugi</h5>
-                            <p class="card-text fs-3">Rp 11.300.000</p>
+                            <h5 class="card-title">Total Post</h5>
+                            <p class="card-text fs-3">1340</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Grafik Arus Kas -->
-            <div class="mb-5">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0">Grafik Arus Kas per Bulan</h5>
-                    <select id="yearFilter" class="form-select w-auto">
-                        <option value="2025" selected>2025</option>
-                        <option value="2024">2024</option>
-                        <option value="2023">2023</option>
-                    </select>
+            <!-- Grafik Arus Kas dan Proyek Aktif -->
+            <div class="d-flex gap-4 mb-5 pt-2">
+                <!-- Grafik Arus Kas -->
+                <div class="flex-grow-1 w-50">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">Grafik Total Engagement Campaign </h5>
+                        <select id="campaignFilter" class="form-select w-auto">
+                            <option value="Campaign A" selected>Campaign A</option>
+                            <option value="Campaign B">Campaign B</option>
+                            <option value="Campaign C">Campaign C</option>
+                        </select>
+                    </div>
+                    <canvas id="cashflowChart"></canvas>
                 </div>
-                <canvas id="cashflowChart" height="120"></canvas>
-            </div>
-
-            <!-- Proyek Aktif -->
-            <div class="mb-5">
-                <h5 class="mb-3">Proyek Aktif Saat Ini</h5>
-                <ul class="list-group">
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Website BUMN <span class="badge bg-success">Berjalan</span>
+                
+                <!-- Campaign Aktif -->
+                <div class="w-50">
+                    <h5>Campaign Aktif Saat Ini</h5>
+                    <ul class="list-group pt-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-center">
+                        Campaign A <span class="badge bg-success">Berjalan</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Sistem E-Voting Pemilu <span class="badge bg-success">Berjalan</span>
+                        Campaign B <span class="badge bg-success">Berjalan</span>
                     </li>
                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Aplikasi Kepegawaian <span class="badge bg-warning">Pending</span>
+                        Campaign C <span class="badge bg-warning">Pending</span>
                     </li>
-                </ul>
-            </div>
-
-            <!-- Pengeluaran Terbesar -->
-            <div class="mb-5">
-                <h5 class="mb-3">Top 3 Pengeluaran Bulan Ini</h5>
-                <ol class="list-group list-group-numbered">
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Gaji Tim Dev
-                        <span class="badge bg-danger rounded-pill">Rp 5.000.000</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Hosting & Cloud Server
-                        <span class="badge bg-danger rounded-pill">Rp 1.500.000</span>
-                    </li>
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Internet Kantor
-                        <span class="badge bg-danger rounded-pill">Rp 700.000</span>
-                    </li>
-                </ol>
-            </div>
-
-            <!-- Aktivitas Keuangan Terbaru -->
-            <div class="mb-5">
-                <h5 class="mb-3">Aktivitas Keuangan Terbaru</h5>
-                <ul class="list-group">
-                    <li class="list-group-item">20 Apr 2025 - Terima pembayaran proyek "Sistem Pemilu" Rp 12.000.000</li>
-                    <li class="list-group-item">19 Apr 2025 - Bayar gaji freelancer backend Rp 2.500.000</li>
-                    <li class="list-group-item">18 Apr 2025 - Pembayaran hosting AWS Rp 1.000.000</li>
                 </ul>
             </div>
         </div>
+
+        </div>
     `;
 
-    setupCashflowChart();
+    setupflowChart();
 
     Promise.all([
         import(`/js/components/header.js?v=${v}`),
-        import(`/js/components/breadcrumb.js?v=${v}`), 
+        import(`/js/components/breadcrumb.js?v=${v}`),
     ])
         .then(([headerAdmin, breadcrumb]) => {
             const { renderHeader } = headerAdmin;
@@ -118,85 +89,72 @@ export function render(target, path, query = {}, labelOverride = null) {
 
             renderHeader("header");
             renderBreadcrumb(target, path, labelOverride);
-           
         })
         .catch((err) => {
             console.error("[Import components failed]", err);
         });
 }
 
-function setupCashflowChart() {
-    const ctx = document.getElementById('cashflowChart').getContext('2d');
-    const yearSelect = document.getElementById('yearFilter');
+function setupflowChart() {
+    const ctx = document.getElementById("cashflowChart").getContext("2d");
+    const campaignSelect = document.getElementById("campaignFilter");
 
-    const dataPerYear = {
-        2025: {
-            pemasukan: [5000000, 7000000, 8000000, 12000000, 10000000, 15000000, 13000000, 14000000, 17000000, 16000000, 18000000, 20000000],
-            pengeluaran: [2000000, 3000000, 4000000, 5000000, 6000000, 7000000, 4000000, 5000000, 6000000, 7000000, 6500000, 7200000]
-        },
-        2024: {
-            pemasukan: [3000000, 5000000, 7000000, 10000000, 8000000, 9000000, 8500000, 9500000, 11000000, 10000000, 12000000, 13000000],
-            pengeluaran: [1500000, 2500000, 2000000, 4000000, 3000000, 5000000, 4200000, 4700000, 5200000, 4800000, 5500000, 5900000]
-        },
-        2023: {
-            pemasukan: [2500000, 3500000, 4000000, 6000000, 5000000, 6500000, 6200000, 7000000, 8000000, 8200000, 8500000, 9000000],
-            pengeluaran: [1000000, 1800000, 2000000, 2500000, 3000000, 3200000, 2800000, 3000000, 3500000, 3300000, 3600000, 4000000]
-        }
+    const dataTable = {
+        view: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200],
+        like: [120, 220, 320, 420, 520, 620, 720, 820, 920, 1020, 1120, 1220],
+        comment: [12, 30, 230, 330, 530, 630, 730, 800, 830, 930, 1230],
+        share: [140, 240, 340, 440, 540, 640, 740, 840, 940, 1040, 1140, 1240],
     };
 
-    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
     let chartInstance = null;
 
-    function renderChart(year) {
-        const income = dataPerYear[year].pemasukan;
-        const expense = dataPerYear[year].pengeluaran;
+    function renderChart() {
+        // Calculate totals
+        const totalView = dataTable.view.reduce((a, b) => a + b, 0);
+        const totalLike = dataTable.like.reduce((a, b) => a + b, 0);
+        const totalComment = dataTable.comment.reduce((a, b) => a + b, 0);
+        const totalShare = dataTable.share.reduce((a, b) => a + b, 0);
 
         if (chartInstance) chartInstance.destroy();
 
         chartInstance = new Chart(ctx, {
-            type: 'line',
+            type: "bar",
             data: {
-                labels: monthLabels,
+                labels: ["View", "Like", "Comment", "Share"],
                 datasets: [
                     {
-                        label: 'Pemasukan',
-                        data: income,
-                        borderColor: '#198754',
-                        backgroundColor: 'rgba(25, 135, 84, 0.2)',
-                        tension: 0.4,
-                        fill: true,
+                        label: "Total",
+                        data: [totalView, totalLike, totalComment, totalShare],
+                        backgroundColor: [
+                            "rgba(194, 239, 12, 0.6)",
+                            "rgba(13, 110, 253, 0.6)",
+                            "rgba(131, 53, 220, 0.6)",
+                            "rgba(255, 159, 64, 0.6)",
+                        ],
+                        borderWidth: 1,
+                        barThickness: 100,
                     },
-                    {
-                        label: 'Pengeluaran',
-                        data: expense,
-                        borderColor: '#dc3545',
-                        backgroundColor: 'rgba(220, 53, 69, 0.2)',
-                        tension: 0.4,
-                        fill: true,
-                    }
-                ]
+                ],
             },
             options: {
                 responsive: true,
                 plugins: {
-                    legend: { position: 'top' }
+                    legend: { display: false },
                 },
                 scales: {
                     y: {
-                        ticks: {
-                            callback: (value) => 'Rp ' + value.toLocaleString('id-ID')
-                        }
-                    }
-                }
-            }
+                        beginAtZero: true,
+                    },
+                },
+            },
         });
     }
 
-    // Inisialisasi
-    renderChart(yearSelect.value);
+    // Initialize
+    renderChart(campaignSelect.value);
 
-    // Ganti tahun → render ulang chart
-    yearSelect.addEventListener('change', (e) => renderChart(e.target.value));
-
-   
+    // Update on campaign change (if you want to change totals based on filter, update dataTable accordingly)
+    campaignSelect.addEventListener("change", (e) =>
+        renderChart(e.target.value)
+    );
 }
