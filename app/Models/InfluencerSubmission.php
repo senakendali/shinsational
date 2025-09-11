@@ -15,6 +15,13 @@ class InfluencerSubmission extends Model
         'yellow_cart','product_sold','gmv',
     ];
 
+    protected $appends = [
+        'screenshot_1_url',
+        'screenshot_2_url',
+        'invoice_file_url',
+        'review_proof_file_url',
+    ];
+
     public function campaign()
     {
         return $this->belongsTo(Campaign::class);

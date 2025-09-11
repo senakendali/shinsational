@@ -181,7 +181,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (!rec) return '';
         const candidates = [
           `${key}_url`, `${key}`,
-          key.replace('_',''),           // screenshot1
+          key.replace('_',''),
           `${key}Url`, `${key}URL`,
           `${key}_path`, `${key}Path`,
         ];
@@ -192,7 +192,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         return '';
       };
 
-      // mode view vs edit untuk file controls
+      // File controls (view vs edit) + preview lokal
       const setFileControls = (inputId, remoteUrl, { editMode = false, btnText = 'Lihat File' } = {}) => {
         const input = $("#"+inputId);
         const viewBtn = $("#"+inputId+"_view");
@@ -219,7 +219,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (input.classList.contains('d-none')) input.value = '';
       };
 
-      // Preview lokal saat pilih file
       const wirePreview = (inputId) => {
         const input = $("#"+inputId);
         const viewBtn = $("#"+inputId+"_view");
@@ -367,13 +366,13 @@ export function render(target, params, query = {}, labelOverride = null) {
         applyViewMode();
       };
 
-      // API: fetch existing submission (cache-busted)
+      // GET by pair (list) – cache-busted
       const fetchSubmissionForCampaign = async ({ tiktok_user_id, campaign_id }) => {
         const qs = new URLSearchParams({
           tiktok_user_id,
           campaign_id,
           per_page: '1',
-          _: String(Date.now()) // cache bust
+          _: String(Date.now())
         }).toString();
 
         const r = await fetch(`/api/influencer-submissions?${qs}`, {
@@ -386,6 +385,17 @@ export function render(target, params, query = {}, labelOverride = null) {
         const json = await r.json();
         const arr = Array.isArray(json) ? json : (json?.data || []);
         return arr[0] || null;
+      };
+
+      // GET by id – cache-busted
+      const fetchSubmissionById = async (id) => {
+        const r = await fetch(`/api/influencer-submissions/${id}?_=${Date.now()}`, {
+          headers: { 'Accept':'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store'
+        });
+        if (!r.ok) return null;
+        return await r.json();
       };
 
       const loadSubmissionForSelected = async () => {
@@ -453,7 +463,7 @@ export function render(target, params, query = {}, labelOverride = null) {
       $("#editBtn")?.addEventListener('click', enterEditMode);
       $("#cancelEditBtn")?.addEventListener('click', exitEditMode);
 
-      // Submit handler (CREATE atau UPDATE dgn PATCH)
+      // Submit handler (CREATE atau UPDATE)
       const form = $("#submissionForm");
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -472,22 +482,24 @@ export function render(target, params, query = {}, labelOverride = null) {
         fd.set('tiktok_user_id', openId);
         fd.set('campaign_id', selectedCampaignId);
 
-        // Kumpulkan field: di edit mode kirim SEMUA yang punya nilai; di view mode hanya yang enabled
-        const addField = (id, key = null, { force = false } = {}) => {
+        // === KIRIM SEMUA FIELD SAAT UPDATE (forceAll) ===
+        const forceAll = !!(currentSubmission?.id); // <— ini kunci
+        const addField = (id, key = null, force = false) => {
           const el = $("#"+id);
           if (!el) return;
+          const name = key || id.replace(/-/g,'_');
           if (force) {
-            if (hasVal(el.value)) fd.set(key || id.replace(/-/g,'_'), el.value.trim());
+            // kirim kalau ada value (boleh sama atau baru)
+            if (hasVal(el.value)) fd.set(name, el.value.trim());
           } else {
-            if (!el.disabled && hasVal(el.value)) fd.set(key || id.replace(/-/g,'_'), el.value.trim());
+            if (!el.disabled && hasVal(el.value)) fd.set(name, el.value.trim());
           }
         };
-        const forceAll = isEditing; // kirim semua saat edit mode
-        addField('link-1', 'link_1', { force: forceAll });
-        addField('post_date_1', 'post_date_1', { force: forceAll });
-        addField('link-2', 'link_2', { force: forceAll });
-        addField('post_date_2', 'post_date_2', { force: forceAll });
-        addField('purchase_platform', 'purchase_platform', { force: forceAll });
+        addField('link-1','link_1', forceAll);
+        addField('post_date_1','post_date_1', forceAll);
+        addField('link-2','link_2', forceAll);
+        addField('post_date_2','post_date_2', forceAll);
+        addField('purchase_platform','purchase_platform', forceAll);
 
         const sc1 = $("#screenshot_1")?.files?.[0];
         const sc2 = $("#screenshot_2")?.files?.[0];
@@ -516,13 +528,18 @@ export function render(target, params, query = {}, labelOverride = null) {
             resp = await r.json();
             showToast(resp?.message || 'Data berhasil diupdate');
 
-            // Pakai data respon kalau ada (lebih fresh), lalu refresh dari server (cache-busted)
-            if (resp?.data) {
-              currentSubmission = resp.data;
+            // Langsung GET by ID (fresh) supaya UI pasti dapet data terbaru
+            const fresh = await fetchSubmissionById(currentSubmission.id);
+            if (fresh) {
+              currentSubmission = fresh;
               fillSubmissionValues(currentSubmission);
+              // perbarui tombol view/inputs sesuai data terbaru
+              isEditing = false;
               applyViewMode();
+            } else {
+              // fallback: reload by pair
+              await loadSubmissionForSelected();
             }
-            await loadSubmissionForSelected();
           } else {
             // CREATE
             if (typeof submissionService?.create === 'function') {
@@ -531,7 +548,7 @@ export function render(target, params, query = {}, labelOverride = null) {
               const r = await fetch('/api/influencer-submissions', {
                 method: 'POST',
                 credentials: 'same-origin',
-                body: fd
+                body: fd,
               });
               if (!r.ok) throw new Error('Gagal kirim');
               resp = await r.json();
@@ -547,12 +564,16 @@ export function render(target, params, query = {}, labelOverride = null) {
         }
       });
 
-      // Daftarkan preview untuk semua input file (sekali di awal)
+      // Preview untuk semua input file
       ['screenshot_1','screenshot_2','invoice_file','review_proof_file'].forEach(wirePreview);
 
       // Load profile + campaigns
       try {
-        const res = await fetch('/me/tiktok', { headers: { 'Accept':'application/json' }, credentials: 'same-origin' });
+        const res = await fetch('/me/tiktok', {
+          headers: { 'Accept':'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store'
+        });
         if (!res.ok) throw new Error('cannot fetch session');
         const me = await res.json();
 
@@ -572,6 +593,7 @@ export function render(target, params, query = {}, labelOverride = null) {
             tiktok_user_id: openId,
             include: 'campaign',
             per_page: 50,
+            _: Date.now()
           });
           const regs = Array.isArray(result) ? result : (result.data || []);
           renderCampaignButtons(regs);
