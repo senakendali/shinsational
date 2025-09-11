@@ -3,7 +3,7 @@ export function renderFooterKol(targetId = "footer") {
     if (!container) return;
 
     container.innerHTML = `
-        <footer class="text-light py-4 mt-5" style="background:#000;">
+        <footer class="text-light py-4" style="background:#000;">
             <div class="container">
                 <div class="row">
                     <!-- Logo + About -->
