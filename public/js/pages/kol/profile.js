@@ -45,10 +45,9 @@ export function render(target, params, query = {}, labelOverride = null) {
           <div class="p-4 flex-grow-1">
             <h4 class="mb-4" id="mainCampaignTitle">My Campaign</h4>
 
-            <!-- Notice existing -->
             <div id="existingNotice" class="alert alert-info d-none">
               Kamu sudah pernah mengirim data untuk campaign ini. Field yang sudah terisi dikunci.
-              Kamu bisa klik <strong>Edit</strong> untuk mengganti data, atau lengkapi bagian yang belum lengkap lalu tekan <strong>Update</strong>.
+              Klik <strong>Edit</strong> untuk mengganti, atau lengkapi bagian yang belum lengkap lalu tekan <strong>Update</strong>.
             </div>
 
             <form id="submissionForm" class="needs-validation" novalidate>
@@ -167,6 +166,73 @@ export function render(target, params, query = {}, labelOverride = null) {
         return k.toISOString().slice(0,10);
       };
 
+      // Ambil URL file dari banyak kemungkinan key
+      const getFileUrl = (rec, key) => {
+        if (!rec) return '';
+        const candidates = [
+          `${key}_url`, `${key}`,
+          key.replace('_',''),           // screenshot1
+          `${key}Url`, `${key}URL`,
+          `${key}_path`, `${key}Path`,
+        ];
+        for (const k of candidates) {
+          if (hasVal(rec?.[k])) return rec[k];
+        }
+        if (rec?.files && hasVal(rec.files[key])) return rec.files[key];
+        return '';
+      };
+
+      // mode view: kalau ada URL → input disembunyikan & tombol view muncul
+      // mode edit: input SELALU tampil; tombol view muncul jika ada URL
+      const setFileControls = (inputId, remoteUrl, { editMode = false, btnText = 'Lihat File' } = {}) => {
+        const input = $("#"+inputId);
+        const viewBtn = $("#"+inputId+"_view");
+        if (!input || !viewBtn) return;
+
+        if (hasVal(remoteUrl)) {
+          viewBtn.href = remoteUrl;
+          viewBtn.textContent = inputId.includes('screenshot') ? 'Lihat Gambar' : btnText;
+          viewBtn.classList.remove('d-none');
+          viewBtn.dataset.remote = '1';
+        } else {
+          viewBtn.classList.add('d-none');
+          viewBtn.removeAttribute('href');
+          delete viewBtn.dataset.remote;
+        }
+
+        if (editMode) {
+          input.classList.remove('d-none');
+        } else {
+          if (hasVal(remoteUrl)) input.classList.add('d-none');
+          else input.classList.remove('d-none');
+        }
+
+        if (input.classList.contains('d-none')) input.value = '';
+      };
+
+      // Preview lokal saat user pilih file
+      const wirePreview = (inputId) => {
+        const input = $("#"+inputId);
+        const viewBtn = $("#"+inputId+"_view");
+        if (!input || !viewBtn) return;
+
+        input.addEventListener('change', () => {
+          const f = input.files?.[0];
+          if (f) {
+            const blobUrl = URL.createObjectURL(f);
+            viewBtn.href = blobUrl;
+            viewBtn.textContent = inputId.includes('screenshot') ? 'Preview Gambar' : 'Preview File';
+            viewBtn.classList.remove('d-none');
+            viewBtn.dataset.remote = '0';
+          } else {
+            if (viewBtn.dataset.remote !== '1') {
+              viewBtn.classList.add('d-none');
+              viewBtn.removeAttribute('href');
+            }
+          }
+        });
+      };
+
       // ===== State
       let openId = null;
       let selectedCampaignId = null;
@@ -175,38 +241,6 @@ export function render(target, params, query = {}, labelOverride = null) {
 
       // ===== UI helpers
       const setTitle = (txt) => { $("#mainCampaignTitle").textContent = txt || 'My Campaign'; };
-
-      const getFileUrl = (rec, key) => rec?.[`${key}_url`] || rec?.[key] || '';
-
-      // mode view: kalau ada URL → input disembunyikan & tombol view muncul
-      // mode edit: input SELALU muncul; tombol view muncul jika ada URL
-      const setFileControls = (inputId, url, { editMode = false, btnText = 'Lihat File' } = {}) => {
-        const input = $("#"+inputId);
-        const viewBtn = $("#"+inputId+"_view");
-        if (!input || !viewBtn) return;
-
-        // tombol view
-        if (hasVal(url)) {
-          viewBtn.href = url;
-          viewBtn.textContent = inputId.includes('screenshot') ? 'Lihat Gambar' : btnText;
-          viewBtn.classList.remove('d-none');
-        } else {
-          viewBtn.classList.add('d-none');
-          viewBtn.removeAttribute('href');
-        }
-
-        // visibilitas input
-        if (editMode) {
-          input.classList.remove('d-none'); // selalu tampil saat edit
-        } else {
-          // view mode → sembunyikan jika sudah ada file
-          if (hasVal(url)) input.classList.add('d-none');
-          else input.classList.remove('d-none');
-        }
-
-        // reset file jika sebelumnya hidden
-        if (input.classList.contains('d-none')) input.value = '';
-      };
 
       const isComplete = (rec) => hasVal(rec?.link_1) && hasVal(rec?.post_date_1);
 
@@ -217,7 +251,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         const submitBtn = $("#submitBtn");
 
         if (!hasRecord) {
-          // create mode
           editBtn.classList.add('d-none');
           cancelBtn.classList.add('d-none');
           submitBtn.textContent = 'Kirim';
@@ -238,8 +271,15 @@ export function render(target, params, query = {}, labelOverride = null) {
         }
       };
 
+      const fillSubmissionValues = (rec) => {
+        $("#link-1").value = safe(rec.link_1, '');
+        $("#link-2").value = safe(rec.link_2, '');
+        $("#post_date_1").value = toInputDate(rec.post_date_1);
+        $("#post_date_2").value = toInputDate(rec.post_date_2);
+        $("#purchase_platform").value = safe(rec.purchase_platform, '');
+      };
+
       const applyViewMode = () => {
-        // field text/select: yang sudah ada → disable; yang kosong + required → required
         const controls = [
           { id: 'link-1',              key: 'link_1',            required: true  },
           { id: 'post_date_1',         key: 'post_date_1',       required: true  },
@@ -256,7 +296,6 @@ export function render(target, params, query = {}, labelOverride = null) {
           else el.removeAttribute('required');
         });
 
-        // file controls
         setFileControls('screenshot_1',     getFileUrl(currentSubmission, 'screenshot_1'),     { editMode: false });
         setFileControls('screenshot_2',     getFileUrl(currentSubmission, 'screenshot_2'),     { editMode: false });
         setFileControls('invoice_file',     getFileUrl(currentSubmission, 'invoice_file'),     { editMode: false, btnText: 'Lihat File' });
@@ -267,17 +306,14 @@ export function render(target, params, query = {}, labelOverride = null) {
       };
 
       const applyEditMode = () => {
-        // semua field enable
         ['link-1','post_date_1','link-2','post_date_2','purchase_platform'].forEach(id => {
           const el = $("#"+id);
           if (!el) return;
           el.disabled = false;
-          // required hanya untuk minimal
           if (id === 'link-1' || id === 'post_date_1') el.setAttribute('required','required');
           else el.removeAttribute('required');
         });
 
-        // file controls (input selalu tampil)
         setFileControls('screenshot_1',     getFileUrl(currentSubmission, 'screenshot_1'),     { editMode: true });
         setFileControls('screenshot_2',     getFileUrl(currentSubmission, 'screenshot_2'),     { editMode: true });
         setFileControls('invoice_file',     getFileUrl(currentSubmission, 'invoice_file'),     { editMode: true, btnText: 'Lihat File' });
@@ -302,21 +338,13 @@ export function render(target, params, query = {}, labelOverride = null) {
           else el.removeAttribute('required');
         });
 
-        // file inputs visible, view hidden
+        // mode create: input tampil, tombol view disembunyikan
         setFileControls('screenshot_1', '', { editMode: true });
         setFileControls('screenshot_2', '', { editMode: true });
         setFileControls('invoice_file', '', { editMode: true });
         setFileControls('review_proof_file', '', { editMode: true });
 
         updateButtonsVisibility();
-      };
-
-      const fillSubmissionValues = (rec) => {
-        $("#link-1").value = safe(rec.link_1, '');
-        $("#link-2").value = safe(rec.link_2, '');
-        $("#post_date_1").value = toInputDate(rec.post_date_1);
-        $("#post_date_2").value = toInputDate(rec.post_date_2);
-        $("#purchase_platform").value = safe(rec.purchase_platform, '');
       };
 
       const enterEditMode = () => {
@@ -328,12 +356,11 @@ export function render(target, params, query = {}, labelOverride = null) {
       const exitEditMode = () => {
         if (!currentSubmission?.id) return;
         isEditing = false;
-        // balikin value dari record
         fillSubmissionValues(currentSubmission);
         applyViewMode();
       };
 
-      // fetch existing submission
+      // API: fetch existing submission
       const fetchSubmissionForCampaign = async ({ tiktok_user_id, campaign_id }) => {
         if (typeof submissionService?.list === 'function') {
           const res = await submissionService.list({ tiktok_user_id, campaign_id, per_page: 1 });
@@ -444,7 +471,6 @@ export function render(target, params, query = {}, labelOverride = null) {
             fd.set(key || id.replace(/-/g,'_'), el.value.trim());
           }
         };
-        // saat edit mode, semua enabled — saat view mode hanya yang kosong & required enabled
         addIfEnabled('link-1', 'link_1');
         addIfEnabled('post_date_1', 'post_date_1');
         addIfEnabled('link-2', 'link_2');
@@ -487,7 +513,7 @@ export function render(target, params, query = {}, labelOverride = null) {
             showToast(resp?.message || 'Data berhasil dikirim');
           }
 
-          await loadSubmissionForSelected(); // refresh tampilan (balik ke view mode)
+          await loadSubmissionForSelected(); // refresh tampilan
         } catch (err) {
           showToast(err.message || 'Proses gagal', 'error');
           $("#submitBtn").disabled = false;
@@ -495,6 +521,9 @@ export function render(target, params, query = {}, labelOverride = null) {
           hideLoader();
         }
       });
+
+      // Daftarkan preview untuk semua input file (sekali di awal)
+      ['screenshot_1','screenshot_2','invoice_file','review_proof_file'].forEach(wirePreview);
 
       // Load profile + campaigns
       try {
