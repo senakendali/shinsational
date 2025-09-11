@@ -45,11 +45,15 @@ Route::get('/me',      [AuthController::class, 'me'])->name('me'); // optional u
 Route::get('/auth/tiktok/redirect', [TikTokAuthController::class, 'redirect']);
 Route::get('/auth/tiktok/callback', [TikTokAuthController::class, 'callback']);
 
+
+
 Route::get('/me/tiktok', function (Request $request) {
     return response()->json([
-        'tiktok_user_id'    => session('tiktok_user_id'),
-        'tiktok_full_name'  => session('tiktok_full_name'),
-        'tiktok_avatar_url' => session('tiktok_avatar_url'), // ← tambahin ini
+        'tiktok_user_id'    => $request->session()->get('tiktok_user_id'),
+        'tiktok_username'   => $request->session()->get('tiktok_username'),
+        'tiktok_full_name'  => $request->session()->get('tiktok_full_name'),
+        'tiktok_avatar_url' => $request->session()->get('tiktok_avatar_url'),
+        'connected'         => (bool) $request->session()->get('tiktok_user_id'),
     ]);
 });
 

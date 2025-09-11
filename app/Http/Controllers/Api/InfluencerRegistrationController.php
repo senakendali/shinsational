@@ -4,10 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\InfluencerRegistration;
-use App\Models\Campaign; // ← tambahkan
+use App\Models\Campaign;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class InfluencerRegistrationController extends Controller
 {
@@ -22,7 +23,7 @@ class InfluencerRegistrationController extends Controller
             $query->where('tiktok_user_id', $request->input('tiktok_user_id'));
         }
         if ($request->filled('campaign_id')) {
-            $query->where('campaign_id', $request->input('campaign_id'));
+            $query->where('campaign_id', (int) $request->input('campaign_id'));
         }
 
         // Eager load relasi
@@ -33,8 +34,8 @@ class InfluencerRegistrationController extends Controller
                 // with brand sekalian jika diminta
                 if (in_array('brand', $parts, true)) {
                     $query->with(['campaign' => function ($q) {
-                        $q->select('id','brand_id','name','slug','start_date','end_date','status','is_active','budget','currency');
-                        $q->with(['brand:id,name']);
+                        $q->select('id','brand_id','name','slug','start_date','end_date','status','is_active','budget','currency')
+                          ->with(['brand:id,name']);
                     }]);
                 } else {
                     $query->with(['campaign' => function ($q) {
@@ -97,14 +98,16 @@ class InfluencerRegistrationController extends Controller
         // Reuse logic di atas
         return $this->campaignsByTiktok($request, $openId);
     }
+
     /**
-     * Store a newly created registration.
+     * POST /api/influencer-registrations
+     * Create registration; jika session punya token TikTok utk open_id yang sama → tempel token ke row baru.
      */
     public function store(Request $request)
     {
         // --- Resolve campaign dari form/query ---
         $campaignId   = $request->integer('campaign_id');
-        $campaignSlug = $request->string('campaign')->toString();
+        $campaignSlug = (string) $request->input('campaign', '');
 
         if (!$campaignId && $campaignSlug) {
             $campaignId = Campaign::where('slug', $campaignSlug)->value('id');
@@ -125,8 +128,6 @@ class InfluencerRegistrationController extends Controller
         $payload = $request->all();
         $payload['tiktok_username'] = $username;
         $payload['campaign_id']     = $campaignId; // bisa null → validasi akan fail kalau kosong
-        // profile_pic_url dikirim dari frontend via hidden input (prefill dari session)
-        // $payload['profile_pic_url'] sudah ada jika dikirim
 
         // Rules dasar
         $rules = [
@@ -172,8 +173,28 @@ class InfluencerRegistrationController extends Controller
 
         $validated = validator($payload, $rules, $messages)->validate();
 
-        // Simpan
+        // Simpan row baru
         $reg = InfluencerRegistration::create($validated);
+
+        // === Tempel token dari session kalau ada & open_id cocok ===
+        $sessionOpenId = $request->session()->get('tiktok_user_id');
+        $bundle        = $request->session()->get('tiktok_token_bundle'); // di-set di TikTokAuthController@callback
+
+        if ($sessionOpenId && $bundle && $reg->tiktok_user_id === $sessionOpenId) {
+            try {
+                $reg->token_type        = $bundle['token_type']    ?? ($reg->token_type ?: 'Bearer');
+                $reg->access_token      = $bundle['access_token']  ?? $reg->access_token;   // terenkripsi via cast (Laravel 10+)
+                $reg->refresh_token     = $bundle['refresh_token'] ?? $reg->refresh_token;  // terenkripsi via cast
+                $reg->expires_at        = isset($bundle['expires_at']) ? Carbon::parse($bundle['expires_at']) : $reg->expires_at;
+                $reg->last_refreshed_at = isset($bundle['last_refreshed_at']) ? Carbon::parse($bundle['last_refreshed_at']) : ($reg->last_refreshed_at ?: now());
+                $reg->revoked_at        = null;
+                $reg->scopes            = $bundle['scopes'] ?? $reg->scopes;
+                $reg->save();
+            } catch (\Throwable $e) {
+                Log::warning('attach_session_token_failed', ['err' => $e->getMessage()]);
+                // lanjut tanpa gagal
+            }
+        }
 
         return response()->json([
             'message' => 'Registrasi berhasil disimpan.',
@@ -181,6 +202,10 @@ class InfluencerRegistrationController extends Controller
         ], 201);
     }
 
+    /**
+     * GET /api/influencer-registrations/check
+     * params: tiktok_user_id, campaign_id? | campaign (slug)?
+     */
     public function check(Request $request)
     {
         $validated = $request->validate([
@@ -204,10 +229,9 @@ class InfluencerRegistrationController extends Controller
             $q->where('campaign_id', $campaignId);
         }
 
-        //$reg = $q->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])->first();
         $reg = $q->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])
-         ->latest() // ambil registrasi terbaru untuk open_id tsb
-         ->first();
+                 ->latest() // ambil registrasi terbaru untuk open_id tsb
+                 ->first();
 
         return response()->json([
             'exists'      => (bool) $reg,
