@@ -27,7 +27,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     import(`/js/services/influencerSubmissionService.js?v=${v}`),
   ]);
 
-  // kalau sudah keduluan render lain, stop
   if (target.dataset.dashInstance !== INSTANCE_KEY) return;
 
   const { renderHeader } = headerMod;
@@ -44,10 +43,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const fmt = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '0');
   const safe = (x) => (x ?? 0);
 
-  // inject layout (REPLACE, bukan append)
+  // inject layout
   target.innerHTML = `
     <div class="container-fluid" id="admin-dashboard-root">
-      <!-- header + breadcrumb -->
       <div id="__breadcrumb_mount"></div>
 
       <!-- KPI cards -->
@@ -104,12 +102,65 @@ export async function render(target, path, query = {}, labelOverride = null) {
               </button>
             </div>
           </div>
-          <canvas id="engagementChart" height="120"></canvas>
+
+          <!-- Donut charts: Actual vs KPI per metric -->
+          <div class="row g-3" id="kpi-donuts" style="display:none;">
+            <div class="col-6 col-md-3">
+              <div class="card h-100">
+                <div class="card-body d-flex flex-column align-items-center">
+                  <div class="text-muted small mb-2">Views</div>
+                  <canvas id="donut-views" height="160"></canvas>
+                  <div class="small mt-2 text-center" id="cap-views">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="card h-100">
+                <div class="card-body d-flex flex-column align-items-center">
+                  <div class="text-muted small mb-2">Likes</div>
+                  <canvas id="donut-likes" height="160"></canvas>
+                  <div class="small mt-2 text-center" id="cap-likes">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="card h-100">
+                <div class="card-body d-flex flex-column align-items-center">
+                  <div class="text-muted small mb-2">Comments</div>
+                  <canvas id="donut-comments" height="160"></canvas>
+                  <div class="small mt-2 text-center" id="cap-comments">—</div>
+                </div>
+              </div>
+            </div>
+            <div class="col-6 col-md-3">
+              <div class="card h-100">
+                <div class="card-body d-flex flex-column align-items-center">
+                  <div class="text-muted small mb-2">Shares</div>
+                  <canvas id="donut-shares" height="160"></canvas>
+                  <div class="small mt-2 text-center" id="cap-shares">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <canvas id="engagementChart" class="mt-3" height="120"></canvas>
+
+          <!-- Engagement summary (aggregated from submissions) -->
           <div class="row mt-3 gx-3 gy-2" id="eng-summary">
             <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Views</div><div class="fs-5" id="es-views">—</div></div></div></div>
             <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Likes</div><div class="fs-5" id="es-likes">—</div></div></div></div>
             <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Comments</div><div class="fs-5" id="es-comments">—</div></div></div></div>
             <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Shares</div><div class="fs-5" id="es-shares">—</div></div></div></div>
+          </div>
+
+          <!-- KPI targets (from campaign.kpi_targets) -->
+          <div class="mt-3" id="kpi-section">
+            <div class="row gx-3 gy-2 d-none" id="kpi-targets">
+              <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Target Views</div><div class="fs-6" id="kt-views">—</div></div></div></div>
+              <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Target Likes</div><div class="fs-6" id="kt-likes">—</div></div></div></div>
+              <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Target Comments</div><div class="fs-6" id="kt-comments">—</div></div></div></div>
+              <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Target Shares</div><div class="fs-6" id="kt-shares">—</div></div></div></div>
+            </div>
           </div>
         </div>
 
@@ -122,7 +173,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
             <li class="list-group-item text-muted">Memuat…</li>
           </ul>
 
-          <!-- === Brands list (baru) -->
           <div class="mt-4">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <h5 class="mb-0">Brands</h5>
@@ -132,7 +182,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
               <li class="list-group-item text-muted">Memuat…</li>
             </ul>
           </div>
-          <!-- === /Brands list -->
         </div>
       </div>
     </div>
@@ -142,19 +191,19 @@ export async function render(target, path, query = {}, labelOverride = null) {
   renderHeader("header");
   renderBreadcrumb(target, path, labelOverride);
 
-  // === destroy helper utk Chart.js supaya gak "canvas already in use"
+  // === destroy helper utk Chart.js
   function destroyChartIfExists(canvasId) {
     try {
       if (!window.Chart) return;
       if (typeof Chart.getChart === 'function') {
         const canvasEl = document.getElementById(canvasId);
         const prev = Chart.getChart(canvasId) || (canvasEl ? Chart.getChart(canvasEl) : null);
-        if (prev && typeof prev.destroy === 'function') prev.destroy();
+        if (prev?.destroy) prev.destroy();
       } else {
         const canvasEl = document.getElementById(canvasId);
         const list = Chart.instances ? Object.values(Chart.instances) : [];
         const found = list.find(inst => inst?.canvas === canvasEl);
-        if (found && typeof found.destroy === 'function') found.destroy();
+        if (found?.destroy) found.destroy();
       }
     } catch (e) {
       console.warn('[dashboard] destroyChartIfExists error:', e);
@@ -162,10 +211,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
   }
 
   await ensureChartJS();
-  // cegah duplikasi canvas chart jika re-visit
   destroyChartIfExists('engagementChart');
 
-  // kalau sudah keduluan render lain, stop
   if (target.dataset.dashInstance !== INSTANCE_KEY) return;
 
   showLoader();
@@ -205,9 +252,10 @@ export async function render(target, path, query = {}, labelOverride = null) {
     showToast('Gagal memuat ringkasan KPI', 'error');
   }
 
-  // === Populate campaign filter
+  // === Populate campaign filter + cache KPI targets
   let currentCampaignId = "";
   const campaignBrandMap = new Map();
+  const campaignKpiMap = new Map(); // cache KPI per campaign
   let cachedCampaignsForBrandList = [];
 
   try {
@@ -224,6 +272,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
         const cname = escapeHtml(c.name || `Campaign ${c.id}`);
         const bname = escapeHtml(c.brand?.name || '-');
         campaignBrandMap.set(String(c.id), bname);
+        const kt = c.kpi_targets || c.kpi || c.kpiTargets || null;
+        if (kt) campaignKpiMap.set(String(c.id), kt);
         return `<option value="${c.id}">${cname} — ${bname}</option>`;
       }).join('');
 
@@ -234,7 +284,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }
 
     updateSelectedBrandLine(currentCampaignId);
-
     renderBrandListFromCampaigns(cachedCampaignsForBrandList);
   } catch (e) {
     console.error('Load campaigns error', e);
@@ -278,11 +327,21 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#active-campaigns').innerHTML = `<li class="list-group-item text-danger">Gagal memuat campaign aktif</li>`;
   }
 
-  // === Chart per-campaign ===
+  // === Charts ===
   const chartCanvas = $('#engagementChart');
   const chartCtx = chartCanvas.getContext('2d');
 
   window.__ADMIN_DASHBOARD_CHART__ ??= null;
+  const donutIds = ['views','likes','comments','shares'];
+  const donutCharts = Object.fromEntries(donutIds.map(id => [id, null]));
+
+  const fmtShort = (n) => {
+    const x = Number(n) || 0;
+    if (x >= 1e9) return (x/1e9).toFixed(1) + 'B';
+    if (x >= 1e6) return (x/1e6).toFixed(1) + 'M';
+    if (x >= 1e3) return (x/1e3).toFixed(1) + 'K';
+    return x.toLocaleString('id-ID');
+  };
 
   const renderChart = (views, likes, comments, shares) => {
     if (window.__ADMIN_DASHBOARD_CHART__?.destroy) {
@@ -311,15 +370,151 @@ export async function render(target, path, query = {}, labelOverride = null) {
       options: {
         responsive: true,
         plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true } }
+        scales: { y: { beginAtZero: true, ticks: { callback: (v)=>fmtShort(v) } } }
       }
     });
   };
 
+  // ==== KPI target helpers (including donuts) ====
+  function applyKpiTargets(kpi) {
+    const row = $('#kpi-targets');
+    if (!row) return;
+
+    const hasAny =
+      kpi && (safe(kpi.views) || safe(kpi.likes) || safe(kpi.comments) || safe(kpi.shares));
+
+    if (!hasAny) {
+      row.classList.add('d-none');
+      ['kt-views','kt-likes','kt-comments','kt-shares'].forEach(id => {
+        const el = $('#'+id); if (el) el.textContent = '—';
+      });
+      // hide donuts if no KPI
+      $('#kpi-donuts').style.display = 'none';
+      destroyDonuts();
+      return;
+    }
+
+    $('#kt-views').textContent    = kpi.views    != null ? fmt(Number(kpi.views))       : '—';
+    $('#kt-likes').textContent    = kpi.likes    != null ? fmt(Number(kpi.likes))       : '—';
+    $('#kt-comments').textContent = kpi.comments != null ? fmt(Number(kpi.comments))    : '—';
+    $('#kt-shares').textContent   = kpi.shares   != null ? fmt(Number(kpi.shares))      : '—';
+
+    row.classList.remove('d-none');
+  }
+
+  async function ensureCampaignKpi(campaignId) {
+    if (!campaignId) return null;
+    const key = String(campaignId);
+    if (campaignKpiMap.has(key)) return campaignKpiMap.get(key);
+    try {
+      const detail = await campaignService.get(campaignId);
+      const kpi = detail?.kpi_targets || detail?.kpi || detail?.kpiTargets || null;
+      if (kpi) campaignKpiMap.set(key, kpi);
+      return kpi;
+    } catch {
+      return null;
+    }
+  }
+
+  function destroyDonuts() {
+    for (const k of donutIds) {
+      try {
+        donutCharts[k]?.destroy?.();
+        donutCharts[k] = null;
+      } catch {}
+      destroyChartIfExists(`donut-${k}`);
+    }
+  }
+
+  function renderOneDonut(kind, actual, target) {
+    const canvas = $(`#donut-${kind}`);
+    const cap = $(`#cap-${kind}`);
+    if (!canvas || !cap) return;
+
+    // jika target <= 0 dan actual <= 0 → kosongkan
+    if (!(Number(target) > 0) && !(Number(actual) > 0)) {
+      cap.textContent = '—';
+      if (donutCharts[kind]?.destroy) donutCharts[kind].destroy();
+      donutCharts[kind] = null;
+      return;
+    }
+
+    const T = Math.max(0, Number(target)||0);
+    const A = Math.max(0, Number(actual)||0);
+    const remain = Math.max(0, T - A);
+
+    // caption progress
+    const pct = T > 0 ? Math.min(100, Math.round((A/T)*100)) : 100;
+    const capText = T > 0
+      ? `${fmtShort(A)} / ${fmtShort(T)} (${pct}%)`
+      : `${fmtShort(A)} (no KPI)`;
+    cap.textContent = capText;
+
+    // rebuild
+    try { donutCharts[kind]?.destroy?.(); } catch {}
+    destroyChartIfExists(`donut-${kind}`);
+
+    donutCharts[kind] = new Chart(canvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Actual','Remaining'],
+        datasets: [{
+          data: T > 0 ? [Math.min(A, T), remain] : [A, 0],
+          backgroundColor: ['rgba(13,110,253,0.8)', 'rgba(200,200,200,0.45)'],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        cutout: '65%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const v = ctx.parsed;
+                return `${ctx.label}: ${fmtShort(v)}`;
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function renderKpiDonuts(totals, kpi) {
+    const wrap = $('#kpi-donuts');
+    if (!wrap) return;
+
+    const hasAnyKpi = kpi && [kpi.views,kpi.likes,kpi.comments,kpi.shares].some(v => Number(v) > 0);
+    // tampilkan row hanya jika ada minimal satu KPI > 0
+    wrap.style.display = hasAnyKpi ? '' : 'none';
+    if (!hasAnyKpi) { destroyDonuts(); return; }
+
+    renderOneDonut('views',    totals.views,    kpi.views);
+    renderOneDonut('likes',    totals.likes,    kpi.likes);
+    renderOneDonut('comments', totals.comments, kpi.comments);
+    renderOneDonut('shares',   totals.shares,   kpi.shares);
+  }
+
+  // sinkronisasi totals & kpi untuk donuts
+  let lastTotals = { views:0, likes:0, comments:0, shares:0 };
+  let lastKpi = null;
+
   async function loadCampaignEngagement(campaignId) {
     if (target.dataset.dashInstance !== INSTANCE_KEY) return;
 
+    // tampilkan KPI (kalau ada) — tidak blocking chart
+    ensureCampaignKpi(campaignId).then((kpi) => {
+      if (target.dataset.dashInstance !== INSTANCE_KEY) return;
+      lastKpi = kpi || null;
+      applyKpiTargets(lastKpi);
+      renderKpiDonuts(lastTotals, lastKpi);
+    });
+
     if (!campaignId) {
+      lastTotals = { views:0, likes:0, comments:0, shares:0 };
+      renderKpiDonuts(lastTotals, lastKpi);
       renderChart(0,0,0,0);
       $('#es-views').textContent = '—';
       $('#es-likes').textContent = '—';
@@ -346,21 +541,19 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       const subs = res?.data || [];
       subs.forEach(s => {
-        agg.views    += safe(Number(s.views_1));
-        agg.likes    += safe(Number(s.likes_1));
-        agg.comments += safe(Number(s.comments_1));
-        agg.shares   += safe(Number(s.shares_1));
-
-        agg.views    += safe(Number(s.views_2));
-        agg.likes    += safe(Number(s.likes_2));
-        agg.comments += safe(Number(s.comments_2));
-        agg.shares   += safe(Number(s.shares_2));
+        agg.views    += safe(Number(s.views_1))    + safe(Number(s.views_2));
+        agg.likes    += safe(Number(s.likes_1))    + safe(Number(s.likes_2));
+        agg.comments += safe(Number(s.comments_1)) + safe(Number(s.comments_2));
+        agg.shares   += safe(Number(s.shares_1))   + safe(Number(s.shares_2));
       });
 
       lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
       page += 1;
     } while (page <= lastPage && page <= 5);
 
+    lastTotals = agg;
+
+    renderKpiDonuts(lastTotals, lastKpi);
     renderChart(agg.views, agg.likes, agg.comments, agg.shares);
     $('#es-views').textContent = fmt(agg.views);
     $('#es-likes').textContent = fmt(agg.likes);
@@ -504,6 +697,14 @@ export function cleanupAdminDashboard() {
   if (window.Chart && typeof Chart.getChart === 'function') {
     const canvasEl = document.getElementById('engagementChart');
     const prev = Chart.getChart('engagementChart') || (canvasEl ? Chart.getChart(canvasEl) : null);
-    if (prev && typeof prev.destroy === 'function') prev.destroy();
+    if (prev?.destroy) prev.destroy();
   }
+
+  // donuts
+  ['donut-views','donut-likes','donut-comments','donut-shares'].forEach(id => {
+    try {
+      const prev = Chart.getChart?.(id) || null;
+      prev?.destroy?.();
+    } catch {}
+  });
 }
