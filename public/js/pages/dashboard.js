@@ -33,7 +33,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const $ = (sel) => document.querySelector(sel);
   const fmt = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '0');
   const safe = (x) => (x ?? 0);
-  const sum = (arr) => arr.reduce((a, b) => a + (Number(b) || 0), 0);
 
   // inject layout
   target.innerHTML += `
@@ -81,13 +80,16 @@ export async function render(target, path, query = {}, labelOverride = null) {
       <!-- chart + active campaigns -->
       <div class="d-flex flex-column flex-lg-row gap-4 mb-5 pt-2">
         <div class="flex-grow-1">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">Campaign Engagement</h5>
-            <div class="d-flex gap-2">
-              <select id="campaignFilter" class="form-select form-select-sm" style="min-width:260px">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <h5 class="mb-1">Campaign Engagement</h5>
+              <div class="small text-muted" id="selectedBrandLine">—</div>
+            </div>
+            <div class="d-flex gap-2 align-items-start">
+              <select id="campaignFilter" class="form-select form-select-sm" style="min-width:280px">
                 <option value="">— Pilih Campaign —</option>
               </select>
-              <button class="btn btn-outline-secondary btn-sm" id="btnRefreshCampaign">
+              <button class="btn btn-outline-secondary btn-sm" id="btnRefreshCampaign" title="Refresh grafik">
                 <i class="bi bi-arrow-clockwise"></i>
               </button>
             </div>
@@ -109,6 +111,18 @@ export async function render(target, path, query = {}, labelOverride = null) {
           <ul class="list-group" id="active-campaigns">
             <li class="list-group-item text-muted">Memuat…</li>
           </ul>
+
+          <!-- === Brands list (baru) -->
+          <div class="mt-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <h5 class="mb-0">Brands</h5>
+              <a class="btn btn-sm btn-outline-primary app-link" href="/admin/brands">Lihat semua</a>
+            </div>
+            <ul class="list-group" id="brand-list">
+              <li class="list-group-item text-muted">Memuat…</li>
+            </ul>
+          </div>
+          <!-- === /Brands list -->
         </div>
       </div>
     </div>
@@ -118,36 +132,30 @@ export async function render(target, path, query = {}, labelOverride = null) {
   renderHeader("header");
   renderBreadcrumb(target, path, labelOverride);
 
-  // Ensure Chart.js loaded (jaga-jaga)
   await ensureChartJS();
-
   showLoader();
 
   // === Load KPI (global totals) ===
   try {
-    // ambil total tanpa tarik banyak data: per_page=1 lalu baca meta.total
     const [brands, campaigns, submissions] = await Promise.all([
       brandService.getAll({ page: 1, per_page: 1 }),
       campaignService.getAll({ page: 1, per_page: 1 }),
       submissionService.getAll({ page: 1, per_page: 1 }),
     ]);
 
-    // beberapa backend pakai "total", ada yang pakai "meta.total"
     const totalBrands = brands?.total ?? brands?.meta?.total ?? brands?.pagination?.total ?? (brands?.data?.length || 0);
     const totalCampaigns = campaigns?.total ?? campaigns?.meta?.total ?? campaigns?.pagination?.total ?? (campaigns?.data?.length || 0);
     const totalSubmissions = submissions?.total ?? submissions?.meta?.total ?? submissions?.pagination?.total ?? (submissions?.data?.length || 0);
 
-    // KOL registrations: kalau ada endpoint registrasi, ambil; kalau tidak, pakai perkiraan distinct di submissions (fallback)
     let totalKols = null;
     try {
-      const regMod = await import(`../../services/influencerRegistrationService.js?v=${v}`);
+      const regMod = await import(`/js/services/influencerRegistrationService.js?v=${v}`);
       const regs = await regMod.influencerService.getAll({ page: 1, per_page: 1 });
       totalKols = regs?.total ?? regs?.meta?.total ?? regs?.pagination?.total ?? null;
     } catch {
-      // fallback: distinct tiktok_user_id dari halaman submissions pertama (kurang akurat, tapi better than nothing)
       const firstPage = submissions?.data || [];
       const distinct = new Set(firstPage.map(s => s.tiktok_user_id).filter(Boolean));
-      totalKols = distinct.size; // NB: hanya dari page 1
+      totalKols = distinct.size;
     }
 
     $('#kpi-brands').textContent = fmt(totalBrands);
@@ -159,15 +167,25 @@ export async function render(target, path, query = {}, labelOverride = null) {
     showToast('Gagal memuat ringkasan KPI', 'error');
   }
 
-  // === Populate campaign filter ===
+  // === Populate campaign filter (include brand untuk tampilkan brand di option & brand line) ===
   let currentCampaignId = "";
+  const campaignBrandMap = new Map();
+  let cachedCampaignsForBrandList = []; // ⬅️ simpan untuk brand list
+
   try {
-    const cs = await campaignService.getAll({ page: 1, per_page: 100, status: '' });
+    const cs = await campaignService.getAll({ page: 1, per_page: 100, status: '', include: 'brand' });
     const items = cs?.data || [];
+    cachedCampaignsForBrandList = items.slice(); // simpan buat brand list
+
     const campaignFilter = $('#campaignFilter');
     campaignFilter.innerHTML =
       `<option value="">— Pilih Campaign —</option>` +
-      items.map(c => `<option value="${c.id}">${escapeHtml(c.name || `Campaign ${c.id}`)}</option>`).join('');
+      items.map(c => {
+        const cname = escapeHtml(c.name || `Campaign ${c.id}`);
+        const bname = escapeHtml(c.brand?.name || '-');
+        campaignBrandMap.set(String(c.id), bname);
+        return `<option value="${c.id}">${cname} — ${bname}</option>`;
+      }).join('');
 
     // auto pilih dari query (jika ada)
     const qId = query?.campaign_id || new URL(location.href).searchParams.get('campaign_id');
@@ -175,11 +193,18 @@ export async function render(target, path, query = {}, labelOverride = null) {
       campaignFilter.value = qId;
       currentCampaignId = qId;
     }
+
+    updateSelectedBrandLine(currentCampaignId);
+
+    // === Render brand list dari kumpulan campaign (baru)
+    renderBrandListFromCampaigns(cachedCampaignsForBrandList);
+
   } catch (e) {
     console.error('Load campaigns error', e);
+    $('#brand-list').innerHTML = `<li class="list-group-item text-danger">Gagal memuat brands</li>`;
   }
 
-  // === Active campaigns list ===
+  // === Active campaigns list (brand di bawah campaign) ===
   try {
     const active = await campaignService.getAll({ page: 1, per_page: 8, status: 'active', include: 'brand' });
     const arr = active?.data || [];
@@ -234,7 +259,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
             'rgba(255, 159, 64, 0.6)',
           ],
           borderWidth: 1,
-          barThickness: 64,
+          barThickness: 80,
         }]
       },
       options: {
@@ -255,7 +280,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
       return;
     }
 
-    // ambil semua submissions campaign ini (paginate beberapa page kalau perlu)
     let page = 1;
     const perPage = 100;
     let lastPage = 1;
@@ -272,12 +296,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       const subs = res?.data || [];
       subs.forEach(s => {
-        // slot1
         agg.views    += safe(Number(s.views_1));
         agg.likes    += safe(Number(s.likes_1));
         agg.comments += safe(Number(s.comments_1));
         agg.shares   += safe(Number(s.shares_1));
-        // slot2
+
         agg.views    += safe(Number(s.views_2));
         agg.likes    += safe(Number(s.likes_2));
         agg.comments += safe(Number(s.comments_2));
@@ -286,7 +309,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
       page += 1;
-    } while (page <= lastPage && page <= 5); // batasi 5 halaman biar ga berat
+    } while (page <= lastPage && page <= 5);
 
     renderChart(agg.views, agg.likes, agg.comments, agg.shares);
     $('#es-views').textContent = fmt(agg.views);
@@ -295,12 +318,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#es-shares').textContent = fmt(agg.shares);
   }
 
-  // initial: kalau filter sudah terpilih dari query
+  // initial
   await loadCampaignEngagement(currentCampaignId);
 
   // events
   $('#campaignFilter').addEventListener('change', async (e) => {
     currentCampaignId = e.target.value || '';
+    updateSelectedBrandLine(currentCampaignId);
     showLoader();
     try {
       await loadCampaignEngagement(currentCampaignId);
@@ -347,6 +371,54 @@ export async function render(target, path, query = {}, labelOverride = null) {
       .replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;')
       .replace(/'/g,'&#039;');
+  }
+
+  function updateSelectedBrandLine(campaignId) {
+    const el = $('#selectedBrandLine');
+    if (!campaignId) {
+      el.textContent = '—';
+      return;
+    }
+    const brandName = campaignBrandMap.get(String(campaignId)) || '—';
+    el.textContent = brandName;
+  }
+
+  // === buat list brands dari data campaign yang sudah kita ambil (hemat request)
+  function renderBrandListFromCampaigns(campaigns) {
+    const ul = $('#brand-list');
+    if (!Array.isArray(campaigns) || !campaigns.length) {
+      ul.innerHTML = `<li class="list-group-item text-muted">Tidak ada data brand.</li>`;
+      return;
+    }
+
+    // agregasi per brand
+    const agg = new Map(); // key: brandId (atau nama), val: { name, total, active }
+    for (const c of campaigns) {
+      const bid = c.brand?.id ?? `name:${c.brand?.name || '-'}`;
+      const bname = c.brand?.name || '-';
+      if (!agg.has(bid)) agg.set(bid, { name: bname, total: 0, active: 0 });
+      const rec = agg.get(bid);
+      rec.total += 1;
+      if (String(c.status) === 'active') rec.active += 1;
+    }
+
+    // sort desc by total
+    const list = Array.from(agg.values()).sort((a,b) => b.total - a.total).slice(0, 10);
+
+    ul.innerHTML = list.map(b => `
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div class="d-flex flex-column">
+          <div class="fw-semibold">${escapeHtml(b.name)}</div>
+          <div class="small text-muted">
+            ${b.active} aktif • ${b.total} campaign
+          </div>
+        </div>
+        <div>
+          <span class="badge bg-primary me-1" title="Total campaign">${b.total}</span>
+          <span class="badge bg-success" title="Active">${b.active}</span>
+        </div>
+      </li>
+    `).join('');
   }
 }
 
