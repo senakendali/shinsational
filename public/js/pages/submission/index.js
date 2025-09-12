@@ -1,12 +1,31 @@
-import { renderHeader } from '../../components/header.js';
-import { renderBreadcrumb } from '../../components/breadcrumb.js';
-import { showLoader, hideLoader } from '../../components/loader.js';
-import { showToast } from '../../utils/toast.js';
-
-import { campaignService } from '../../services/campaignService.js';
-import { submissionService } from '../../services/influencerSubmissionService.js'; // pastikan ada method refreshMetrics(id)
-
+// /js/pages/admin/submissions-list.js
 export async function render(target, path, query = {}, labelOverride = null) {
+  const v = window.BUILD_VERSION || Date.now();
+
+  // Dynamic imports dengan cache-buster
+  const [
+    headerMod,
+    breadcrumbMod,
+    loaderMod,
+    toastMod,
+    campaignMod,
+    submissionMod,
+  ] = await Promise.all([
+    import(`../../components/header.js?v=${v}`),
+    import(`../../components/breadcrumb.js?v=${v}`),
+    import(`../../components/loader.js?v=${v}`),
+    import(`../../utils/toast.js?v=${v}`),
+    import(`../../services/campaignService.js?v=${v}`),
+    import(`../../services/influencerSubmissionService.js?v=${v}`), // harus punya refreshMetrics(id)
+  ]);
+
+  const { renderHeader } = headerMod;
+  const { renderBreadcrumb } = breadcrumbMod;
+  const { showLoader, hideLoader } = loaderMod;
+  const { showToast } = toastMod;
+  const { campaignService } = campaignMod;
+  const { submissionService } = submissionMod;
+
   showLoader();
   target.innerHTML = '';
 
@@ -25,7 +44,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         <button class="btn btn-outline-secondary btn-refresh-all" type="button">
           <i class="bi bi-arrow-clockwise"></i> Refresh visible
         </button>
-        <span class="text-muted small d-none d-md-inline"><span class="me-2">Tips: klik “View” untuk buka file</span></span>
+        
       </div>
     </div>
 
@@ -187,7 +206,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
             if (!link && !pdate && !scUrl) return '';
 
-            // Aksi: hanya tampil di Slot 1 biar nggak dobel
             const actions = is1
               ? `
                 <div class="d-flex flex-wrap gap-2">
@@ -280,7 +298,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
   }
 
   function attachActionHandlers() {
-    // navigasi app-link
     document.querySelectorAll('.app-link').forEach(el => {
       el.addEventListener('click', (e) => {
         e.preventDefault();
@@ -291,7 +308,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
       });
     });
 
-    // refresh per submission
     document.querySelectorAll('.btn-refresh-metrics').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
@@ -307,7 +323,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
         } catch (err) {
           if ((err.status === 401 || err.status === 409) && err.reauth_url) {
             showToast(err.message || 'Token TikTok tidak valid. Silakan connect ulang.', 'error');
-            // Optional: window.open(err.reauth_url, '_blank');
           } else {
             showToast(err.message || 'Gagal refresh metrik', 'error');
           }
@@ -318,7 +333,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
       });
     });
 
-    // refresh semua yang terlihat
     if (refreshAllBtn) {
       refreshAllBtn.onclick = async () => {
         const ids = Array.from(document.querySelectorAll('tr[data-submission-id]'))
