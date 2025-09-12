@@ -56,7 +56,7 @@ class InfluencerSubmissionController extends Controller
      */
     public function store(Request $request)
     {
-        // Validasi dasar
+        // Validasi dasar + METRIK
         $validated = $request->validate(
             [
                 'tiktok_user_id'  => ['required','string','max:100'],
@@ -74,16 +74,27 @@ class InfluencerSubmissionController extends Controller
                 'invoice_file'        => ['nullable','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
                 'review_proof_file'   => ['nullable','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
 
-                // Kalau kamu sudah tambahkan kolom KPI ini dan mau terima:
+                // KPI lama (opsional)
                 'yellow_cart'     => ['nullable','integer','min:0'],
                 'product_sold'    => ['nullable','integer','min:0'],
                 'gmv'             => ['nullable','numeric','min:0'],
+
+                // 🔽 METRIK BARU per slot (opsional)
+                'views_1'         => ['nullable','integer','min:0'],
+                'likes_1'         => ['nullable','integer','min:0'],
+                'comments_1'      => ['nullable','integer','min:0'],
+                'shares_1'        => ['nullable','integer','min:0'],
+
+                'views_2'         => ['nullable','integer','min:0'],
+                'likes_2'         => ['nullable','integer','min:0'],
+                'comments_2'      => ['nullable','integer','min:0'],
+                'shares_2'        => ['nullable','integer','min:0'],
             ],
             [
                 'tiktok_user_id.required' => 'ID TikTok wajib diisi.',
                 'campaign_id.required'    => 'Campaign wajib dipilih.',
                 'link_1.required'         => 'Link postingan 1 wajib diisi.',
-                'link_2.required'         => 'Link postingan 2 wajib diisi.',
+                // 'link_2.required'      => 'Link postingan 2 wajib diisi.', // opsional
             ]
         );
 
@@ -128,11 +139,11 @@ class InfluencerSubmissionController extends Controller
         // Set kolom-kolom utama
         $submission->link_1              = $validated['link_1'];
         $submission->post_date_1         = $validated['post_date_1'] ?? null;
-        $submission->link_2              = $validated['link_2'];
+        $submission->link_2              = $validated['link_2'] ?? null;
         $submission->post_date_2         = $validated['post_date_2'] ?? null;
         $submission->purchase_platform   = $validated['purchase_platform'] ?? null;
 
-        // Optional KPI
+        // Optional KPI lama
         $submission->yellow_cart   = $validated['yellow_cart']  ?? $submission->yellow_cart;
         $submission->product_sold  = $validated['product_sold'] ?? $submission->product_sold;
         $submission->gmv           = $validated['gmv']          ?? $submission->gmv;
@@ -143,6 +154,22 @@ class InfluencerSubmissionController extends Controller
         if ($invPath) $submission->invoice_file_path      = $invPath;
         if ($revPath) $submission->review_proof_file_path = $revPath;
 
+        // 🔽 Set METRIK per slot (jika dikirim)
+        $metricKeys = [
+            'views_1','likes_1','comments_1','shares_1',
+            'views_2','likes_2','comments_2','shares_2',
+        ];
+        $hasMetricPayload = false;
+        foreach ($metricKeys as $m) {
+            if (array_key_exists($m, $validated)) {
+                $submission->$m = $validated[$m];
+                $hasMetricPayload = true;
+            }
+        }
+        if ($hasMetricPayload) {
+            $submission->last_metrics_synced_at = now();
+        }
+
         $submission->save();
 
         return response()->json([
@@ -151,9 +178,111 @@ class InfluencerSubmissionController extends Controller
         ], $submission->wasRecentlyCreated ? 201 : 200);
     }
 
+
     // App\Http\Controllers\Api\InfluencerSubmissionController.php
 
     public function update(Request $request, $id)
+    {
+        $submission = InfluencerSubmission::findOrFail($id);
+
+        // Validasi (semua optional/sometimes)
+        $validated = $request->validate([
+            'tiktok_user_id'    => ['sometimes','string','max:100'],
+            'campaign_id'       => ['sometimes','integer','exists:campaigns,id'],
+
+            'link_1'            => ['sometimes','nullable','url','max:2048'],
+            'post_date_1'       => ['sometimes','nullable','date'],
+            'screenshot_1'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
+
+            'link_2'            => ['sometimes','nullable','url','max:2048'],
+            'post_date_2'       => ['sometimes','nullable','date'],
+            'screenshot_2'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
+
+            'purchase_platform' => ['sometimes','nullable', \Illuminate\Validation\Rule::in(['tiktokshop','shopee'])],
+            'invoice_file'      => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
+            'review_proof_file' => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
+
+            // KPI lama (opsional)
+            'yellow_cart'       => ['sometimes','nullable','integer','min:0'],
+            'product_sold'      => ['sometimes','nullable','integer','min:0'],
+            'gmv'               => ['sometimes','nullable','numeric','min:0'],
+
+            // 🔽 METRIK BARU per slot
+            'views_1'           => ['sometimes','nullable','integer','min:0'],
+            'likes_1'           => ['sometimes','nullable','integer','min:0'],
+            'comments_1'        => ['sometimes','nullable','integer','min:0'],
+            'shares_1'          => ['sometimes','nullable','integer','min:0'],
+
+            'views_2'           => ['sometimes','nullable','integer','min:0'],
+            'likes_2'           => ['sometimes','nullable','integer','min:0'],
+            'comments_2'        => ['sometimes','nullable','integer','min:0'],
+            'shares_2'          => ['sometimes','nullable','integer','min:0'],
+        ]);
+
+        // Base dir bisa berubah kalau campaign_id/tiktok_user_id ikut diupdate
+        $campaignId   = $validated['campaign_id']    ?? $submission->campaign_id;
+        $tiktokUserId = $validated['tiktok_user_id'] ?? $submission->tiktok_user_id;
+        $baseDir = "submissions/{$campaignId}/{$tiktokUserId}";
+
+        $saveFile = function (? \Illuminate\Http\UploadedFile $file, string $prefix) use ($baseDir) {
+            if (!$file) return null;
+            $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+            $name = $prefix . '_' . \Illuminate\Support\Str::uuid() . '.' . $ext;
+            return $file->storeAs($baseDir, $name, 'public');
+        };
+
+        // Ganti file jika ada upload baru
+        if ($request->hasFile('screenshot_1')) {
+            if ($submission->screenshot_1_path) \Storage::disk('public')->delete($submission->screenshot_1_path);
+            $submission->screenshot_1_path = $saveFile($request->file('screenshot_1'), 's1');
+        }
+        if ($request->hasFile('screenshot_2')) {
+            if ($submission->screenshot_2_path) \Storage::disk('public')->delete($submission->screenshot_2_path);
+            $submission->screenshot_2_path = $saveFile($request->file('screenshot_2'), 's2');
+        }
+        if ($request->hasFile('invoice_file')) {
+            if ($submission->invoice_file_path) \Storage::disk('public')->delete($submission->invoice_file_path);
+            $submission->invoice_file_path = $saveFile($request->file('invoice_file'), 'invoice');
+        }
+        if ($request->hasFile('review_proof_file')) {
+            if ($submission->review_proof_file_path) \Storage::disk('public')->delete($submission->review_proof_file_path);
+            $submission->review_proof_file_path = $saveFile($request->file('review_proof_file'), 'review');
+        }
+
+        // Assign field biasa
+        foreach ([
+            'tiktok_user_id','campaign_id',
+            'link_1','post_date_1',
+            'link_2','post_date_2',
+            'purchase_platform',
+            'yellow_cart','product_sold','gmv',
+            // 🔽 metrik
+            'views_1','likes_1','comments_1','shares_1',
+            'views_2','likes_2','comments_2','shares_2',
+        ] as $field) {
+            if (array_key_exists($field, $validated)) {
+                $submission->$field = $validated[$field];
+            }
+        }
+
+        // Set last_metrics_synced_at kalau ada metrik ikut diupdate
+        if (collect([
+            'views_1','likes_1','comments_1','shares_1',
+            'views_2','likes_2','comments_2','shares_2',
+        ])->some(fn($k) => array_key_exists($k, $validated))) {
+            $submission->last_metrics_synced_at = now();
+        }
+
+        $submission->save();
+
+        return response()->json([
+            'message' => 'Submission berhasil diupdate.',
+            'data'    => $submission->fresh()->loadMissing(['campaign:id,name,slug,brand_id','campaign.brand:id,name']),
+        ]);
+    }
+
+
+    public function update__(Request $request, $id)
     {
         // sementara di awal update():
         \Log::info('UPDATE payload', [

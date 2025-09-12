@@ -43,10 +43,42 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const toUrl = (p) => {
     if (!p) return null;
     if (/^https?:\/\//i.test(p)) return p;
-    // backend biasanya kirim relative path "submissions/.."
     return `/storage/${String(p).replace(/^\/?storage\/?/, '')}`;
   };
-  const fmtDate = (s) => (s ? new Date(s).toLocaleDateString('id-ID') : '-');
+  const fmtDate = (s) => (s ? new Date(s).toLocaleDateString('id-ID') : '—');
+  const fmtNum  = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '—');
+
+  // ambil nama tampil KOL dari field yang mungkin ada
+  const kolNameOf = (s) => {
+    return (
+      s.kol_name ||
+      s.full_name ||
+      s.display_name ||
+      s.tiktok_display_name ||
+      (s.tiktok_username ? `@${s.tiktok_username}` : null) ||
+      s.name ||
+      s.creator_name ||
+      s.influencer_name ||
+      s.user_name ||
+      s.tiktok_user_id || '—'
+    );
+  };
+
+  // ambil metric per slot kalau tersedia; fallback total
+  const metric = (s, slot, base) => {
+    const keys = [
+      `${base}_${slot}`,          // views_1
+      `${base}${slot}`,           // views1
+      `${base}_${slot}_count`,    // view_1_count
+      `${base}${slot}_count`,     // view1_count
+      base,                       // views
+      `${base}_count`,            // views_count
+    ];
+    for (const k of keys) {
+      if (k in s && s[k] != null) return s[k];
+    }
+    return null;
+  };
 
   // Populate campaign dropdown
   try {
@@ -86,90 +118,129 @@ export async function render(target, path, query = {}, labelOverride = null) {
         campaign_id: currentCampaignId
       });
 
-      const arr = res?.data || []; // paginated items
-      const rowsHtml = [];
+      const arr = res?.data || [];
 
-      // Client-side filter by keyword (kol id, link)
+      // Filter keyword sederhana (nama, open_id, link)
       const kw = (currentKeyword || '').toLowerCase().trim();
+      const filtered = kw
+        ? arr.filter(s => {
+            const name = kolNameOf(s);
+            const hay = [
+              name,
+              s.tiktok_user_id || '',
+              s.link_1 || '',
+              s.link_2 || '',
+            ].join(' ').toLowerCase();
+            return hay.includes(kw);
+          })
+        : arr;
 
-      arr.forEach((s, idx) => {
-        const nBase = (res.current_page - 1) * (res.per_page || 20) + idx + 1;
-
-        const link1 = s.link_1 || '';
-        const link2 = s.link_2 || '';
-
-        // skip rows if keyword not match (simple client filter)
-        const hay = [
-          s.tiktok_user_id || '',
-          link1, link2,
-        ].join(' ').toLowerCase();
-
-        if (kw && !hay.includes(kw)) return;
-
-        // compose urls
-        const s1url = s.screenshot_1_url || toUrl(s.screenshot_1_path);
-        const s2url = s.screenshot_2_url || toUrl(s.screenshot_2_path);
-        const invUrl = s.invoice_file_url || toUrl(s.invoice_file_path);
-        const revUrl = s.review_proof_file_url || toUrl(s.review_proof_file_path);
-
-        // helper to render action buttons
-        const btn = (u, label='View') => u ? `<a class="btn btn-sm btn-outline-secondary" href="${u}" target="_blank" rel="noopener"> ${label} </a>` : '<span class="text-muted">—</span>';
-
-        // One row per slot if there is content
-        const makeRow = (slot) => {
-          const is1 = slot === 1;
-          const link = is1 ? link1 : link2;
-          const pdate = is1 ? s.post_date_1 : s.post_date_2;
-          const scUrl = is1 ? s1url : s2url;
-
-          if (!link && !scUrl && !pdate) return ''; // nothing to show
-
-          return `
-            <tr>
-              <td>${nBase}${slot === 2 ? '<small class="text-muted">.2</small>' : ''}</td>
-              <td>
-                <div class="fw-semibold">${s.tiktok_user_id || '-'}</div>
-                <div class="small text-muted">${s.campaign?.name ? `Campaign: ${s.campaign.name}` : ''}</div>
-              </td>
-              <td>Slot ${slot}</td>
-              <td>${link ? `<a href="${link}" target="_blank" rel="noopener">${link}</a>` : '<span class="text-muted">—</span>'}</td>
-              <td>${fmtDate(pdate)}</td>
-              <td>${btn(scUrl, 'View')}</td>
-              <td>${btn(invUrl, 'Invoice')}</td>
-              <td>${btn(revUrl, 'Review')}</td>
-              <td>
-                <button class="btn btn-sm btn-outline-primary app-link" data-href="/admin/submissions/${s.id}/edit">
-                  <i class="bi bi-pencil"></i> Edit
-                </button>
-              </td>
-            </tr>
-          `;
-        };
-
-        // push up to 2 rows
-        rowsHtml.push(makeRow(1));
-        rowsHtml.push(makeRow(2));
+      // Grouping per open_id (fallback ke nama kalau open_id kosong)
+      const groups = new Map();
+      filtered.forEach((s) => {
+        const key = s.tiktok_user_id || `anon:${kolNameOf(s)}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(s);
       });
+
+      // Builder button
+      const btn = (u, label='View') =>
+        u ? `<a class="btn btn-sm btn-outline-secondary" href="${u}" target="_blank" rel="noopener">${label}</a>` : '<span class="text-muted">—</span>';
+
+      // Build table body: group header (nama) + 2 baris (slot 1 & 2) per submission
+      const rowsHtml = [];
+      let rowIndex = (res.current_page - 1) * (res.per_page || 20);
+
+      for (const [openId, subs] of groups.entries()) {
+        // Pakai nama dari submission pertama di grup
+        const first = subs[0] || {};
+        const displayName = kolNameOf(first);
+
+        // Separator/heading per KOL
+        rowsHtml.push(`
+          <tr class="table-active">
+            <td colspan="12">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="fw-semibold">${displayName}</div>
+                <div class="small text-muted">${openId !== displayName ? openId : ''}</div>
+              </div>
+            </td>
+          </tr>
+        `);
+
+        subs.forEach((s) => {
+          rowIndex += 1;
+
+          const s1url = s.screenshot_1_url || toUrl(s.screenshot_1_path);
+          const s2url = s.screenshot_2_url || toUrl(s.screenshot_2_path);
+          const invUrl = s.invoice_file_url || toUrl(s.invoice_file_path);
+          const revUrl = s.review_proof_file_url || toUrl(s.review_proof_file_path);
+
+          const slotRow = (slot) => {
+            const is1 = slot === 1;
+            const link = is1 ? (s.link_1 || '') : (s.link_2 || '');
+            const pdate = is1 ? s.post_date_1 : s.post_date_2;
+            const scUrl = is1 ? s1url : s2url;
+
+            // Metrics per-slot (fallback ke total)
+            const views   = metric(s, slot, 'views')   ?? metric(s, slot, 'view');
+            const likes   = metric(s, slot, 'likes')   ?? metric(s, slot, 'like');
+            const comments= metric(s, slot, 'comments')?? metric(s, slot, 'comment');
+            const shares  = metric(s, slot, 'shares')  ?? metric(s, slot, 'share');
+
+            // Jika row kosong total (tak ada link/tanggal/screenshot), skip
+            if (!link && !pdate && !scUrl) return '';
+
+            return `
+              <tr>
+                <td>${rowIndex}${slot === 2 ? '<small class="text-muted">.2</small>' : ''}</td>
+                <td>Slot ${slot}</td>
+                <td>${link ? `<a href="${link}" target="_blank" rel="noopener">${link}</a>` : '<span class="text-muted">—</span>'}</td>
+                <td>${fmtDate(pdate)}</td>
+                <td>${btn(scUrl, 'View')}</td>
+                <td>${btn(invUrl, 'Invoice')}</td>
+                <td>${btn(revUrl, 'Review')}</td>
+                <td class="text-end">${fmtNum(views)}</td>
+                <td class="text-end">${fmtNum(likes)}</td>
+                <td class="text-end">${fmtNum(comments)}</td>
+                <td class="text-end">${fmtNum(shares)}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline-primary app-link" data-href="/admin/submissions/${s.id}/edit">
+                    <i class="bi bi-pencil"></i> Edit
+                  </button>
+                </td>
+              </tr>
+            `;
+          };
+
+          // Maks. 2 baris per submission (slot 1 & 2)
+          rowsHtml.push(slotRow(1));
+          rowsHtml.push(slotRow(2));
+        });
+      }
 
       const tableHtml = `
         <table class="table table-bordered bg-white">
           <thead>
-            <tr><th colspan="9" class="text-uppercase">Submissions</th></tr>
+            <tr><th colspan="12" class="text-uppercase">Submissions</th></tr>
             <tr>
               <th style="width:60px">#</th>
-              <th style="min-width:220px">KOL (open_id)</th>
               <th style="width:80px">Slot</th>
               <th style="min-width:260px">Link</th>
               <th style="width:120px">Tanggal</th>
               <th style="width:120px">Screenshot</th>
               <th style="width:120px">Invoice</th>
               <th style="width:120px">Review Proof</th>
+              <th style="width:100px" class="text-end">Views</th>
+              <th style="width:100px" class="text-end">Likes</th>
+              <th style="width:110px" class="text-end">Comments</th>
+              <th style="width:100px" class="text-end">Shares</th>
               <th style="width:120px">Aksi</th>
             </tr>
           </thead>
           <tbody>
             ${rowsHtml.filter(Boolean).join('') || `
-              <tr><td colspan="9" class="text-center text-muted">Tidak ada data.</td></tr>
+              <tr><td colspan="12" class="text-center text-muted">Tidak ada data.</td></tr>
             `}
           </tbody>
         </table>
@@ -228,7 +299,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }, 250);
   });
 
-  // initial load (kalau ada campaign di query/terpilih)
+  // initial load
   if (campaignFilter.value) {
     currentCampaignId = campaignFilter.value;
     loadSubmissions(currentPage);
