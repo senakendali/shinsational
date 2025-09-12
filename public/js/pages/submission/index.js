@@ -44,7 +44,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
         <button class="btn btn-outline-secondary btn-refresh-all" type="button">
           <i class="bi bi-arrow-clockwise"></i> Refresh visible
         </button>
-        
       </div>
     </div>
 
@@ -71,21 +70,22 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const fmtDate = (s) => (s ? new Date(s).toLocaleDateString('id-ID') : '—');
   const fmtNum  = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '—');
 
+  // Ambil nama tampilan KOL
   const kolNameOf = (s) => {
     return (
-      s.kol_name ||
       s.full_name ||
+      (s.tiktok_username ? `@${s.tiktok_username}` : null) ||
       s.display_name ||
       s.tiktok_display_name ||
-      (s.tiktok_username ? `@${s.tiktok_username}` : null) ||
       s.name ||
       s.creator_name ||
       s.influencer_name ||
       s.user_name ||
-      s.tiktok_user_id || '—'
+      '—'
     );
   };
 
+  // Ambil metric per slot (fallback total)
   const metric = (s, slot, base) => {
     const keys = [
       `${base}_${slot}`,
@@ -155,7 +155,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
           })
         : arr;
 
-      // Group per open_id
+      // Group per open_id (tetap group by open_id; tampilannya pakai nama)
       const groups = new Map();
       filtered.forEach((s) => {
         const key = s.tiktok_user_id || `anon:${kolNameOf(s)}`;
@@ -172,14 +172,28 @@ export async function render(target, path, query = {}, labelOverride = null) {
       for (const [openId, subs] of groups.entries()) {
         const first = subs[0] || {};
         const displayName = kolNameOf(first);
+        const avatar = first.profile_pic_url ? `<img src="${first.profile_pic_url}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : '';
 
-        // Header per KOL (separator)
+        // Ambil satu submission id untuk aksi (by design: max 1 submission per campaign & KOL)
+        const firstSubmissionId = first.id;
+
+        // Header per KOL — kiri: nama (tanpa open_id), kanan: tombol aksi
         rowsHtml.push(`
           <tr class="table-active">
             <td colspan="12">
               <div class="d-flex justify-content-between align-items-center">
-                <div class="fw-semibold">${displayName}</div>
-                <div class="small text-muted">${openId !== displayName ? openId : ''}</div>
+                <div class="d-flex align-items-center gap-2">
+                  ${avatar}
+                  <span class="fw-semibold">${displayName}</span>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                  <button class="btn btn-sm btn-outline-primary app-link" data-href="/admin/submissions/${firstSubmissionId}/edit">
+                    <i class="bi bi-pencil"></i> Edit
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary btn-refresh-metrics" data-id="${firstSubmissionId}">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                  </button>
+                </div>
               </div>
             </td>
           </tr>
@@ -206,22 +220,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
             if (!link && !pdate && !scUrl) return '';
 
-            const actions = is1
-              ? `
-                <div class="d-flex flex-wrap gap-2">
-                  <button class="btn btn-sm btn-outline-primary app-link" data-href="/admin/submissions/${s.id}/edit">
-                    <i class="bi bi-pencil"></i> Edit
-                  </button>
-                  <button class="btn btn-sm btn-outline-secondary btn-refresh-metrics" data-id="${s.id}">
-                    <i class="bi bi-arrow-clockwise"></i> Refresh
-                  </button>
-                </div>
-              `
-              : '';
-
+            // Tidak ada tombol aksi di baris konten; semua aksi dipindah ke header per KOL
             return `
               <tr ${is1 ? `data-submission-id="${s.id}"` : ''}>
-                
                 <td colspan="2">Content ${slot}</td>
                 <td>${link ? `<a href="${link}" target="_blank" rel="noopener">${link}</a>` : '<span class="text-muted">—</span>'}</td>
                 <td>${fmtDate(pdate)}</td>
@@ -232,7 +233,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
                 <td class="text-end">${fmtNum(likes)}</td>
                 <td class="text-end">${fmtNum(comments)}</td>
                 <td class="text-end">${fmtNum(shares)}</td>
-                <td>${actions}</td>
+                <td></td>
               </tr>
             `;
           };
@@ -297,6 +298,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   }
 
   function attachActionHandlers() {
+    // navigasi app-link
     document.querySelectorAll('.app-link').forEach(el => {
       el.addEventListener('click', (e) => {
         e.preventDefault();
@@ -307,6 +309,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       });
     });
 
+    // refresh per submission (tombol ada di baris header per KOL)
     document.querySelectorAll('.btn-refresh-metrics').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         e.preventDefault();
@@ -320,10 +323,10 @@ export async function render(target, path, query = {}, labelOverride = null) {
           showToast(resp.message || 'Metrik berhasil di-refresh.');
           await loadSubmissions(currentPage);
         } catch (err) {
-          if ((err.status === 401 || err.status === 409) && err.reauth_url) {
+          if ((err?.status === 401 || err?.status === 409) && err?.reauth_url) {
             showToast(err.message || 'Token TikTok tidak valid. Silakan connect ulang.', 'error');
           } else {
-            showToast(err.message || 'Gagal refresh metrik', 'error');
+            showToast(err?.message || 'Gagal refresh metrik', 'error');
           }
         } finally {
           btn.disabled = false;
@@ -332,6 +335,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       });
     });
 
+    // refresh semua yang terlihat
     if (refreshAllBtn) {
       refreshAllBtn.onclick = async () => {
         const ids = Array.from(document.querySelectorAll('tr[data-submission-id]'))

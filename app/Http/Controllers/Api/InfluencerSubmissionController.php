@@ -607,13 +607,32 @@ protected function oembedAuthor(?string $url): ?array
 
     public function index(Request $request)
     {
-        $query = InfluencerSubmission::query();
+        $query = InfluencerSubmission::query()
+            ->select('influencer_submissions.*')
+            // ambil kolom profil dari registrasi terbaru per (tiktok_user_id,campaign_id)
+            ->addSelect([
+                'full_name' => \App\Models\InfluencerRegistration::select('full_name')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()
+                    ->limit(1),
+                'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()
+                    ->limit(1),
+                'profile_pic_url' => \App\Models\InfluencerRegistration::select('profile_pic_url')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()
+                    ->limit(1),
+            ]);
 
         if ($request->filled('tiktok_user_id')) {
-            $query->where('tiktok_user_id', $request->string('tiktok_user_id'));
+            $query->where('tiktok_user_id', (string) $request->string('tiktok_user_id'));
         }
         if ($request->filled('campaign_id')) {
-            $query->where('campaign_id', $request->integer('campaign_id'));
+            $query->where('campaign_id', (int) $request->integer('campaign_id'));
         }
 
         if ($request->get('include') === 'campaign') {
@@ -631,9 +650,31 @@ protected function oembedAuthor(?string $url): ?array
      */
     public function show($id)
     {
-        $submission = InfluencerSubmission::with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])->findOrFail($id);
+        $submission = InfluencerSubmission::query()
+            ->select('influencer_submissions.*')
+            ->addSelect([
+                'full_name' => \App\Models\InfluencerRegistration::select('full_name')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()
+                    ->limit(1),
+                'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()
+                    ->limit(1),
+                'profile_pic_url' => \App\Models\InfluencerRegistration::select('profile_pic_url')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()
+                    ->limit(1),
+            ])
+            ->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])
+            ->findOrFail($id);
+
         return response()->json($submission);
-    }
+}
+
 
     /**
      * POST /api/influencer-submissions
