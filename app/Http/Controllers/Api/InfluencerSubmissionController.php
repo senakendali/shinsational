@@ -186,106 +186,174 @@ class InfluencerSubmissionController extends Controller
     }
 
     protected function parseVideoIdFromUrl(?string $url): ?string
-    {
-        if (!$url) return null;
-        // contoh: https://www.tiktok.com/@handle/video/7548495147772710151?... 
-        if (preg_match('~tiktok\.com/.*/video/(\d+)~i', $url, $m)) {
-            return $m[1];
-        }
-        // kadang short form atau param lain – coba ambil 19 digit terakhir
-        if (preg_match('~(\d{18,20})~', $url, $m)) {
-            return $m[1];
-        }
-        return null;
-    }
+{
+    if (!$url) return null;
+    if (preg_match('~tiktok\.com/.*/video/(\d+)~i', $url, $m)) return $m[1];
+    if (preg_match('~(\d{18,20})~', $url, $m)) return $m[1]; // fallback
+    return null;
+}
+
+protected function parseHandleFromUrl(?string $url): ?string
+{
+    if (!$url) return null;
+    if (preg_match('~tiktok\.com/@([^/]+)/video/~i', $url, $m)) return strtolower($m[1]);
+    return null;
+}
 
     /** Ambil access token untuk open_id. Prioritas: influencer_accounts → registrations */
     protected function getAccessTokenBundle(string $openId): ?array
-    {
-        // 1) Opsi B: influencer_accounts
-        $acc = InfluencerAccount::where('tiktok_user_id', $openId)->first();
-        if ($acc) {
-            return [
-                'access_token'  => $acc->access_token,
-                'refresh_token' => $acc->refresh_token,
-                'expires_at'    => $acc->expires_at ? Carbon::parse($acc->expires_at) : null,
-                'token_type'    => $acc->token_type ?: 'Bearer',
-                'model'         => $acc,
-                'source'        => 'accounts',
-            ];
-        }
-
-        // 2) Fallback: dari registrasi (row terbaru yang punya token)
-        $reg = InfluencerRegistration::where('tiktok_user_id', $openId)
-            ->whereNotNull('access_token')
-            ->orderByDesc('last_refreshed_at')
-            ->orderByDesc('updated_at')
-            ->first();
-        if ($reg) {
-            return [
-                'access_token'  => $reg->access_token,
-                'refresh_token' => $reg->refresh_token,
-                'expires_at'    => $reg->expires_at ? Carbon::parse($reg->expires_at) : null,
-                'token_type'    => $reg->token_type ?: 'Bearer',
-                'model'         => $reg,
-                'source'        => 'registrations',
-            ];
-        }
-
-        return null;
+{
+    if ($acc = InfluencerAccount::where('tiktok_user_id', $openId)->first()) {
+        return [
+            'access_token'  => $acc->access_token,
+            'refresh_token' => $acc->refresh_token,
+            'expires_at'    => $acc->expires_at ? Carbon::parse($acc->expires_at) : null,
+            'token_type'    => $acc->token_type ?: 'Bearer',
+            'model'         => $acc,
+            'source'        => 'accounts',
+        ];
     }
+
+    $reg = InfluencerRegistration::where('tiktok_user_id', $openId)
+        ->whereNotNull('access_token')
+        ->orderByDesc('last_refreshed_at')
+        ->orderByDesc('updated_at')
+        ->first();
+
+    if ($reg) {
+        return [
+            'access_token'  => $reg->access_token,
+            'refresh_token' => $reg->refresh_token,
+            'expires_at'    => $reg->expires_at ? Carbon::parse($reg->expires_at) : null,
+            'token_type'    => $reg->token_type ?: 'Bearer',
+            'model'         => $reg,
+            'source'        => 'registrations',
+        ];
+    }
+    return null;
+}
 
     /** Refresh access_token jika expired; simpan balik ke model sumber */
     protected function ensureFreshToken(array $bundle): array
-    {
-        $access  = $bundle['access_token'] ?? null;
-        $refresh = $bundle['refresh_token'] ?? null;
-        $exp     = $bundle['expires_at'] ?? null;
-        $model   = $bundle['model'] ?? null;
-
-        // masih valid?
-        if ($access && $exp instanceof Carbon && $exp->gt(now()->addMinutes(2))) {
-            return $bundle;
-        }
-
-        if (!$refresh || !$model) return $bundle; // nggak bisa refresh
-
-        try {
-            $resp = Http::asForm()->post('https://open.tiktokapis.com/v2/oauth/token/', [
-                'client_key'    => TikTokAuthController::CLIENT_KEY,
-                'client_secret' => TikTokAuthController::CLIENT_SECRET,
-                'grant_type'    => 'refresh_token',
-                'refresh_token' => $refresh,
-            ]);
-
-            if (!$resp->ok()) {
-                Log::warning('tiktok_refresh_failed', ['status' => $resp->status(), 'body' => $resp->json()]);
-                return $bundle;
-            }
-
-            $j = $resp->json();
-            $newAccess = $j['access_token']  ?? null;
-            $newRefresh= $j['refresh_token'] ?? $refresh;
-            $expiresIn = $j['expires_in']    ?? null;
-
-            if ($newAccess) {
-                // simpan ke sumbernya (accounts atau registrations)
-                $model->access_token  = $newAccess;
-                $model->refresh_token = $newRefresh;
-                $model->expires_at    = $expiresIn ? now()->addSeconds((int)$expiresIn) : null;
-                $model->last_refreshed_at = now();
-                $model->save();
-
-                $bundle['access_token'] = $newAccess;
-                $bundle['refresh_token']= $newRefresh;
-                $bundle['expires_at']   = $model->expires_at ? Carbon::parse($model->expires_at) : null;
-            }
-        } catch (\Throwable $e) {
-            Log::error('tiktok_refresh_exception', ['err' => $e->getMessage()]);
-        }
-
-        return $bundle;
+{
+    $exp = $bundle['expires_at'] ?? null;
+    if ($exp instanceof Carbon && $exp->gt(now()->addMinutes(2))) {
+        return $bundle; // masih valid
     }
+
+    $refresh = $bundle['refresh_token'] ?? null;
+    $model   = $bundle['model'] ?? null;
+    if (!$refresh || !$model) return $bundle;
+
+    try {
+        $resp = Http::asForm()->post('https://open.tiktokapis.com/v2/oauth/token/', [
+            'client_key'    => TikTokAuthController::CLIENT_KEY,
+            'client_secret' => TikTokAuthController::CLIENT_SECRET,
+            'grant_type'    => 'refresh_token',
+            'refresh_token' => $refresh,
+        ]);
+        if ($resp->ok()) {
+            $j = $resp->json();
+            $model->access_token      = $j['access_token'] ?? $model->access_token;
+            $model->refresh_token     = $j['refresh_token'] ?? $model->refresh_token;
+            $model->expires_at        = isset($j['expires_in']) ? now()->addSeconds((int)$j['expires_in']) : $model->expires_at;
+            $model->last_refreshed_at = now();
+            $model->save();
+
+            $bundle['access_token'] = $model->access_token;
+            $bundle['refresh_token']= $model->refresh_token;
+            $bundle['expires_at']   = $model->expires_at ? Carbon::parse($model->expires_at) : null;
+        } else {
+            Log::warning('tiktok_refresh_failed', ['status'=>$resp->status(),'body'=>$resp->json()]);
+        }
+    } catch (\Throwable $e) {
+        Log::error('tiktok_refresh_exception', ['err'=>$e->getMessage()]);
+    }
+    return $bundle;
+}
+
+protected function queryVideoStatsByIds(array $videoIds, string $accessToken): array
+{
+    $stats = [];
+    try {
+        $resp = Http::withToken($accessToken)->acceptJson()
+            ->post('https://open.tiktokapis.com/v2/video/query/', [
+                'filters' => ['video_ids' => array_values($videoIds)],
+                'fields'  => 'video_id,view_count,like_count,comment_count,share_count,author_open_id',
+            ]);
+        if ($resp->ok()) {
+            foreach ((array) data_get($resp->json(), 'data.videos', []) as $it) {
+                $vid = (string) data_get($it, 'video_id');
+                if (!$vid) continue;
+                $stats[$vid] = [
+                    'view'          => data_get($it, 'view_count'),
+                    'like'          => data_get($it, 'like_count'),
+                    'comment'       => data_get($it, 'comment_count'),
+                    'share'         => data_get($it, 'share_count'),
+                    'author_open_id'=> data_get($it, 'author_open_id'),
+                ];
+            }
+        } else {
+            Log::warning('tiktok_video_query_failed', ['status'=>$resp->status(),'body'=>$resp->json()]);
+        }
+    } catch (\Throwable $e) {
+        Log::error('tiktok_video_query_exception', ['err'=>$e->getMessage()]);
+    }
+    return $stats;
+}
+
+protected function listAndScanStats(string $openId, array $videoIds, string $accessToken): array
+{
+    $found = [];
+    $need  = array_fill_keys($videoIds, true);
+    $cursor = 0;
+
+    for ($page=0; $page<3 && count($need)>0; $page++) {
+        $resp = Http::withToken($accessToken)->acceptJson()
+            ->post('https://open.tiktokapis.com/v2/video/list/', [
+                'creator_id' => $openId,
+                'max_count'  => 50,
+                'cursor'     => $cursor,
+                'fields'     => 'video_id,view_count,like_count,comment_count,share_count',
+            ]);
+        if (!$resp->ok()) {
+            Log::warning('tiktok_video_list_failed', ['status'=>$resp->status(),'body'=>$resp->json()]);
+            break;
+        }
+
+        $j = $resp->json();
+        $items  = (array) (data_get($j, 'data.videos') ?? data_get($j, 'data.items', []));
+        $cursor = data_get($j, 'data.cursor', null);
+        $hasMore= (bool) data_get($j, 'data.has_more', false);
+
+        foreach ($items as $it) {
+            $vid = (string) data_get($it, 'video_id');
+            if (!isset($need[$vid])) continue;
+
+            $found[$vid] = [
+                'view'    => data_get($it, 'view_count'),
+                'like'    => data_get($it, 'like_count'),
+                'comment' => data_get($it, 'comment_count'),
+                'share'   => data_get($it, 'share_count'),
+            ];
+            unset($need[$vid]);
+        }
+
+        if (!$hasMore || !$cursor) break;
+    }
+    return $found;
+}
+
+protected function oembedAuthor(?string $url): ?array
+{
+    if (!$url) return null;
+    try {
+        $r = Http::timeout(8)->get('https://www.tiktok.com/oembed', ['url'=>$url]);
+        return $r->ok() ? $r->json() : null;
+    } catch (\Throwable $e) {
+        return null;
+    }
+}
 
     /** Ambil metrik video untuk open_id (creator) & daftar video_id; return map video_id => stats */
     protected function fetchVideoStats(string $openId, array $videoIds, string $accessToken): array
@@ -341,43 +409,47 @@ class InfluencerSubmissionController extends Controller
     {
         $submission = InfluencerSubmission::findOrFail($id);
 
-        // Ambil video IDs dari link 1 & 2
+        // Ambil video id dari link
         $vid1 = $this->parseVideoIdFromUrl($submission->link_1);
         $vid2 = $this->parseVideoIdFromUrl($submission->link_2);
-        $wantIds = array_values(array_filter([$vid1, $vid2], fn($v) => !empty($v)));
+        $want = array_values(array_filter([$vid1, $vid2], fn($v) => !empty($v)));
 
-        if (empty($wantIds)) {
+        if (empty($want)) {
             return response()->json([
-                'message' => 'Link video tidak valid / video_id tidak terdeteksi.',
-                'updated' => [],
+                'message'   => 'Link video tidak valid / video_id tidak terdeteksi.',
+                'updated'   => [],
                 'not_found' => [],
-                'data' => $submission,
-            ], 200); // <-- JANGAN 404
+                'data'      => $submission,
+            ], 200);
         }
 
-        // Ambil token untuk open_id ini
+        // Ambil token
         $openId = $submission->tiktok_user_id;
         $bundle = $this->getAccessTokenBundle($openId);
-
         if (!$bundle || empty($bundle['access_token'])) {
-            // Tidak ada token → minta user re-connect
             return response()->json([
                 'message'    => 'Token TikTok tidak tersedia. Minta KOL untuk connect ulang.',
-                'reauth_url' => url('/auth/tiktok/redirect'), // bisa tambahkan ?campaign_id=...
-            ], 409); // 409 biar ketahuan "action required"
+                'reauth_url' => url('/auth/tiktok/redirect'),
+            ], 409);
+        }
+        $bundle = $this->ensureFreshToken($bundle);
+        $access = $bundle['access_token'];
+
+        // 1) Coba query by IDs (presisi)
+        $stats = $this->queryVideoStatsByIds($want, $access);
+
+        // 2) Masih ada yang belum ketemu? Fallback list & scan
+        $missing = array_values(array_diff($want, array_keys($stats)));
+        if ($missing) {
+            $scan = $this->listAndScanStats($openId, $missing, $access);
+            $stats = $stats + $scan;
+            $missing = array_values(array_diff($want, array_keys($stats)));
         }
 
-        // Pastikan token fresh
-        $bundle = $this->ensureFreshToken($bundle);
-        $accessToken = $bundle['access_token'];
-
-        // Panggil API TikTok untuk ambil stats
-        $stats = $this->fetchVideoStats($openId, $wantIds, $accessToken);
-
+        // 3) Tulis ke kolom per slot
         $updated = [];
         $notFound = [];
 
-        // Map ke slot 1
         if ($vid1) {
             if (isset($stats[$vid1])) {
                 $st = $stats[$vid1];
@@ -391,7 +463,6 @@ class InfluencerSubmissionController extends Controller
             }
         }
 
-        // Map ke slot 2
         if ($vid2) {
             if (isset($stats[$vid2])) {
                 $st = $stats[$vid2];
@@ -405,20 +476,55 @@ class InfluencerSubmissionController extends Controller
             }
         }
 
-        // Set timestamp sinkronisasi
         if (!empty($updated)) {
             $submission->last_metrics_synced_at = now();
             $submission->save();
         }
 
-        // Kembalikan SELALU 200 (supaya tidak merah 404 di console)
+        // 4) Hint mismatch: bandingkan handle link vs username yang kita simpan
+        $hint = [];
+        $linkHandle1 = $this->parseHandleFromUrl($submission->link_1);
+        $linkHandle2 = $this->parseHandleFromUrl($submission->link_2);
+        $reg = InfluencerRegistration::where('tiktok_user_id', $openId)->latest()->first();
+        $savedHandle = $reg ? strtolower((string)$reg->tiktok_username) : null;
+
+        if (($linkHandle1 && $savedHandle && $linkHandle1 !== $savedHandle) ||
+            ($linkHandle2 && $savedHandle && $linkHandle2 !== $savedHandle)) {
+            $hint['possible_account_mismatch'] = [
+                'saved_username' => $savedHandle,
+                'link_username_1'=> $linkHandle1,
+                'link_username_2'=> $linkHandle2,
+                'note' => 'Akun di link tampaknya berbeda dengan akun yang memberi izin OAuth. TikTok API hanya mengembalikan metrik untuk akun yang mengizinkan.',
+            ];
+        }
+
+        // (opsional) tambah oEmbed author untuk debug (tidak mengubah logika)
+        if (!empty($notFound)) {
+            $oe1 = $this->oembedAuthor($submission->link_1);
+            $oe2 = $this->oembedAuthor($submission->link_2);
+            if ($oe1 || $oe2) {
+                $hint['oembed'] = [
+                    '1' => $oe1 ? [
+                        'author_unique_id' => data_get($oe1,'author_unique_id'),
+                        'author_name'      => data_get($oe1,'author_name'),
+                    ] : null,
+                    '2' => $oe2 ? [
+                        'author_unique_id' => data_get($oe2,'author_unique_id'),
+                        'author_name'      => data_get($oe2,'author_name'),
+                    ] : null,
+                ];
+            }
+        }
+
         return response()->json([
             'message'    => empty($updated) ? 'Tidak ada metrik yang ditemukan untuk link ini.' : 'Metrik berhasil di-refresh.',
             'updated'    => $updated,
             'not_found'  => $notFound,
+            'hints'      => $hint,
             'data'       => $submission->fresh(),
         ], 200);
     }
+
 
 
     public function index(Request $request)

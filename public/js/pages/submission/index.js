@@ -221,8 +221,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
             return `
               <tr ${is1 ? `data-submission-id="${s.id}"` : ''}>
-                <td>${rowIndex}${slot === 2 ? '<small class="text-muted">.2</small>' : ''}</td>
-                <td>Slot ${slot}</td>
+                
+                <td colspan="2">Content ${slot}</td>
                 <td>${link ? `<a href="${link}" target="_blank" rel="noopener">${link}</a>` : '<span class="text-muted">—</span>'}</td>
                 <td>${fmtDate(pdate)}</td>
                 <td>${btn(scUrl, 'View')}</td>
@@ -247,13 +247,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
           <thead>
             <tr><th colspan="12" class="text-uppercase">Submissions</th></tr>
             <tr>
-              <th style="width:60px">#</th>
-              <th style="width:80px">Slot</th>
+              <th style="width:140px" colspan="2">Content</th>
               <th style="min-width:260px">Link</th>
               <th style="width:120px">Tanggal</th>
               <th style="width:120px">Screenshot</th>
               <th style="width:120px">Invoice</th>
-              <th style="width:120px">Review Proof</th>
+              <th style="width:120px">Review</th>
               <th style="width:100px" class="text-end">Views</th>
               <th style="width:100px" class="text-end">Likes</th>
               <th style="width:110px" class="text-end">Comments</th>
