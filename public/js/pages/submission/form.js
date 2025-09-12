@@ -191,13 +191,12 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     return k.toISOString().slice(0,10);
   };
 
-  // === Viewer link: /files?p=... (bukan /storage/...)
+  // === Viewer link: /files?p=... (bukan /storage/...) untuk file download/preview (bukan untuk <img>)
   const toFileUrl = (input) => {
     if (!input) return '';
     const origin = location.origin;
     let raw = String(input).trim();
 
-    // Full URL?
     if (/^https?:\/\//i.test(raw)) {
       try {
         const u = new URL(raw);
@@ -205,11 +204,10 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
           const stripped = u.pathname.replace(/^\/?storage\/?/i, '');
           return `${origin}/files?p=${encodeURIComponent(stripped)}`;
         }
-        return raw; // external or non-storage on same domain
-      } catch { /* fallthrough */ }
+        return raw;
+      } catch {}
     }
 
-    // Relative / storage path
     const normalized = raw.replace(/^\/+/, '').replace(/^storage\/+/i, '');
     return `${origin}/files?p=${encodeURIComponent(normalized)}`;
   };
@@ -226,6 +224,39 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       if (hasVal(rec?.[k])) return toFileUrl(rec[k]);
     }
     if (rec?.files && hasVal(rec.files[key])) return toFileUrl(rec.files[key]);
+    return '';
+  };
+
+  // === Avatar helpers (untuk <img src>) ===
+  const toImageSrc = (raw) => {
+    if (!hasVal(raw)) return '';
+    const s = String(raw).trim();
+    // biarkan http(s) / data: apa adanya
+    if (/^(https?:\/\/|data:image)/i.test(s)) return s;
+    // path relatif → pastikan jadi /storage/...
+    let path = s.replace(/^\/+/, '');
+    if (!/^storage\//i.test(path)) path = `storage/${path}`;
+    return `${location.origin}/${path}`;
+  };
+
+  const getAvatarUrl = (rec) => {
+    if (!rec) return '';
+    const keys = [
+      'tiktok_avatar_url',
+      'tiktok_profile_pic_url',
+      'profile_pic_url',
+      'profile_image_url',
+      'avatar_url',
+      'avatar',
+      'picture_url',
+      'picture',
+    ];
+    for (const k of keys) {
+      if (hasVal(rec[k])) return toImageSrc(rec[k]);
+    }
+    // nested possibilities
+    if (rec.user && hasVal(rec.user.avatar_url)) return toImageSrc(rec.user.avatar_url);
+    if (rec.creator && hasVal(rec.creator.avatar_url)) return toImageSrc(rec.creator.avatar_url);
     return '';
   };
 
@@ -270,11 +301,11 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
   const getMetric = (rec, slot, base) => {
     if (!rec) return '';
     const keys = [
-      `${base}_${slot}`,     // views_1
-      `${base}${slot}`,      // views1
+      `${base}_${slot}`,
+      `${base}${slot}`,
       `${base}_${slot}_count`,
       `${base}${slot}_count`,
-      base,                  // views
+      base,
       `${base}_count`,
     ];
     for (const k of keys) {
@@ -340,19 +371,36 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       $('#campId').textContent = safe(rec.campaign_id, '-');
       $('#ttUserId').textContent = safe(rec.tiktok_user_id, '-');
 
-      const name = safe(rec.tiktok_full_name || rec.full_name, '');
-      const handle = safe(rec.tiktok_username ? '@'+rec.tiktok_username : '', '');
-      const avatar = safe(rec.tiktok_avatar_url || rec.avatar_url, '');
+      const name   = safe(rec.tiktok_full_name || rec.full_name || rec.creator_name, '');
+      const handle = safe(rec.tiktok_username ? '@'+rec.tiktok_username : (rec.username ? '@'+rec.username : ''), '');
+      const avatar = getAvatarUrl(rec);
 
+      // set texts
       if (name || handle || avatar) {
         $('#kolName').textContent = name || 'Creator';
         $('#kolHandle').textContent = handle || '';
+
+        const icon = $('#kolAvatarIcon');
+        const img  = $('#kolAvatarImg');
+
         if (avatar) {
-          $('#kolAvatarIcon')?.classList.add('d-none');
-          const img = $('#kolAvatarImg');
-          img.src = avatar;
-          img.classList.remove('d-none');
+          // tampilkan img, sembunyikan icon
+          if (icon) icon.classList.add('d-none');
+          if (img) {
+            img.src = avatar;
+            img.classList.remove('d-none');
+            // fallback jika 404/invalid
+            img.onerror = () => {
+              if (img) img.classList.add('d-none');
+              if (icon) icon.classList.remove('d-none');
+            };
+          }
+        } else {
+          // tanpa avatar → pakai icon
+          if (img) img.classList.add('d-none');
+          if (icon) icon.classList.remove('d-none');
         }
+
         kolBox.classList.remove('d-none');
       }
     }
@@ -394,8 +442,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       const el = $('#'+id);
       if (!el) return;
       const name = key || id.replace(/-/g,'_');
-      // kirim jika ada value (boleh kosong untuk number di handler terpisah)
-      if (el.type === 'number') return; // number handled below
+      if (el.type === 'number') return;
       if (hasVal(el.value)) fd.set(name, el.value.trim());
     };
     addField('link-1', 'link_1');
@@ -411,9 +458,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       const name = id;
       if (el.value !== '') fd.set(name, String(Math.max(0, Number(el.value))));
     };
-    // metrics content 1
     ['views_1','likes_1','comments_1','shares_1'].forEach(addNumber);
-    // metrics content 2
     ['views_2','likes_2','comments_2','shares_2'].forEach(addNumber);
 
     // Files
@@ -433,11 +478,10 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     try {
       let resp;
       if (isEdit) {
-        // PATCH via POST + _method agar aman multipart
         fd.set('_method', 'PATCH');
 
         if (submissionService?.update) {
-          resp = await submissionService.update(params.id, fd); // service aware of _method
+          resp = await submissionService.update(params.id, fd);
         } else {
           const r = await fetch(`/api/influencer-submissions/${params.id}`, {
             method: 'POST',
@@ -449,7 +493,6 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         }
         showToast(resp?.message || 'Submission berhasil diperbarui');
       } else {
-        // CREATE
         if (!tiktok_user_id || !campaign_id) {
           throw new Error('tiktok_user_id & campaign_id wajib untuk membuat submission.');
         }
@@ -467,7 +510,6 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         showToast(resp?.message || 'Submission berhasil dibuat');
       }
 
-      // Kembali ke list admin submissions
       history.pushState(null, '', '/admin/submissions');
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (err) {
