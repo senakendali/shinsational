@@ -50,17 +50,17 @@ export const routes = [
     {
         path: "/admin/submissions",
         label: "Submission",
-        component: () => import("../pages/campaign/index.js?v=" + BUILD_ID),
+        component: () => import("../pages/submission/index.js?v=" + BUILD_ID),
     },
     {
         path: "/admin/submissions/create",
         label: "Add Campaign",
-        component: () => import("../pages/campaign/form.js?v=" + BUILD_ID),
+        component: () => import("../pages/submission/form.js?v=" + BUILD_ID),
     },
     {
         path: "/admin/submissions/:id/edit",
         label: "Edit Campaign",
-        component: () => import("../pages/campaign/form.js?v=" + BUILD_ID),
+        component: () => import("../pages/submission/form.js?v=" + BUILD_ID),
     },
 
     {
