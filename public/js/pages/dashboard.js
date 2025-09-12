@@ -3,7 +3,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const v = window.BUILD_VERSION || Date.now();
   target.innerHTML = "";
 
-  // --- dynamic imports (cache-busted) ---
   const [
     headerMod,
     breadcrumbMod,
@@ -12,15 +11,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
     brandMod,
     campaignMod,
     submissionMod,
-    // influencer registration service optional (kalau ada)
   ] = await Promise.all([
-    import(`../../components/header.js?v=${v}`),
-    import(`../../components/breadcrumb.js?v=${v}`),
-    import(`../../components/loader.js?v=${v}`),
-    import(`../../utils/toast.js?v=${v}`),
-    import(`../../services/brandService.js?v=${v}`),
-    import(`../../services/campaignService.js?v=${v}`),
-    import(`../../services/influencerSubmissionService.js?v=${v}`),
+    import(`/js/components/header.js?v=${v}`),
+    import(`/js/components/breadcrumb.js?v=${v}`),
+    import(`/js/components/loader.js?v=${v}`),
+    import(`/js/utils/toast.js?v=${v}`),
+    import(`/js/services/brandService.js?v=${v}`),
+    import(`/js/services/campaignService.js?v=${v}`),
+    import(`/js/services/influencerSubmissionService.js?v=${v}`),
   ]);
 
   const { renderHeader } = headerMod;
@@ -84,13 +82,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
       <div class="d-flex flex-column flex-lg-row gap-4 mb-5 pt-2">
         <div class="flex-grow-1">
           <div class="d-flex justify-content-between align-items-center mb-3">
-            <h5 class="mb-0">Total Engagement per Campaign</h5>
+            <h5 class="mb-0">Campaign Engagement</h5>
             <div class="d-flex gap-2">
               <select id="campaignFilter" class="form-select form-select-sm" style="min-width:260px">
                 <option value="">— Pilih Campaign —</option>
               </select>
               <button class="btn btn-outline-secondary btn-sm" id="btnRefreshCampaign">
-                <i class="bi bi-arrow-clockwise"></i> Refresh
+                <i class="bi bi-arrow-clockwise"></i>
               </button>
             </div>
           </div>
