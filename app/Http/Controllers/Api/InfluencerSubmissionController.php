@@ -607,43 +607,76 @@ protected function oembedAuthor(?string $url): ?array
 
     public function index(Request $request)
     {
-        $query = InfluencerSubmission::query()
-            ->select('influencer_submissions.*')
-            // ambil kolom profil dari registrasi terbaru per (tiktok_user_id,campaign_id)
-            ->addSelect([
-                'full_name' => \App\Models\InfluencerRegistration::select('full_name')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()
-                    ->limit(1),
-                'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()
-                    ->limit(1),
-                'profile_pic_url' => \App\Models\InfluencerRegistration::select('profile_pic_url')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()
-                    ->limit(1),
-            ]);
+        $perPage  = (int) $request->get('per_page', 15);
+        $include  = (string) $request->get('include', ''); // "campaign" kalau mau ikut relasi
 
+        // Subquery: registrasi terbaru per (tiktok_user_id, campaign_id)
+        $latestPerPair = \App\Models\InfluencerRegistration::query()
+            ->selectRaw('tiktok_user_id, campaign_id, MAX(id) as latest_id')
+            ->groupBy('tiktok_user_id', 'campaign_id');
+
+        // Base: ambil row registrasi TERBARU per pair
+        $query = \App\Models\InfluencerRegistration::query()
+            ->from('influencer_registrations as ir')
+            ->joinSub($latestPerPair, 'lp', function ($join) {
+                $join->on('lp.tiktok_user_id', '=', 'ir.tiktok_user_id')
+                    ->on('lp.campaign_id', '=', 'ir.campaign_id')
+                    ->on('lp.latest_id', '=', 'ir.id');
+            });
+
+        // Filter
         if ($request->filled('tiktok_user_id')) {
-            $query->where('tiktok_user_id', (string) $request->string('tiktok_user_id'));
+            $query->where('ir.tiktok_user_id', (string) $request->string('tiktok_user_id'));
         }
         if ($request->filled('campaign_id')) {
-            $query->where('campaign_id', (int) $request->integer('campaign_id'));
+            $query->where('ir.campaign_id', (int) $request->integer('campaign_id'));
         }
 
-        if ($request->get('include') === 'campaign') {
+        // LEFT JOIN submissions → kalau belum submit, kolom2 submission = NULL
+        $query->leftJoin('influencer_submissions as s', function ($join) {
+            $join->on('s.tiktok_user_id', '=', 'ir.tiktok_user_id')
+                ->on('s.campaign_id', '=', 'ir.campaign_id');
+        });
+
+        // Select kolom profil dari registrasi + kolom submission (alias id submission → "id")
+        $query->select([
+            'ir.tiktok_user_id',
+            'ir.campaign_id',
+            'ir.full_name',
+            'ir.tiktok_username',
+            'ir.profile_pic_url',
+
+            // kolom submission; "id" diset dari s.id agar kompatibel dengan UI (edit/refresh)
+            \DB::raw('s.id as id'),
+            's.link_1', 's.post_date_1', 's.screenshot_1_path',
+            's.link_2', 's.post_date_2', 's.screenshot_2_path',
+            's.purchase_platform',
+            's.invoice_file_path', 's.review_proof_file_path',
+
+            's.views_1','s.likes_1','s.comments_1','s.shares_1',
+            's.views_2','s.likes_2','s.comments_2','s.shares_2',
+
+            \DB::raw('s.created_at as submission_created_at'),
+            \DB::raw('s.updated_at as submission_updated_at'),
+
+            // flag bantu untuk UI: 0 = belum ada submission
+            \DB::raw('CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS has_submission'),
+        ]);
+
+        // Include relasi campaign (dari model InfluencerRegistration → belongsTo Campaign)
+        if ($include === 'campaign') {
             $query->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name']);
         }
 
-        $perPage = (int) $request->get('per_page', 15);
-        $data = $query->latest()->paginate($perPage);
+        // Urutan: yang ada submission (updated terbaru) dulu, lalu yang belum submit (urut berdasarkan registrasi)
+        $query->orderByRaw('has_submission DESC')
+            ->orderByDesc(\DB::raw('COALESCE(s.updated_at, ir.id)'));
 
-        return response()->json($data);
+        return response()->json(
+            $query->paginate($perPage)
+        );
     }
+
 
     /**
      * GET /api/influencer-submissions/{id}
@@ -673,7 +706,7 @@ protected function oembedAuthor(?string $url): ?array
             ->findOrFail($id);
 
         return response()->json($submission);
-}
+    }
 
 
     /**
