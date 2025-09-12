@@ -4,21 +4,32 @@ import { installNavbarBackgroundController, applyNavbarBackgroundNow } from './c
 
 let routes = []; // akan diisi setelah dynamic import
 
-function adjustAppPadding() {
-  const header = document.querySelector(".shrinkable-navbar");
-  const app = document.getElementById("app");
-  if (header && app) {
-    const headerHeight = header.offsetHeight;
-    app.style.paddingTop = `15px`;
-  }
+function ensureScrollable() {
+  try {
+    // Pulihkan scroll yang mungkin dikunci loader/modal
+    document.documentElement.style.overflowY = 'auto';
+    document.body.style.overflowY = 'auto';
+    document.body.classList.remove('overflow-hidden', 'modal-open');
+
+    // Jangan kunci tinggi; biarkan konten menambah tinggi halaman
+    document.documentElement.style.height = '';
+    document.body.style.height = '';
+
+    // Bersihkan style yang mungkin diset sebelumnya pada #app
+    const app = document.getElementById('app');
+    if (app) {
+      app.style.paddingTop = '';     // we don’t need top padding
+      app.style.minHeight = '';      // biarkan natural height
+      app.style.overflow = '';       // biarkan ikut body
+      app.style.height = '';         // no fixed height
+    }
+  } catch {}
 }
 
 function matchRoute(pathname) {
   for (const route of routes) {
-    // exact
     if (route.path === pathname) return { route, params: {} };
 
-    // dynamic segments: /path/:id
     const routeParts = route.path.split('/');
     const pathParts = pathname.split('/');
     if (routeParts.length !== pathParts.length) continue;
@@ -33,11 +44,10 @@ function matchRoute(pathname) {
   return null;
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
-  setTimeout(() => requestAnimationFrame(adjustAppPadding), 50);
+document.addEventListener('DOMContentLoaded', async () => {
   installNavbarBackgroundController();
 
-  const content = document.getElementById("app");
+  const content = document.getElementById('app');
   const v = window.BUILD_VERSION || Date.now();
 
   // 🔥 dynamic import routes.js
@@ -45,8 +55,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     const mod = await import(`/js/config/routes.js?v=${v}`);
     routes = mod.routes || [];
   } catch (err) {
-    console.error("[SPA] Gagal load routes.js:", err);
-    content.innerHTML = `<h4>Gagal memuat konfigurasi routes</h4>`;
+    console.error('[SPA] Gagal load routes.js:', err);
+    if (content) content.innerHTML = `<h4>Gagal memuat konfigurasi routes</h4>`;
+    ensureScrollable();
     return;
   }
 
@@ -57,18 +68,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     const pathname = url.pathname;
     const query = Object.fromEntries(url.searchParams.entries());
 
-    // ❌ HAPUS fallback ke /dashboard
-    // ✅ cari match apa adanya; kalau tidak ada dan bukan root, fallback ke root (home/KOL)
     let match = matchRoute(pathname);
-    if (!match && pathname !== "/") {
-      match = matchRoute("/"); // fallback ke home
+    if (!match && pathname !== '/') {
+      match = matchRoute('/'); // fallback ke home
     }
 
-    content.innerHTML = ""; // reset konten
+    if (content) content.innerHTML = ''; // reset konten
 
     if (!match) {
       hideLoader();
-      content.innerHTML = `<h4>404 - Halaman <code>${path}</code> tidak ditemukan</h4>`;
+      ensureScrollable();
+      if (content) content.innerHTML = `<h4>404 - Halaman <code>${path}</code> tidak ditemukan</h4>`;
       return;
     }
 
@@ -79,33 +89,36 @@ document.addEventListener("DOMContentLoaded", async () => {
       const module = await route.component(v);
       await module.render(content, params, query, route.label);
 
+      // sinkronkan URL bila berubah
       if (location.pathname + location.search !== path) {
-        history.pushState({}, "", path);
+        history.pushState({}, '', path);
       }
 
-      requestAnimationFrame(adjustAppPadding);
-      applyNavbarBackgroundNow();
+      // setelah render, pastikan scroll bebas & header bg apply
+      requestAnimationFrame(() => {
+        ensureScrollable();
+        applyNavbarBackgroundNow();
+      });
     } catch (err) {
-      console.error("[SPA] Gagal load halaman:", path, err);
+      console.error('[SPA] Gagal load halaman:', path, err);
       alert(`❌ Gagal load halaman: ${path}\n\n${err}`);
-      content.innerHTML = `<h4>404 - Halaman <code>${path}</code> tidak ditemukan</h4>`;
+      if (content) content.innerHTML = `<h4>404 - Halaman <code>${path}</code> tidak ditemukan</h4>`;
     } finally {
       hideLoader();
+      ensureScrollable();
     }
   }
 
   // back/forward
-  window.addEventListener("popstate", () => {
+  window.addEventListener('popstate', () => {
     loadPage(location.pathname + location.search);
   });
 
-  // Tangkap klik anchor internal (logo/menu), ga perlu class .app-link
-  document.body.addEventListener("click", function (e) {
+  // Tangkap klik anchor internal (logo/menu)
+  document.body.addEventListener('click', function (e) {
     const a = e.target.closest('a[href^="/"]');
     if (!a) return;
-
-    // biarkan external style
-    if (a.target === "_blank" || a.hasAttribute("data-external")) return;
+    if (a.target === '_blank' || a.hasAttribute('data-external')) return;
 
     e.preventDefault();
     const hrefUrl = new URL(a.href);
@@ -113,10 +126,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     loadPage(href);
   });
 
-  // ✅ INIT: biarkan "/" tetap ke halaman KOL
+  // ✅ INIT
+  ensureScrollable();
   const initialPath = location.pathname + location.search;
   loadPage(initialPath);
 });
 
-window.addEventListener("resize", adjustAppPadding);
-window.addEventListener("load", adjustAppPadding);
+// Global listeners
+window.addEventListener('resize', ensureScrollable);
+window.addEventListener('load', ensureScrollable);
