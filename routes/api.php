@@ -83,6 +83,11 @@ Route::match(['POST','PUT','PATCH'], '/influencer-submissions/{id}', [Influencer
 Route::post('/influencer-submissions/{id}',    [InfluencerSubmissionController::class, 'update'])->whereNumber('id'); // POST utk update
 Route::delete('/influencer-submissions/{id}',  [InfluencerSubmissionController::class, 'destroy'])->whereNumber('id');
 
+Route::post(
+    '/influencer-submissions/{id}/refresh-metrics',
+    [InfluencerSubmissionController::class, 'refreshMetrics']
+)->whereNumber('id');
+
 
 
 
