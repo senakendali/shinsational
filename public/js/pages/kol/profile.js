@@ -166,17 +166,41 @@ export function render(target, params, query = {}, labelOverride = null) {
         return k.toISOString().slice(0,10);
       };
 
-      // Map path 'public' → URL klikable
-      const toPublicUrl = (raw) => {
-        if (!hasVal(raw)) return '';
-        const s = String(raw);
-        if (/^(https?:)?\/\//i.test(s) || /^blob:|^data:/i.test(s)) return s;
-        let path = s.replace(/^\/+/, '');
-        if (!/^storage\//i.test(path)) path = `storage/${path}`;
-        return `${location.origin}/${path}`;
+      // === Viewer link helper: convert path/URL → /files?p=... (keep blob/data/external as is)
+      const toFileUrl = (input) => {
+        if (!hasVal(input)) return '';
+        const origin = location.origin;
+        let raw = String(input).trim();
+
+        // Blob/Data URL or absolute HTTP(S)
+        if (/^(blob:|data:|https?:\/\/)/i.test(raw)) {
+          try {
+            const u = new URL(raw);
+            if (u.origin === origin) {
+              // already viewer?
+              if (/^\/?files/i.test(u.pathname)) return raw;
+              // /storage/... → /files?p=...
+              if (/^\/?storage\//i.test(u.pathname)) {
+                const stripped = u.pathname.replace(/^\/?storage\/+/i, '');
+                return `${origin}/files?p=${encodeURIComponent(stripped)}`;
+              }
+            }
+            return raw; // external or other same-origin path
+          } catch {
+            return raw; // not a valid URL string but starts with scheme
+          }
+        }
+
+        // Relative path
+        // already /files?p=... ?
+        if (/^\/?files\?/i.test(raw)) {
+          return `${origin}/${raw.replace(/^\/+/, '')}`;
+        }
+        const normalized = raw.replace(/^\/+/, '').replace(/^storage\/+/i, '');
+        return `${origin}/files?p=${encodeURIComponent(normalized)}`;
       };
 
-      // Ambil URL file dari berbagai kemungkinan key
+      // Ambil URL file dari berbagai kemungkinan key → pakai viewer /files?p=...
       const getFileUrl = (rec, key) => {
         if (!rec) return '';
         const candidates = [
@@ -186,20 +210,20 @@ export function render(target, params, query = {}, labelOverride = null) {
           `${key}_path`, `${key}Path`,
         ];
         for (const k of candidates) {
-          if (hasVal(rec?.[k])) return toPublicUrl(rec[k]);
+          if (hasVal(rec?.[k])) return toFileUrl(rec[k]);
         }
-        if (rec?.files && hasVal(rec.files[key])) return toPublicUrl(rec.files[key]);
+        if (rec?.files && hasVal(rec.files[key])) return toFileUrl(rec.files[key]);
         return '';
       };
 
-      // File controls (view vs edit) + preview lokal
+      // File controls (view vs edit) + preview lokal (blob)
       const setFileControls = (inputId, remoteUrl, { editMode = false, btnText = 'Lihat File' } = {}) => {
         const input = $("#"+inputId);
         const viewBtn = $("#"+inputId+"_view");
         if (!input || !viewBtn) return;
 
         if (hasVal(remoteUrl)) {
-          viewBtn.href = remoteUrl;
+          viewBtn.href = remoteUrl; // already converted to /files?p=...
           viewBtn.textContent = inputId.includes('screenshot') ? 'Lihat Gambar' : btnText;
           viewBtn.classList.remove('d-none');
           viewBtn.dataset.remote = '1';
@@ -228,7 +252,7 @@ export function render(target, params, query = {}, labelOverride = null) {
           const f = input.files?.[0];
           if (f) {
             const blobUrl = URL.createObjectURL(f);
-            viewBtn.href = blobUrl;
+            viewBtn.href = blobUrl; // local preview stays blob:
             viewBtn.textContent = inputId.includes('screenshot') ? 'Preview Gambar' : 'Preview File';
             viewBtn.classList.remove('d-none');
             viewBtn.dataset.remote = '0';
@@ -483,13 +507,12 @@ export function render(target, params, query = {}, labelOverride = null) {
         fd.set('campaign_id', selectedCampaignId);
 
         // === KIRIM SEMUA FIELD SAAT UPDATE (forceAll) ===
-        const forceAll = !!(currentSubmission?.id); // <— ini kunci
+        const forceAll = !!(currentSubmission?.id);
         const addField = (id, key = null, force = false) => {
           const el = $("#"+id);
           if (!el) return;
           const name = key || id.replace(/-/g,'_');
           if (force) {
-            // kirim kalau ada value (boleh sama atau baru)
             if (hasVal(el.value)) fd.set(name, el.value.trim());
           } else {
             if (!el.disabled && hasVal(el.value)) fd.set(name, el.value.trim());
@@ -517,8 +540,6 @@ export function render(target, params, query = {}, labelOverride = null) {
 
           let resp;
           if (currentSubmission?.id) {
-            // UPDATE via PATCH
-            // UPDATE via POST + _method=PATCH (aman untuk multipart)
             fd.set('_method', 'PATCH');
             const r = await fetch(`/api/influencer-submissions/${currentSubmission.id}`, {
               method: 'POST',
@@ -531,20 +552,16 @@ export function render(target, params, query = {}, labelOverride = null) {
             resp = await r.json();
             showToast(resp?.message || 'Data berhasil diupdate');
 
-            // Langsung GET by ID (fresh) supaya UI pasti dapet data terbaru
             const fresh = await fetchSubmissionById(currentSubmission.id);
             if (fresh) {
               currentSubmission = fresh;
               fillSubmissionValues(currentSubmission);
-              // perbarui tombol view/inputs sesuai data terbaru
               isEditing = false;
               applyViewMode();
             } else {
-              // fallback: reload by pair
               await loadSubmissionForSelected();
             }
           } else {
-            // CREATE
             if (typeof submissionService?.create === 'function') {
               resp = await submissionService.create(fd);
             } else {
@@ -567,7 +584,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         }
       });
 
-      // Preview untuk semua input file
+      // Preview untuk semua input file (local blob)
       ['screenshot_1','screenshot_2','invoice_file','review_proof_file'].forEach(wirePreview);
 
       // Load profile + campaigns

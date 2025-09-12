@@ -74,6 +74,30 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
               <a id="screenshot_1_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
             </div>
           </div>
+
+          <!-- METRICS CONTENT 1 -->
+          <div class="row g-3 mt-1">
+            <div class="col-md-3">
+              <label for="views_1" class="form-label text-muted">Views 1</label>
+              <input type="number" min="0" step="1" class="form-control" id="views_1" placeholder="0">
+              <div class="invalid-feedback">Isi angka ≥ 0.</div>
+            </div>
+            <div class="col-md-3">
+              <label for="likes_1" class="form-label text-muted">Likes 1</label>
+              <input type="number" min="0" step="1" class="form-control" id="likes_1" placeholder="0">
+              <div class="invalid-feedback">Isi angka ≥ 0.</div>
+            </div>
+            <div class="col-md-3">
+              <label for="comments_1" class="form-label text-muted">Comments 1</label>
+              <input type="number" min="0" step="1" class="form-control" id="comments_1" placeholder="0">
+              <div class="invalid-feedback">Isi angka ≥ 0.</div>
+            </div>
+            <div class="col-md-3">
+              <label for="shares_1" class="form-label text-muted">Shares 1</label>
+              <input type="number" min="0" step="1" class="form-control" id="shares_1" placeholder="0">
+              <div class="invalid-feedback">Isi angka ≥ 0.</div>
+            </div>
+          </div>
         </div>
 
         <!-- BARIS 2 (opsional) -->
@@ -93,6 +117,30 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
               <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2</label>
               <input type="file" class="form-control" id="screenshot_2" accept="image/*">
               <a id="screenshot_2_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+            </div>
+          </div>
+
+          <!-- METRICS CONTENT 2 -->
+          <div class="row g-3 mt-1">
+            <div class="col-md-3">
+              <label for="views_2" class="form-label text-muted">Views 2</label>
+              <input type="number" min="0" step="1" class="form-control" id="views_2" placeholder="0">
+              <div class="invalid-feedback">Isi angka ≥ 0.</div>
+            </div>
+            <div class="col-md-3">
+              <label for="likes_2" class="form-label text-muted">Likes 2</label>
+              <input type="number" min="0" step="1" class="form-control" id="likes_2" placeholder="0">
+              <div class="invalid-feedback">Isi angka ≥ 0.</div>
+            </div>
+            <div class="col-md-3">
+              <label for="comments_2" class="form-label text-muted">Comments 2</label>
+              <input type="number" min="0" step="1" class="form-control" id="comments_2" placeholder="0">
+              <div class="invalid-feedback">Isi angka ≥ 0.</div>
+            </div>
+            <div class="col-md-3">
+              <label for="shares_2" class="form-label text-muted">Shares 2</label>
+              <input type="number" min="0" step="1" class="form-control" id="shares_2" placeholder="0">
+              <div class="invalid-feedback">Isi angka ≥ 0.</div>
             </div>
           </div>
         </div>
@@ -143,13 +191,27 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     return k.toISOString().slice(0,10);
   };
 
-  const toPublicUrl = (raw) => {
-    if (!hasVal(raw)) return '';
-    const s = String(raw);
-    if (/^(https?:)?\/\//i.test(s) || /^blob:|^data:/i.test(s)) return s;
-    let path = s.replace(/^\/+/, '');
-    if (!/^storage\//i.test(path)) path = `storage/${path}`;
-    return `${location.origin}/${path}`;
+  // === Viewer link: /files?p=... (bukan /storage/...)
+  const toFileUrl = (input) => {
+    if (!input) return '';
+    const origin = location.origin;
+    let raw = String(input).trim();
+
+    // Full URL?
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        const u = new URL(raw);
+        if (u.origin === origin && /^\/?storage\//i.test(u.pathname)) {
+          const stripped = u.pathname.replace(/^\/?storage\/?/i, '');
+          return `${origin}/files?p=${encodeURIComponent(stripped)}`;
+        }
+        return raw; // external or non-storage on same domain
+      } catch { /* fallthrough */ }
+    }
+
+    // Relative / storage path
+    const normalized = raw.replace(/^\/+/, '').replace(/^storage\/+/i, '');
+    return `${origin}/files?p=${encodeURIComponent(normalized)}`;
   };
 
   const getFileUrl = (rec, key) => {
@@ -161,9 +223,9 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       `${key}_path`, `${key}Path`,
     ];
     for (const k of candidates) {
-      if (hasVal(rec?.[k])) return toPublicUrl(rec[k]);
+      if (hasVal(rec?.[k])) return toFileUrl(rec[k]);
     }
-    if (rec?.files && hasVal(rec.files[key])) return toPublicUrl(rec.files[key]);
+    if (rec?.files && hasVal(rec.files[key])) return toFileUrl(rec.files[key]);
     return '';
   };
 
@@ -204,6 +266,23 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     });
   };
 
+  // Ambil metric per slot (support berbagai penamaan)
+  const getMetric = (rec, slot, base) => {
+    if (!rec) return '';
+    const keys = [
+      `${base}_${slot}`,     // views_1
+      `${base}${slot}`,      // views1
+      `${base}_${slot}_count`,
+      `${base}${slot}_count`,
+      base,                  // views
+      `${base}_count`,
+    ];
+    for (const k of keys) {
+      if (k in rec && rec[k] != null && rec[k] !== '') return String(rec[k]);
+    }
+    return '';
+  };
+
   // Preview listeners
   ['screenshot_1','screenshot_2','invoice_file','review_proof_file'].forEach(wirePreview);
 
@@ -230,13 +309,26 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
   }
 
   function fillForm(rec) {
+    // Texts & dates
     $('#link-1').value = safe(rec.link_1, '');
     $('#link-2').value = safe(rec.link_2, '');
     $('#post_date_1').value = toInputDate(rec.post_date_1);
     $('#post_date_2').value = toInputDate(rec.post_date_2);
     $('#purchase_platform').value = safe(rec.purchase_platform, '');
 
-    // File links
+    // Metrics content 1
+    $('#views_1').value    = getMetric(rec, 1, 'views');
+    $('#likes_1').value    = getMetric(rec, 1, 'likes');
+    $('#comments_1').value = getMetric(rec, 1, 'comments');
+    $('#shares_1').value   = getMetric(rec, 1, 'shares');
+
+    // Metrics content 2
+    $('#views_2').value    = getMetric(rec, 2, 'views');
+    $('#likes_2').value    = getMetric(rec, 2, 'likes');
+    $('#comments_2').value = getMetric(rec, 2, 'comments');
+    $('#shares_2').value   = getMetric(rec, 2, 'shares');
+
+    // File links (viewer)
     setFileControls('screenshot_1',      getFileUrl(rec, 'screenshot_1'));
     setFileControls('screenshot_2',      getFileUrl(rec, 'screenshot_2'));
     setFileControls('invoice_file',      getFileUrl(rec, 'invoice_file'),      { btnText: 'Lihat File' });
@@ -302,6 +394,8 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       const el = $('#'+id);
       if (!el) return;
       const name = key || id.replace(/-/g,'_');
+      // kirim jika ada value (boleh kosong untuk number di handler terpisah)
+      if (el.type === 'number') return; // number handled below
       if (hasVal(el.value)) fd.set(name, el.value.trim());
     };
     addField('link-1', 'link_1');
@@ -309,6 +403,18 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     addField('link-2', 'link_2');
     addField('post_date_2', 'post_date_2');
     addField('purchase_platform', 'purchase_platform');
+
+    // Number fields (ikutkan 0 juga jika diisi 0)
+    const addNumber = (id) => {
+      const el = $('#'+id);
+      if (!el) return;
+      const name = id;
+      if (el.value !== '') fd.set(name, String(Math.max(0, Number(el.value))));
+    };
+    // metrics content 1
+    ['views_1','likes_1','comments_1','shares_1'].forEach(addNumber);
+    // metrics content 2
+    ['views_2','likes_2','comments_2','shares_2'].forEach(addNumber);
 
     // Files
     const sc1 = $('#screenshot_1')?.files?.[0];
@@ -343,7 +449,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         }
         showToast(resp?.message || 'Submission berhasil diperbarui');
       } else {
-        // CREATE (butuh tiktok_user_id & campaign_id)
+        // CREATE
         if (!tiktok_user_id || !campaign_id) {
           throw new Error('tiktok_user_id & campaign_id wajib untuk membuat submission.');
         }

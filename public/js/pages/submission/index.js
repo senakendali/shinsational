@@ -61,12 +61,35 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const pager = $('#pagination');
   const refreshAllBtn = $('.btn-refresh-all');
 
-  // Helpers
-  const toUrl = (p) => {
-    if (!p) return null;
-    if (/^https?:\/\//i.test(p)) return p;
-    return `/storage/${String(p).replace(/^\/?storage\/?/, '')}`;
+  // ===== Helpers =====
+
+  // Pakai viewer: /files?p=<encoded path tanpa prefix storage/>
+  const toFileUrl = (input) => {
+    if (!input) return null;
+    const origin = location.origin;
+    let raw = String(input).trim();
+
+    // Full URL?
+    if (/^https?:\/\//i.test(raw)) {
+      try {
+        const u = new URL(raw);
+        // Jika masih 1 domain dan path-nya /storage/... -> konversi ke /files?p=
+        if (u.origin === origin && /^\/?storage\//i.test(u.pathname)) {
+          const stripped = u.pathname.replace(/^\/?storage\/?/i, '');
+          return `${origin}/files?p=${encodeURIComponent(stripped)}`;
+        }
+        // Domain lain / bukan storage -> biarkan
+        return raw;
+      } catch {
+        // jatuh ke path relatif
+      }
+    }
+
+    // Path relatif -> hilangkan prefix /storage/, lalu encode
+    const normalized = raw.replace(/^\/+/, '').replace(/^storage\/+/i, '');
+    return `${origin}/files?p=${encodeURIComponent(normalized)}`;
   };
+
   const fmtDate = (s) => (s ? new Date(s).toLocaleDateString('id-ID') : '—');
   const fmtNum  = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '—');
 
@@ -202,10 +225,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
         subs.forEach((s) => {
           rowIndex += 1;
 
-          const s1url = s.screenshot_1_url || toUrl(s.screenshot_1_path);
-          const s2url = s.screenshot_2_url || toUrl(s.screenshot_2_path);
-          const invUrl = s.invoice_file_url || toUrl(s.invoice_file_path);
-          const revUrl = s.review_proof_file_url || toUrl(s.review_proof_file_path);
+          // ==== GUNAKAN VIEWER /files?p=... ====
+          const s1url = toFileUrl(s.screenshot_1_url || s.screenshot_1_path);
+          const s2url = toFileUrl(s.screenshot_2_url || s.screenshot_2_path);
+          const invUrl = toFileUrl(s.invoice_file_url || s.invoice_file_path);
+          const revUrl = toFileUrl(s.review_proof_file_url || s.review_proof_file_path);
 
           const slotRow = (slot) => {
             const is1 = slot === 1;

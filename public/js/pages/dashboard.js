@@ -1,6 +1,12 @@
 // /js/pages/admin/dashboard.js
 export async function render(target, path, query = {}, labelOverride = null) {
   const v = window.BUILD_VERSION || Date.now();
+
+  // --- instance guard: cegah duplikasi saat render dipanggil 2x berbarengan
+  const INSTANCE_KEY = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  target.dataset.dashInstance = INSTANCE_KEY;
+
+  // reset container
   target.innerHTML = "";
 
   const [
@@ -21,6 +27,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
     import(`/js/services/influencerSubmissionService.js?v=${v}`),
   ]);
 
+  // kalau sudah keduluan render lain, stop
+  if (target.dataset.dashInstance !== INSTANCE_KEY) return;
+
   const { renderHeader } = headerMod;
   const { renderBreadcrumb } = breadcrumbMod;
   const { showLoader, hideLoader } = loaderMod;
@@ -29,14 +38,15 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const { campaignService } = campaignMod;
   const { submissionService } = submissionMod;
 
-  // Helpers
-  const $ = (sel) => document.querySelector(sel);
+  // Helpers (scoped ke target)
+  const $ = (sel) => target.querySelector(sel);
+  const $$ = (sel) => Array.from(target.querySelectorAll(sel));
   const fmt = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '0');
   const safe = (x) => (x ?? 0);
 
-  // inject layout
-  target.innerHTML += `
-    <div class="container-fluid">
+  // inject layout (REPLACE, bukan append)
+  target.innerHTML = `
+    <div class="container-fluid" id="admin-dashboard-root">
       <!-- header + breadcrumb -->
       <div id="__breadcrumb_mount"></div>
 
@@ -136,13 +146,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
   function destroyChartIfExists(canvasId) {
     try {
       if (!window.Chart) return;
-      // v3/v4
       if (typeof Chart.getChart === 'function') {
         const canvasEl = document.getElementById(canvasId);
         const prev = Chart.getChart(canvasId) || (canvasEl ? Chart.getChart(canvasEl) : null);
         if (prev && typeof prev.destroy === 'function') prev.destroy();
       } else {
-        // v2 fallback
         const canvasEl = document.getElementById(canvasId);
         const list = Chart.instances ? Object.values(Chart.instances) : [];
         const found = list.find(inst => inst?.canvas === canvasEl);
@@ -154,9 +162,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
   }
 
   await ensureChartJS();
-
-  // pastikan canvas fresh (hancurkan chart lama kalau ada sisa dari visit sebelumnya)
+  // cegah duplikasi canvas chart jika re-visit
   destroyChartIfExists('engagementChart');
+
+  // kalau sudah keduluan render lain, stop
+  if (target.dataset.dashInstance !== INSTANCE_KEY) return;
 
   showLoader();
 
@@ -168,6 +178,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
       submissionService.getAll({ page: 1, per_page: 1 }),
     ]);
 
+    if (target.dataset.dashInstance !== INSTANCE_KEY) return;
+
     const totalBrands = brands?.total ?? brands?.meta?.total ?? brands?.pagination?.total ?? (brands?.data?.length || 0);
     const totalCampaigns = campaigns?.total ?? campaigns?.meta?.total ?? campaigns?.pagination?.total ?? (campaigns?.data?.length || 0);
     const totalSubmissions = submissions?.total ?? submissions?.meta?.total ?? submissions?.pagination?.total ?? (submissions?.data?.length || 0);
@@ -175,6 +187,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     let totalKols = null;
     try {
       const regMod = await import(`/js/services/influencerRegistrationService.js?v=${v}`);
+      if (target.dataset.dashInstance !== INSTANCE_KEY) return;
       const regs = await regMod.influencerService.getAll({ page: 1, per_page: 1 });
       totalKols = regs?.total ?? regs?.meta?.total ?? regs?.pagination?.total ?? null;
     } catch {
@@ -192,15 +205,17 @@ export async function render(target, path, query = {}, labelOverride = null) {
     showToast('Gagal memuat ringkasan KPI', 'error');
   }
 
-  // === Populate campaign filter (include brand untuk tampilkan brand di option & brand line) ===
+  // === Populate campaign filter
   let currentCampaignId = "";
   const campaignBrandMap = new Map();
-  let cachedCampaignsForBrandList = []; // ⬅️ simpan untuk brand list
+  let cachedCampaignsForBrandList = [];
 
   try {
     const cs = await campaignService.getAll({ page: 1, per_page: 100, status: '', include: 'brand' });
+    if (target.dataset.dashInstance !== INSTANCE_KEY) return;
+
     const items = cs?.data || [];
-    cachedCampaignsForBrandList = items.slice(); // simpan buat brand list
+    cachedCampaignsForBrandList = items.slice();
 
     const campaignFilter = $('#campaignFilter');
     campaignFilter.innerHTML =
@@ -212,7 +227,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
         return `<option value="${c.id}">${cname} — ${bname}</option>`;
       }).join('');
 
-    // auto pilih dari query (jika ada)
     const qId = query?.campaign_id || new URL(location.href).searchParams.get('campaign_id');
     if (qId && campaignFilter.querySelector(`option[value="${qId}"]`)) {
       campaignFilter.value = qId;
@@ -221,17 +235,17 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
     updateSelectedBrandLine(currentCampaignId);
 
-    // === Render brand list dari kumpulan campaign (baru)
     renderBrandListFromCampaigns(cachedCampaignsForBrandList);
-
   } catch (e) {
     console.error('Load campaigns error', e);
     $('#brand-list').innerHTML = `<li class="list-group-item text-danger">Gagal memuat brands</li>`;
   }
 
-  // === Active campaigns list (brand di bawah campaign) ===
+  // === Active campaigns list
   try {
     const active = await campaignService.getAll({ page: 1, per_page: 8, status: 'active', include: 'brand' });
+    if (target.dataset.dashInstance !== INSTANCE_KEY) return;
+
     const arr = active?.data || [];
     const ul = $('#active-campaigns');
     if (!arr.length) {
@@ -268,17 +282,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const chartCanvas = $('#engagementChart');
   const chartCtx = chartCanvas.getContext('2d');
 
-  // simpan instance di global supaya bisa dihancurkan saat re-visit page
   window.__ADMIN_DASHBOARD_CHART__ ??= null;
 
   const renderChart = (views, likes, comments, shares) => {
-    // hancurkan instance global jika ada
     if (window.__ADMIN_DASHBOARD_CHART__?.destroy) {
       try { window.__ADMIN_DASHBOARD_CHART__.destroy(); } catch {}
       window.__ADMIN_DASHBOARD_CHART__ = null;
     }
-
-    // safeguard tambahan: cek registry chart.js
     destroyChartIfExists(chartCanvas.id);
 
     window.__ADMIN_DASHBOARD_CHART__ = new window.Chart(chartCtx, {
@@ -307,6 +317,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
   };
 
   async function loadCampaignEngagement(campaignId) {
+    if (target.dataset.dashInstance !== INSTANCE_KEY) return;
+
     if (!campaignId) {
       renderChart(0,0,0,0);
       $('#es-views').textContent = '—';
@@ -329,6 +341,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
         include: '',
         campaign_id: campaignId,
       });
+
+      if (target.dataset.dashInstance !== INSTANCE_KEY) return;
 
       const subs = res?.data || [];
       subs.forEach(s => {
@@ -357,7 +371,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   // initial
   await loadCampaignEngagement(currentCampaignId);
 
-  // events
+  // events (scoped ke target)
   $('#campaignFilter').addEventListener('change', async (e) => {
     currentCampaignId = e.target.value || '';
     updateSelectedBrandLine(currentCampaignId);
@@ -385,8 +399,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }
   });
 
-  // app-link navigation
-  document.querySelectorAll('.app-link').forEach(el => {
+  // app-link navigation (scoped)
+  $$('.app-link').forEach(el => {
     el.addEventListener('click', (e) => {
       e.preventDefault();
       const href = el.getAttribute('href');
@@ -411,6 +425,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
   function updateSelectedBrandLine(campaignId) {
     const el = $('#selectedBrandLine');
+    if (!el) return;
     if (!campaignId) {
       el.textContent = '—';
       return;
@@ -419,16 +434,17 @@ export async function render(target, path, query = {}, labelOverride = null) {
     el.textContent = brandName;
   }
 
-  // === buat list brands dari data campaign yang sudah kita ambil (hemat request)
   function renderBrandListFromCampaigns(campaigns) {
+    if (target.dataset.dashInstance !== INSTANCE_KEY) return;
     const ul = $('#brand-list');
+    if (!ul) return;
+
     if (!Array.isArray(campaigns) || !campaigns.length) {
       ul.innerHTML = `<li class="list-group-item text-muted">Tidak ada data brand.</li>`;
       return;
     }
 
-    // agregasi per brand
-    const agg = new Map(); // key: brandId (atau nama), val: { name, total, active }
+    const agg = new Map();
     for (const c of campaigns) {
       const bid = c.brand?.id ?? `name:${c.brand?.name || '-'}`;
       const bname = c.brand?.name || '-';
@@ -438,7 +454,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
       if (String(c.status) === 'active') rec.active += 1;
     }
 
-    // sort desc by total
     const list = Array.from(agg.values()).sort((a,b) => b.total - a.total).slice(0, 10);
 
     ul.innerHTML = list.map(b => `
@@ -486,7 +501,6 @@ export function cleanupAdminDashboard() {
   } catch {}
   window.__ADMIN_DASHBOARD_CHART__ = null;
 
-  // tambahan safeguard
   if (window.Chart && typeof Chart.getChart === 'function') {
     const canvasEl = document.getElementById('engagementChart');
     const prev = Chart.getChart('engagementChart') || (canvasEl ? Chart.getChart(canvasEl) : null);
