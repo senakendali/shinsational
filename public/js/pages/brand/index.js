@@ -1,27 +1,40 @@
-import { brandService } from '../../services/brandService.js';
-import { renderHeader } from '../../components/header.js';
-import { showToast } from '../../utils/toast.js';
-import { renderBreadcrumb } from '../../components/breadcrumb.js';
-import { showLoader, hideLoader } from '../../components/loader.js';
-
+// NOTE: semua import dibuat dinamis + cache buster v
 export async function render(target, path, query = {}, labelOverride = null) {
-    showLoader();
-    target.innerHTML = '';
-    renderHeader("header");
-    renderBreadcrumb(target, path, labelOverride);
+  const v = window.BUILD_VERSION || Date.now();
 
-    target.innerHTML += `
-        <div class="d-flex justify-content-between align-items-center mb-3">
-        <input class="form-control w-50" type="search" placeholder="Cari brand..." id="searchInput">
-        <button class="btn btn-outline-primary" id="addNew">
-            <i class="bi bi-plus-lg"></i> Tambah Brand
-        </button>
-        </div>
-        <div id="brand-list"></div>
-        <nav class="mt-3">
-        <ul class="pagination" id="pagination"></ul>
-        </nav>
-    `;
+  const [
+    { brandService },
+    { renderHeader },
+    { showToast },                // dipakai utk notifikasi dlm halaman ini (kalau perlu)
+    { renderBreadcrumb },
+    loaderMod
+  ] = await Promise.all([
+    import(`../../services/brandService.js?v=${v}`),
+    import(`../../components/header.js?v=${v}`),
+    import(`../../utils/toast.js?v=${v}`),
+    import(`../../components/breadcrumb.js?v=${v}`),
+    import(`../../components/loader.js?v=${v}`)
+  ]);
+
+  const { showLoader, hideLoader } = loaderMod;
+
+  target.innerHTML = '';
+  showLoader();
+  renderHeader("header");
+  renderBreadcrumb(target, path, labelOverride);
+
+  target.innerHTML += `
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <input class="form-control w-50" type="search" placeholder="Cari brand..." id="searchInput">
+      <button class="btn btn-outline-primary" id="addNew">
+        <i class="bi bi-plus-lg"></i> Tambah Brand
+      </button>
+    </div>
+    <div id="brand-list"></div>
+    <nav class="mt-3">
+      <ul class="pagination" id="pagination"></ul>
+    </nav>
+  `;
 
   // Tambah → ke form create
   const addBtn = document.getElementById('addNew');
@@ -34,10 +47,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
   let searchKeyword = '';
   let searchTimeout = null;
 
-  function loadBrands(keyword = '', page = 1) {
+  async function loadBrands(keyword = '', page = 1) {
     showLoader();
 
-    brandService.getAll({ search: keyword, page }).then(data => {
+    try {
+      const data = await brandService.getAll({ search: keyword, page });
       const brands = data.data || [];
 
       const listHtml = brands.map((brand, i) => {
@@ -51,7 +65,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
           ? '<span class="badge bg-success">Aktif</span>'
           : '<span class="badge bg-secondary">Nonaktif</span>';
 
-        // ambil beberapa sosial (kalau ada)
         const s = brand.socials || {};
         const socialsText = [
           s.tiktok ? `TikTok: ${s.tiktok}` : null,
@@ -102,13 +115,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
         </table>
       `;
 
-       
-
       // Pagination
       const pagination = document.getElementById('pagination');
       pagination.innerHTML = '';
 
-      if (data.last_page <= 1) {
+      if ((data.last_page ?? 1) <= 1) {
         pagination.style.display = 'none';
       } else {
         pagination.style.display = 'flex';
@@ -134,11 +145,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
           window.dispatchEvent(new PopStateEvent('popstate'));
         });
       });
-    }).catch(() => {
+    } catch (e) {
       document.getElementById('brand-list').innerHTML = `<div class="text-danger">Gagal memuat data brand.</div>`;
-    }).finally(() => {
+    } finally {
       hideLoader();
-    });
+    }
   }
 
   // Search debounce
@@ -154,8 +165,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
   loadBrands(); // initial
 }
 
-// ====== Konfirmasi Hapus (global) ======
-window.confirmDeleteBrand = function (btn) {
+// ====== Konfirmasi Hapus (global) → dynamic import di dalam fungsi ======
+window.confirmDeleteBrand = async function (btn) {
+  const v = window.BUILD_VERSION || Date.now();
+  const [{ brandService }, { showToast }] = await Promise.all([
+    import(`../../services/brandService.js?v=${v}`),
+    import(`../../utils/toast.js?v=${v}`)
+  ]);
+
   const id = btn.getAttribute('data-id');
   const name = btn.getAttribute('data-name');
 
@@ -196,13 +213,8 @@ window.confirmDeleteBrand = function (btn) {
       await brandService.delete(id);
       showToast('Brand berhasil dihapus');
       modal.hide();
-      // re-render list
-      // ambil target konten dari SPA container
-      const app = document.getElementById('app');
-      // panggil kembali render halaman brands (path disesuaikan)
-      // asumsi file ini diekspor sebagai render(), jadi bisa:
-      // import dinamis ulang kalau perlu—lebih simpel: trigger nav ke /brands
-      history.pushState(null, '', '/brands');
+      // re-render list → konsisten pakai route /admin/brands
+      history.pushState(null, '', '/admin/brands');
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (err) {
       showToast('Gagal menghapus brand', 'error');

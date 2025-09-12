@@ -223,7 +223,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
             // Tidak ada tombol aksi di baris konten; semua aksi dipindah ke header per KOL
             return `
               <tr ${is1 ? `data-submission-id="${s.id}"` : ''}>
-                <td colspan="2">Content ${slot}</td>
+                <td colspan="2" style="width: 180px">Content ${slot}</td>
                 <td>${link ? `<a href="${link}" target="_blank" rel="noopener">${link}</a>` : '<span class="text-muted">—</span>'}</td>
                 <td>${fmtDate(pdate)}</td>
                 <td>${btn(scUrl, 'View')}</td>

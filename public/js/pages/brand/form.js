@@ -1,20 +1,36 @@
-import { renderHeader } from '../../components/header.js';
-import { renderBreadcrumb } from '../../components/breadcrumb.js';
-import { brandService } from '../../services/brandService.js';
-import { showLoader, hideLoader } from '../../components/loader.js';
-import { showToast } from '../../utils/toast.js';
-import {
-  formGroup,
-  formTextarea,
-  showValidationErrors,
-  clearAllErrors
-} from '../../utils/form.js';
-
-export function render(target, params = {}, query = {}, labelOverride = null) {
+// brands/form.js (page)
+// Semua import diubah ke dynamic import dengan cache-buster ?v=BUILD_VERSION
+export async function render(target, params = {}, query = {}, labelOverride = null) {
+  const v = window.BUILD_VERSION || Date.now();
   const isEdit = !!params.id;
   const title = isEdit ? 'Edit Brand' : 'Tambah Brand';
 
+  const [
+    { renderHeader },
+    { renderBreadcrumb },
+    { brandService },
+    loaderMod,
+    { showToast },
+    formMod
+  ] = await Promise.all([
+    import(`../../components/header.js?v=${v}`),
+    import(`../../components/breadcrumb.js?v=${v}`),
+    import(`../../services/brandService.js?v=${v}`),
+    import(`../../components/loader.js?v=${v}`),
+    import(`../../utils/toast.js?v=${v}`),
+    import(`../../utils/form.js?v=${v}`)
+  ]);
+
+  const { showLoader, hideLoader } = loaderMod;
+  const {
+    formGroup,
+    formTextarea,
+    showValidationErrors,
+    clearAllErrors
+  } = formMod;
+
   target.innerHTML = "";
+  showLoader();
   renderHeader("header");
   renderBreadcrumb(
     target,
@@ -59,7 +75,7 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
     </form>
   `;
 
-  // Cancel → balik ke list brands
+  // Cancel → balik ke list brands (route admin biar konsisten)
   document.getElementById('cancelBtn').addEventListener('click', () => {
     history.pushState(null, '', '/admin/brands');
     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -110,7 +126,6 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
       instagram: (document.getElementById('socials_instagram')?.value || '').trim(),
       youtube: (document.getElementById('socials_youtube')?.value || '').trim(),
     };
-    // hapus key kosong
     Object.keys(socials).forEach(k => { if (!socials[k]) delete socials[k]; });
 
     fd.set('name', name);
@@ -134,7 +149,7 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (err) {
       showToast('Gagal menyimpan brand.', 'error');
-      if (err.errors) {
+      if (err?.errors) {
         // mapping error standar
         showValidationErrors(err.errors);
 
@@ -152,8 +167,9 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
 
   // Prefill saat edit
   if (isEdit) {
-    brandService.get(params.id).then(data => {
-      // field sederhana
+    try {
+      const data = await brandService.get(params.id);
+
       const fill = (id, val) => {
         const el = document.getElementById(id);
         if (el && el.type !== 'file') el.value = val ?? '';
@@ -168,7 +184,6 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
       const activeEl = document.getElementById('is_active');
       if (activeEl) activeEl.checked = !!data.is_active;
 
-      // socials object
       const s = data.socials || {};
       fill('socials_tiktok', s.tiktok);
       fill('socials_instagram', s.instagram);
@@ -176,6 +191,12 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
 
       // catat auto-slug supaya tidak override manual
       lastAutoSlug = slugify(data.name || '');
-    });
+    } catch (e) {
+      showToast('Gagal mengambil data brand.', 'error');
+    } finally {
+      hideLoader();
+    }
+  } else {
+    hideLoader();
   }
 }

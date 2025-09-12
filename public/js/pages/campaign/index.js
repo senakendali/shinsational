@@ -1,14 +1,30 @@
-import { renderHeader } from '../../components/header.js';
-import { campaignService } from '../../services/campaignService.js';
-import { brandService } from '../../services/brandService.js';
-import { showToast } from '../../utils/toast.js';
-import { renderBreadcrumb } from '../../components/breadcrumb.js';
-import { showLoader, hideLoader } from '../../components/loader.js';
-import { formatNumber } from '../../utils/number.js';
-
+// campaigns/index.js
 export async function render(target, path, query = {}, labelOverride = null) {
-  showLoader();
+  const v = window.BUILD_VERSION || Date.now();
+
+  const [
+    { renderHeader },
+    { renderBreadcrumb },
+    { campaignService },
+    { brandService },
+    loaderMod,
+    { showToast },
+    numberMod
+  ] = await Promise.all([
+    import(`../../components/header.js?v=${v}`),
+    import(`../../components/breadcrumb.js?v=${v}`),
+    import(`../../services/campaignService.js?v=${v}`),
+    import(`../../services/brandService.js?v=${v}`),
+    import(`../../components/loader.js?v=${v}`),
+    import(`../../utils/toast.js?v=${v}`),
+    import(`../../utils/number.js?v=${v}`)
+  ]);
+
+  const { showLoader, hideLoader } = loaderMod;
+  const { formatNumber } = numberMod;
+
   target.innerHTML = '';
+  showLoader();
 
   renderHeader("header");
   renderBreadcrumb(target, path, labelOverride);
@@ -48,11 +64,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
   // Populate brand filter
   try {
-    const brands = (await brandService.getAll({ page: 1 }))?.data || [];
+    const brands = (await brandService.getAll({ page: 1, per_page: 1000 }))?.data || [];
     const bf = document.getElementById('brandFilter');
     bf.innerHTML = `<option value="">Semua Brand</option>` + brands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
   } catch (_) {
-    // ignore
+    // ignore if brand fetch fails
   }
 
   let currentPage = 1;
@@ -73,7 +89,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       const items = data.data || [];
       const listHtml = items.map((c, i) => {
-        const n = (page - 1) * data.per_page + i + 1;
+        const n = (page - 1) * (data.per_page || items.length) + i + 1;
+
         const period = [
           c.start_date ? new Date(c.start_date).toLocaleDateString('id-ID') : null,
           c.end_date ? new Date(c.end_date).toLocaleDateString('id-ID') : null
@@ -90,13 +107,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
           : '';
 
         const activeBadge = c.is_active
-          ? '<span class="badge bg-success">Aktif</span>'
-          : '<span class="badge bg-secondary">Nonaktif</span>';
+          ? '<span class="badge bg-success ms-1">Aktif</span>'
+          : '<span class="badge bg-secondary ms-1">Nonaktif</span>';
 
-        // Budget dengan format ribuan (tanpa desimal), plus kode mata uang
+        // Budget: ribuan tanpa desimal + currency (kalau ada)
         const budgetText =
           (c.budget != null && c.budget !== '')
-            ? `${formatNumber(String(Math.trunc(Number(c.budget))))} ${c.currency || ''}`
+            ? `${formatNumber(String(Math.trunc(Number(c.budget))))}${c.currency ? ' ' + c.currency : ''}`
             : '-';
 
         return `
@@ -104,7 +121,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
             <td>${n}</td>
             <td>
               <div class="fw-semibold">${c.name}</div>
-              <div class="text-muted small">${c.code ? `<code>${c.code}</code> • ` : ''}${c.slug ? `<code>${c.slug}</code>` : ''}</div>
+              <div class="text-muted small">${c.code ? `<code>${c.code}</code>` : ''}${c.code && c.slug ? ' • ' : ''}${c.slug ? `<code>${c.slug}</code>` : ''}</div>
             </td>
             <td>${c.brand?.name ?? '-'}</td>
             <td>${period}</td>
@@ -147,7 +164,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       const pagination = document.getElementById('pagination');
       pagination.innerHTML = '';
 
-      if (data.last_page <= 1) {
+      if ((data.last_page ?? 1) <= 1) {
         pagination.style.display = 'none';
       } else {
         pagination.style.display = 'flex';
@@ -203,11 +220,17 @@ export async function render(target, path, query = {}, labelOverride = null) {
     loadCampaigns(searchKeyword, currentPage, brandId, status);
   });
 
-  loadCampaigns(); // initial
+  loadCampaigns(); // initial load
 }
 
-// ====== Konfirmasi Hapus (global) ======
-window.confirmDeleteCampaign = function (btn) {
+// ====== Konfirmasi Hapus (global) → dynamic import di dalam fungsi ======
+window.confirmDeleteCampaign = async function (btn) {
+  const v = window.BUILD_VERSION || Date.now();
+  const [{ campaignService }, { showToast }] = await Promise.all([
+    import(`../../services/campaignService.js?v=${v}`),
+    import(`../../utils/toast.js?v=${v}`)
+  ]);
+
   const id = btn.getAttribute('data-id');
   const name = btn.getAttribute('data-name');
 
@@ -247,7 +270,6 @@ window.confirmDeleteCampaign = function (btn) {
       await campaignService.delete(id);
       showToast('Campaign berhasil dihapus');
       modal.hide();
-      // reload halaman list (pakai admin)
       history.pushState(null, '', '/admin/campaigns');
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (err) {
@@ -258,26 +280,28 @@ window.confirmDeleteCampaign = function (btn) {
   };
 };
 
-// ====== Copy Link Pendaftaran (global) ======
+// ====== Copy Link Pendaftaran (global) → dynamic import utk toast ======
 window.copyCampaignLink = async function (btn) {
+  const v = window.BUILD_VERSION || Date.now();
+  const { showToast } = await import(`../../utils/toast.js?v=${v}`);
+
   const slug = btn.getAttribute('data-slug') || '';
   const id = btn.getAttribute('data-id');
+
   // fallback identifier kalau slug kosong
   const ident = slug || `campaign-${id}`;
-  // format link: /register?<slug-campaign>
+  // format link: /registration?<slug-campaign>
   const link = `${location.origin}/registration?${encodeURIComponent(ident)}`;
 
-  // try clipboard API → fallback ke textarea
-  const doToast = (msg, type = 'success') => showToast(msg, type);
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(link);
-      doToast('Link pendaftaran disalin!');
+      showToast('Link pendaftaran disalin!');
     } else {
       throw new Error('Clipboard API tidak tersedia');
     }
   } catch (_) {
-    // Fallback
+    // Fallback ke <textarea>
     const ta = document.createElement('textarea');
     ta.value = link;
     ta.style.position = 'fixed';
@@ -286,9 +310,9 @@ window.copyCampaignLink = async function (btn) {
     ta.select();
     try {
       document.execCommand('copy');
-      doToast('Link pendaftaran disalin!');
+      showToast('Link pendaftaran disalin!');
     } catch (e2) {
-      doToast('Gagal menyalin link.', 'error');
+      showToast('Gagal menyalin link.', 'error');
     } finally {
       document.body.removeChild(ta);
     }

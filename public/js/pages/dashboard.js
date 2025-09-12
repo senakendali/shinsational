@@ -132,7 +132,32 @@ export async function render(target, path, query = {}, labelOverride = null) {
   renderHeader("header");
   renderBreadcrumb(target, path, labelOverride);
 
+  // === destroy helper utk Chart.js supaya gak "canvas already in use"
+  function destroyChartIfExists(canvasId) {
+    try {
+      if (!window.Chart) return;
+      // v3/v4
+      if (typeof Chart.getChart === 'function') {
+        const canvasEl = document.getElementById(canvasId);
+        const prev = Chart.getChart(canvasId) || (canvasEl ? Chart.getChart(canvasEl) : null);
+        if (prev && typeof prev.destroy === 'function') prev.destroy();
+      } else {
+        // v2 fallback
+        const canvasEl = document.getElementById(canvasId);
+        const list = Chart.instances ? Object.values(Chart.instances) : [];
+        const found = list.find(inst => inst?.canvas === canvasEl);
+        if (found && typeof found.destroy === 'function') found.destroy();
+      }
+    } catch (e) {
+      console.warn('[dashboard] destroyChartIfExists error:', e);
+    }
+  }
+
   await ensureChartJS();
+
+  // pastikan canvas fresh (hancurkan chart lama kalau ada sisa dari visit sebelumnya)
+  destroyChartIfExists('engagementChart');
+
   showLoader();
 
   // === Load KPI (global totals) ===
@@ -240,12 +265,23 @@ export async function render(target, path, query = {}, labelOverride = null) {
   }
 
   // === Chart per-campaign ===
-  const chartCtx = $('#engagementChart').getContext('2d');
-  let chartInstance = null;
+  const chartCanvas = $('#engagementChart');
+  const chartCtx = chartCanvas.getContext('2d');
+
+  // simpan instance di global supaya bisa dihancurkan saat re-visit page
+  window.__ADMIN_DASHBOARD_CHART__ ??= null;
 
   const renderChart = (views, likes, comments, shares) => {
-    if (chartInstance) chartInstance.destroy();
-    chartInstance = new window.Chart(chartCtx, {
+    // hancurkan instance global jika ada
+    if (window.__ADMIN_DASHBOARD_CHART__?.destroy) {
+      try { window.__ADMIN_DASHBOARD_CHART__.destroy(); } catch {}
+      window.__ADMIN_DASHBOARD_CHART__ = null;
+    }
+
+    // safeguard tambahan: cek registry chart.js
+    destroyChartIfExists(chartCanvas.id);
+
+    window.__ADMIN_DASHBOARD_CHART__ = new window.Chart(chartCtx, {
       type: 'bar',
       data: {
         labels: ['Views', 'Likes', 'Comments', 'Shares'],
@@ -439,4 +475,21 @@ async function ensureChartJS() {
     s.onerror = reject;
     document.head.appendChild(s);
   });
+}
+
+/** (opsional) panggil ini saat unmount/keluar dashboard untuk bersihkan chart */
+export function cleanupAdminDashboard() {
+  try {
+    if (window.__ADMIN_DASHBOARD_CHART__?.destroy) {
+      window.__ADMIN_DASHBOARD_CHART__.destroy();
+    }
+  } catch {}
+  window.__ADMIN_DASHBOARD_CHART__ = null;
+
+  // tambahan safeguard
+  if (window.Chart && typeof Chart.getChart === 'function') {
+    const canvasEl = document.getElementById('engagementChart');
+    const prev = Chart.getChart('engagementChart') || (canvasEl ? Chart.getChart(canvasEl) : null);
+    if (prev && typeof prev.destroy === 'function') prev.destroy();
+  }
 }

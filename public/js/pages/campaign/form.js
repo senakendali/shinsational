@@ -1,26 +1,43 @@
-import { renderBreadcrumb } from '../../components/breadcrumb.js';
-import { renderHeader } from '../../components/header.js';
-import { campaignService } from '../../services/campaignService.js';
-import { brandService } from '../../services/brandService.js';
-import { showLoader, hideLoader } from '../../components/loader.js';
-import { showToast } from '../../utils/toast.js';
-import {
-  formGroup,
-  formTextarea,
-  showValidationErrors,
-  clearAllErrors
-} from '../../utils/form.js';
-import { formatNumber, unformatNumber } from '../../utils/number.js';
-
-export function render(target, params = {}, query = {}, labelOverride = null) {
+// campaigns/form.js
+export async function render(target, params = {}, query = {}, labelOverride = null) {
+  const v = window.BUILD_VERSION || Date.now();
   const isEdit = !!params.id;
   const title = isEdit ? 'Edit Campaign' : 'Tambah Campaign';
+
+  const [
+    { renderBreadcrumb },
+    { renderHeader },
+    { campaignService },
+    { brandService },
+    loaderMod,
+    { showToast },
+    formMod,
+    numberMod
+  ] = await Promise.all([
+    import(`../../components/breadcrumb.js?v=${v}`),
+    import(`../../components/header.js?v=${v}`),
+    import(`../../services/campaignService.js?v=${v}`),
+    import(`../../services/brandService.js?v=${v}`),
+    import(`../../components/loader.js?v=${v}`),
+    import(`../../utils/toast.js?v=${v}`),
+    import(`../../utils/form.js?v=${v}`),
+    import(`../../utils/number.js?v=${v}`)
+  ]);
+
+  const { showLoader, hideLoader } = loaderMod;
+  const {
+    formGroup,
+    formTextarea,
+    showValidationErrors,
+    clearAllErrors
+  } = formMod;
+  const { formatNumber, unformatNumber } = numberMod;
 
   target.innerHTML = "";
   renderHeader("header");
   renderBreadcrumb(
     target,
-    isEdit ? `/campaigns/${params.id}/edit` : '/campaigns/create',
+    isEdit ? `/admin/campaigns/${params.id}/edit` : '/admin/campaigns/create',
     labelOverride || title
   );
 
@@ -197,7 +214,7 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
   // Load brands ke dropdown
   async function populateBrands(selectedId = null) {
     try {
-      const res = await brandService.getAll({ page: 1 });
+      const res = await brandService.getAll({ page: 1, per_page: 1000 });
       const brands = res.data || [];
       const sel = document.getElementById('brand_id');
       sel.innerHTML = `<option value="">-- Pilih Brand --</option>` +
@@ -264,7 +281,7 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
     if (status) fd.set('status', status);
     fd.set('is_active', is_active);
 
-    // Budget: kirim angka polos (tanpa titik)
+    // Budget: angka polos
     if (budgetFormatted) {
       const digits = unformatNumber(budgetFormatted); // "1.200.000" -> "1200000"
       if (digits) fd.set('budget', digits);
@@ -287,11 +304,11 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
       window.dispatchEvent(new PopStateEvent('popstate'));
     } catch (err) {
       showToast('Gagal menyimpan campaign.', 'error');
-      if (err.errors) {
+      if (err?.errors) {
         showValidationErrors(err.errors);
-        if (err.errors.brand_id) document.getElementById('error-brand_id').textContent = err.errors.brand_id.join(', ');
-        if (err.errors.kpi_targets) document.getElementById('error-kpi_targets').textContent = err.errors.kpi_targets.join(', ');
-        if (err.errors.hashtags) document.getElementById('error-hashtags').textContent = err.errors.hashtags.join(', ');
+        if (err.errors.brand_id) document.getElementById('error-brand_id').textContent = Array.isArray(err.errors.brand_id) ? err.errors.brand_id.join(', ') : String(err.errors.brand_id);
+        if (err.errors.kpi_targets) document.getElementById('error-kpi_targets').textContent = Array.isArray(err.errors.kpi_targets) ? err.errors.kpi_targets.join(', ') : String(err.errors.kpi_targets);
+        if (err.errors.hashtags) document.getElementById('error-hashtags').textContent = Array.isArray(err.errors.hashtags) ? err.errors.hashtags.join(', ') : String(err.errors.hashtags);
       }
     } finally {
       hideLoader();
@@ -299,9 +316,15 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
     }
   });
 
-  // Prefill edit
+  // Prefill edit / populate brands
+  showLoader();
   if (isEdit) {
-    Promise.all([campaignService.get(params.id), brandService.getAll({ page: 1 })]).then(([data, brandsRes]) => {
+    try {
+      const [data, brandsRes] = await Promise.all([
+        campaignService.get(params.id),
+        brandService.getAll({ page: 1, per_page: 1000 })
+      ]);
+
       // brands
       const sel = document.getElementById('brand_id');
       const brands = brandsRes?.data || [];
@@ -322,7 +345,7 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
       set('currency', data.currency || 'IDR');
       set('notes', data.notes);
 
-      // budget → tampilkan format ribuan (bulatkan ke integer)
+      // budget → format ribuan (integer)
       const budgetVal = (data.budget != null && data.budget !== '') ? Math.trunc(Number(data.budget)) : '';
       const budgetEl = document.getElementById('budget');
       budgetEl.value = budgetVal === '' ? '' : formatNumber(String(budgetVal));
@@ -340,8 +363,7 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
       document.getElementById('hashtags').value = tags;
 
       // protect auto-slug
-      const auto = slugify(data.name || '');
-      lastAutoSlug = auto;
+      lastAutoSlug = slugify(data.name || '');
 
       // re-attach formatter setelah prefill (jaga-jaga)
       attachThousandFormatter(budgetEl);
@@ -349,11 +371,14 @@ export function render(target, params = {}, query = {}, labelOverride = null) {
       attachThousandFormatter(document.getElementById('kpi_likes'));
       attachThousandFormatter(document.getElementById('kpi_comments'));
       attachThousandFormatter(document.getElementById('kpi_shares'));
-    }).catch(async () => {
+    } catch (e) {
       await populateBrands();
       showToast('Gagal memuat data campaign/brand', 'error');
-    });
+    } finally {
+      hideLoader();
+    }
   } else {
-    populateBrands();
+    await populateBrands();
+    hideLoader();
   }
 }
