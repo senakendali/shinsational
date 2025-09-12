@@ -88,6 +88,11 @@ Route::post(
     [InfluencerSubmissionController::class, 'refreshMetrics']
 )->whereNumber('id');
 
+Route::post('/_ping-refresh/{id}', function ($id) {
+    return response()->json(['ok' => true, 'id' => (int) $id]);
+})->whereNumber('id');
+
+
 
 
 
