@@ -4,7 +4,7 @@ import { showLoader, hideLoader } from '../../components/loader.js';
 import { showToast } from '../../utils/toast.js';
 
 import { campaignService } from '../../services/campaignService.js';
-import { submissionService } from '../../services/influencerSubmissionService.js';
+import { submissionService } from '../../services/influencerSubmissionService.js'; // pastikan ada method refreshMetrics(id)
 
 export async function render(target, path, query = {}, labelOverride = null) {
   showLoader();
@@ -21,8 +21,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
         </select>
         <input class="form-control" style="min-width:260px" type="search" placeholder="Cari KOL / link…" id="searchInput">
       </div>
-      <div class="text-muted small">
-        <span class="me-2">Tips: klik “View” untuk buka file</span>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-secondary btn-refresh-all" type="button">
+          <i class="bi bi-arrow-clockwise"></i> Refresh visible
+        </button>
+        <span class="text-muted small d-none d-md-inline"><span class="me-2">Tips: klik “View” untuk buka file</span></span>
       </div>
     </div>
 
@@ -38,6 +41,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const searchInput = $('#searchInput');
   const listWrap = $('#submission-list');
   const pager = $('#pagination');
+  const refreshAllBtn = $('.btn-refresh-all');
 
   // Helpers
   const toUrl = (p) => {
@@ -48,7 +52,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const fmtDate = (s) => (s ? new Date(s).toLocaleDateString('id-ID') : '—');
   const fmtNum  = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '—');
 
-  // ambil nama tampil KOL dari field yang mungkin ada
   const kolNameOf = (s) => {
     return (
       s.kol_name ||
@@ -64,15 +67,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
     );
   };
 
-  // ambil metric per slot kalau tersedia; fallback total
   const metric = (s, slot, base) => {
     const keys = [
-      `${base}_${slot}`,          // views_1
-      `${base}${slot}`,           // views1
-      `${base}_${slot}_count`,    // view_1_count
-      `${base}${slot}_count`,     // view1_count
-      base,                       // views
-      `${base}_count`,            // views_count
+      `${base}_${slot}`,
+      `${base}${slot}`,
+      `${base}_${slot}_count`,
+      `${base}${slot}_count`,
+      base,
+      `${base}_count`,
     ];
     for (const k of keys) {
       if (k in s && s[k] != null) return s[k];
@@ -87,7 +89,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     campaignFilter.innerHTML =
       `<option value="">— Pilih Campaign —</option>` +
       items.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-    // auto select dari query ?campaign_id=...
     const qId = query?.campaign_id || new URL(location.href).searchParams.get('campaign_id');
     if (qId && campaignFilter.querySelector(`option[value="${qId}"]`)) {
       campaignFilter.value = qId;
@@ -120,7 +121,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       const arr = res?.data || [];
 
-      // Filter keyword sederhana (nama, open_id, link)
+      // Filter keyword (nama, open_id, link)
       const kw = (currentKeyword || '').toLowerCase().trim();
       const filtered = kw
         ? arr.filter(s => {
@@ -135,7 +136,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
           })
         : arr;
 
-      // Grouping per open_id (fallback ke nama kalau open_id kosong)
+      // Group per open_id
       const groups = new Map();
       filtered.forEach((s) => {
         const key = s.tiktok_user_id || `anon:${kolNameOf(s)}`;
@@ -143,20 +144,17 @@ export async function render(target, path, query = {}, labelOverride = null) {
         groups.get(key).push(s);
       });
 
-      // Builder button
       const btn = (u, label='View') =>
         u ? `<a class="btn btn-sm btn-outline-secondary" href="${u}" target="_blank" rel="noopener">${label}</a>` : '<span class="text-muted">—</span>';
 
-      // Build table body: group header (nama) + 2 baris (slot 1 & 2) per submission
       const rowsHtml = [];
       let rowIndex = (res.current_page - 1) * (res.per_page || 20);
 
       for (const [openId, subs] of groups.entries()) {
-        // Pakai nama dari submission pertama di grup
         const first = subs[0] || {};
         const displayName = kolNameOf(first);
 
-        // Separator/heading per KOL
+        // Header per KOL (separator)
         rowsHtml.push(`
           <tr class="table-active">
             <td colspan="12">
@@ -182,17 +180,29 @@ export async function render(target, path, query = {}, labelOverride = null) {
             const pdate = is1 ? s.post_date_1 : s.post_date_2;
             const scUrl = is1 ? s1url : s2url;
 
-            // Metrics per-slot (fallback ke total)
-            const views   = metric(s, slot, 'views')   ?? metric(s, slot, 'view');
-            const likes   = metric(s, slot, 'likes')   ?? metric(s, slot, 'like');
-            const comments= metric(s, slot, 'comments')?? metric(s, slot, 'comment');
-            const shares  = metric(s, slot, 'shares')  ?? metric(s, slot, 'share');
+            const views    = metric(s, slot, 'views')    ?? metric(s, slot, 'view');
+            const likes    = metric(s, slot, 'likes')    ?? metric(s, slot, 'like');
+            const comments = metric(s, slot, 'comments') ?? metric(s, slot, 'comment');
+            const shares   = metric(s, slot, 'shares')   ?? metric(s, slot, 'share');
 
-            // Jika row kosong total (tak ada link/tanggal/screenshot), skip
             if (!link && !pdate && !scUrl) return '';
 
+            // Aksi: hanya tampil di Slot 1 biar nggak dobel
+            const actions = is1
+              ? `
+                <div class="d-flex flex-wrap gap-2">
+                  <button class="btn btn-sm btn-outline-primary app-link" data-href="/admin/submissions/${s.id}/edit">
+                    <i class="bi bi-pencil"></i> Edit
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary btn-refresh-metrics" data-id="${s.id}">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                  </button>
+                </div>
+              `
+              : '';
+
             return `
-              <tr>
+              <tr ${is1 ? `data-submission-id="${s.id}"` : ''}>
                 <td>${rowIndex}${slot === 2 ? '<small class="text-muted">.2</small>' : ''}</td>
                 <td>Slot ${slot}</td>
                 <td>${link ? `<a href="${link}" target="_blank" rel="noopener">${link}</a>` : '<span class="text-muted">—</span>'}</td>
@@ -204,16 +214,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
                 <td class="text-end">${fmtNum(likes)}</td>
                 <td class="text-end">${fmtNum(comments)}</td>
                 <td class="text-end">${fmtNum(shares)}</td>
-                <td>
-                  <button class="btn btn-sm btn-outline-primary app-link" data-href="/admin/submissions/${s.id}/edit">
-                    <i class="bi bi-pencil"></i> Edit
-                  </button>
-                </td>
+                <td>${actions}</td>
               </tr>
             `;
           };
 
-          // Maks. 2 baris per submission (slot 1 & 2)
           rowsHtml.push(slotRow(1));
           rowsHtml.push(slotRow(2));
         });
@@ -235,7 +240,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
               <th style="width:100px" class="text-end">Likes</th>
               <th style="width:110px" class="text-end">Comments</th>
               <th style="width:100px" class="text-end">Shares</th>
-              <th style="width:120px">Aksi</th>
+              <th style="width:160px">Aksi</th>
             </tr>
           </thead>
           <tbody>
@@ -264,22 +269,87 @@ export async function render(target, path, query = {}, labelOverride = null) {
         }
       }
 
-      // app-link navigation
-      document.querySelectorAll('.app-link').forEach(el => {
-        el.addEventListener('click', (e) => {
-          e.preventDefault();
-          const href = el.getAttribute('data-href');
-          if (!href) return;
-          history.pushState(null, '', href);
-          window.dispatchEvent(new PopStateEvent('popstate'));
-        });
-      });
+      attachActionHandlers();
 
     } catch (err) {
       console.error(err);
       listWrap.innerHTML = `<div class="text-danger">Gagal memuat submissions.</div>`;
     } finally {
       hideLoader();
+    }
+  }
+
+  function attachActionHandlers() {
+    // navigasi app-link
+    document.querySelectorAll('.app-link').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        const href = el.getAttribute('data-href');
+        if (!href) return;
+        history.pushState(null, '', href);
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+    });
+
+    // refresh per submission
+    document.querySelectorAll('.btn-refresh-metrics').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        const id = btn.getAttribute('data-id');
+        const old = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Refresh`;
+
+        try {
+          const resp = await submissionService.refreshMetrics(id);
+          showToast(resp.message || 'Metrik berhasil di-refresh.');
+          await loadSubmissions(currentPage);
+        } catch (err) {
+          if ((err.status === 401 || err.status === 409) && err.reauth_url) {
+            showToast(err.message || 'Token TikTok tidak valid. Silakan connect ulang.', 'error');
+            // Optional: window.open(err.reauth_url, '_blank');
+          } else {
+            showToast(err.message || 'Gagal refresh metrik', 'error');
+          }
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = old;
+        }
+      });
+    });
+
+    // refresh semua yang terlihat
+    if (refreshAllBtn) {
+      refreshAllBtn.onclick = async () => {
+        const ids = Array.from(document.querySelectorAll('tr[data-submission-id]'))
+          .map(tr => tr.getAttribute('data-submission-id'))
+          .filter(Boolean);
+
+        if (!ids.length) {
+          showToast('Tidak ada baris untuk di-refresh.', 'error');
+          return;
+        }
+
+        const old = refreshAllBtn.innerHTML;
+        refreshAllBtn.disabled = true;
+        refreshAllBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Refreshing…`;
+
+        let ok = 0, fail = 0;
+        for (const id of ids) {
+          try {
+            await submissionService.refreshMetrics(id);
+            ok++;
+          } catch {
+            fail++;
+          }
+        }
+
+        await loadSubmissions(currentPage);
+        refreshAllBtn.disabled = false;
+        refreshAllBtn.innerHTML = old;
+
+        showToast(`Refresh selesai: ${ok} sukses, ${fail} gagal.`);
+      };
     }
   }
 

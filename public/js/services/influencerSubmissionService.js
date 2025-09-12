@@ -19,6 +19,8 @@ async function safeFetch(url, options, retryOnce = true) {
   return res;
 }
 
+
+
 export const submissionService = {
   /**
    * Create submission (multipart/form-data)
@@ -112,5 +114,20 @@ export const submissionService = {
       };
     }
     return data;
+  },
+
+  async refreshMetrics(id) {
+    const res = await fetch(`/api/influencer-submissions/${id}/refresh-metrics`, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin'
+    });
+    if (!res.ok) {
+      let body=null; try{ body=await res.json(); }catch{}
+      const err = new Error(body?.message || res.statusText);
+      err.status = res.status; Object.assign(err, body||{});
+      throw err;
+    }
+    return res.json();
   },
 };
