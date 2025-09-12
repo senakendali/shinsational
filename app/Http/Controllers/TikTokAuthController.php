@@ -229,6 +229,37 @@ class TikTokAuthController extends Controller
             );
     }
 
+    public function reset(Request $request)
+    {
+        // simpan konteks agar ikut ke redirect berikutnya
+        $campaignId   = $request->query('campaign_id');
+        $campaignSlug = $request->query('campaign');
+
+        // bersihkan sesi lokal
+        $request->session()->forget([
+            'tiktok_state',
+            'tiktok_user_id',
+            'tiktok_username',
+            'tiktok_full_name',
+            'tiktok_avatar_url',
+            'tiktok_token_bundle',
+            'pending_campaign_id',
+            'pending_campaign_slug',
+        ]);
+        // optional: regen id sesi
+        try { $request->session()->invalidate(); } catch (\Throwable $e) {}
+        try { $request->session()->regenerateToken(); } catch (\Throwable $e) {}
+        try { $request->session()->regenerate(); } catch (\Throwable $e) {}
+
+        // lempar ke redirect dengan flag force=1 supaya (jika didukung) diminta consent lagi
+        $qs = array_filter([
+            'campaign_id' => $campaignId,
+            'campaign'    => $campaignSlug,
+            'force'       => 1,
+        ]);
+        return redirect('/auth/tiktok/redirect' . ( $qs ? ('?' . http_build_query($qs)) : '' ));
+    }
+
 
 
 }

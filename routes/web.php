@@ -46,6 +46,8 @@ Route::get('/me',      [AuthController::class, 'me'])->name('me'); // optional u
 Route::get('/auth/tiktok/redirect', [TikTokAuthController::class, 'redirect']);
 Route::get('/auth/tiktok/callback', [TikTokAuthController::class, 'callback']);
 
+Route::get('/auth/tiktok/reset', [TikTokAuthController::class, 'reset']);
+
 
 
 Route::get('/me/tiktok', function (Request $request) {
