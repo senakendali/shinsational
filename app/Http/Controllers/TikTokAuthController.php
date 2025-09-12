@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use App\Models\InfluencerAccount;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Cookie;
+
 
 
 
@@ -235,30 +237,39 @@ class TikTokAuthController extends Controller
         $campaignId   = $request->query('campaign_id');
         $campaignSlug = $request->query('campaign');
 
-        // bersihkan sesi lokal
-        $request->session()->forget([
-            'tiktok_state',
-            'tiktok_user_id',
-            'tiktok_username',
-            'tiktok_full_name',
-            'tiktok_avatar_url',
-            'tiktok_token_bundle',
-            'pending_campaign_id',
-            'pending_campaign_slug',
-        ]);
-        // optional: regen id sesi
-        try { $request->session()->invalidate(); } catch (\Throwable $e) {}
-        try { $request->session()->regenerateToken(); } catch (\Throwable $e) {}
-        try { $request->session()->regenerate(); } catch (\Throwable $e) {}
+        // --- bersihkan session lokal sepenuhnya ---
+        try {
+            // buang semua data di session
+            $request->session()->flush();
+            // invalidate (destroy) & ganti session ID
+            $request->session()->invalidate();
+            // regenerate CSRF token
+            $request->session()->regenerateToken();
+        } catch (\Throwable $e) {
+            \Log::warning('session_reset_failed', ['err' => $e->getMessage()]);
+        }
 
-        // lempar ke redirect dengan flag force=1 supaya (jika didukung) diminta consent lagi
+        // --- hapus cookie sesi di browser ---
+        try {
+            $forget = Cookie::forget(config('session.cookie'));
+        } catch (\Throwable $e) {
+            $forget = null; // fallback kalau gagal ambil nama cookie
+        }
+
+        // redirect ke OAuth dengan force re-consent
         $qs = array_filter([
             'campaign_id' => $campaignId,
             'campaign'    => $campaignSlug,
             'force'       => 1,
         ]);
-        return redirect('/auth/tiktok/redirect' . ( $qs ? ('?' . http_build_query($qs)) : '' ));
+        $url = '/auth/tiktok/redirect' . ($qs ? ('?' . http_build_query($qs)) : '');
+
+        // kirim juga instruksi hapus cookie (kalau tersedia)
+        return $forget
+            ? redirect($url)->withCookie($forget)
+            : redirect($url);
     }
+
 
 
 
