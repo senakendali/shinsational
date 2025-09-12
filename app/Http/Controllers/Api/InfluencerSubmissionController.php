@@ -407,123 +407,201 @@ protected function oembedAuthor(?string $url): ?array
     // === Endpoint utama: refresh metrics ===
     public function refreshMetrics(Request $request, $id)
     {
-        $submission = InfluencerSubmission::findOrFail($id);
+        $submission = \App\Models\InfluencerSubmission::findOrFail($id);
 
-        // Ambil video id dari link
-        $vid1 = $this->parseVideoIdFromUrl($submission->link_1);
-        $vid2 = $this->parseVideoIdFromUrl($submission->link_2);
-        $want = array_values(array_filter([$vid1, $vid2], fn($v) => !empty($v)));
+        // --- Ambil token milik owner open_id ini (sesuaikan kalau pakai influencer_accounts)
+        $reg = \App\Models\InfluencerRegistration::where('tiktok_user_id', $submission->tiktok_user_id)
+            ->whereNotNull('access_token')
+            ->orderByDesc('last_refreshed_at')
+            ->orderByDesc('updated_at')
+            ->first();
 
-        if (empty($want)) {
+        if (!$reg) {
             return response()->json([
-                'message'   => 'Link video tidak valid / video_id tidak terdeteksi.',
-                'updated'   => [],
-                'not_found' => [],
-                'data'      => $submission,
-            ], 200);
-        }
-
-        // Ambil token
-        $openId = $submission->tiktok_user_id;
-        $bundle = $this->getAccessTokenBundle($openId);
-        if (!$bundle || empty($bundle['access_token'])) {
-            return response()->json([
-                'message'    => 'Token TikTok tidak tersedia. Minta KOL untuk connect ulang.',
-                'reauth_url' => url('/auth/tiktok/redirect'),
+                'message' => 'Token TikTok tidak ditemukan untuk influencer ini. Minta KOL connect ulang.',
+                'reauth_url' => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
             ], 409);
         }
-        $bundle = $this->ensureFreshToken($bundle);
-        $access = $bundle['access_token'];
 
-        // 1) Coba query by IDs (presisi)
-        $stats = $this->queryVideoStatsByIds($want, $access);
-
-        // 2) Masih ada yang belum ketemu? Fallback list & scan
-        $missing = array_values(array_diff($want, array_keys($stats)));
-        if ($missing) {
-            $scan = $this->listAndScanStats($openId, $missing, $access);
-            $stats = $stats + $scan;
-            $missing = array_values(array_diff($want, array_keys($stats)));
+        $accessToken = $reg->access_token;
+        $scopes      = (array) ($reg->scopes ?? []);
+        if (!in_array('video.list', $scopes, true)) {
+            return response()->json([
+                'message' => 'Token tidak punya scope video.list. Minta KOL re-authorize & centang izin video.',
+                'reauth_url' => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
+                'current_scopes' => $scopes,
+            ], 409);
         }
 
-        // 3) Tulis ke kolom per slot
+        // --- Identitas owner token (buat debug)
+        $meResp = \Http::withToken($accessToken)->acceptJson()
+            ->get('https://open.tiktokapis.com/v2/user/info/', ['fields' => 'open_id,username,display_name']);
+        $tokenOwner = [
+            'open_id'      => data_get($meResp->json(), 'data.user.open_id'),
+            'username'     => data_get($meResp->json(), 'data.user.username'),
+            'display_name' => data_get($meResp->json(), 'data.user.display_name'),
+        ];
+
+        // --- Ekstrak aweme/video id dari URL
+        $id1 = $this->extractAwemeId($submission->link_1);
+        $id2 = $this->extractAwemeId($submission->link_2);
+
+        // --- Hint lewat oEmbed (sekadar info author)
+        $oembedHints = [];
+        foreach ([1 => $submission->link_1, 2 => $submission->link_2] as $slot => $url) {
+            if (!$url) continue;
+            try {
+                $oe = \Http::timeout(8)->get('https://www.tiktok.com/oembed', ['url' => $url]);
+                if ($oe->ok()) {
+                    $oembedHints[$slot] = [
+                        'author_unique_id' => data_get($oe->json(), 'author_unique_id'),
+                        'author_name'      => data_get($oe->json(), 'author_name'),
+                    ];
+                }
+            } catch (\Throwable $e) {}
+        }
+
+        // --- Helper: query by id (lebih akurat)
+        $queryById = function (string $videoId) use ($accessToken) {
+            try {
+                $resp = \Http::withToken($accessToken)->acceptJson()
+                    ->post('https://open.tiktokapis.com/v2/video/query/', [
+                        'filters' => ['video_ids' => [$videoId]],
+                        'fields'  => 'id,view_count,like_count,comment_count,share_count,create_time',
+                    ]);
+                if (!$resp->ok()) {
+                    return [null, $resp->json()];
+                }
+                $videos = data_get($resp->json(), 'data.videos', []);
+                foreach ($videos as $v) {
+                    // beberapa implementasi pakai "id" atau "video_id"
+                    $vid = $v['id'] ?? $v['video_id'] ?? null;
+                    if ((string)$vid === (string)$videoId) {
+                        return [$v, null];
+                    }
+                }
+                return [null, null];
+            } catch (\Throwable $e) {
+                return [null, ['exception' => $e->getMessage()]];
+            }
+        };
+
+        // --- Helper: paginate list (fallback)
+        $findInList = function (string $videoId) use ($accessToken) {
+            $cursor = 0; $page = 0; $maxPages = 25; // naikkan batas
+            $lastErr = null;
+            while ($page < $maxPages) {
+                $resp = \Http::withToken($accessToken)->acceptJson()
+                    ->get('https://open.tiktokapis.com/v2/video/list/', [
+                        'fields'    => 'id,view_count,like_count,comment_count,share_count,create_time',
+                        'cursor'    => $cursor,
+                        'max_count' => 20,
+                    ]);
+                if (!$resp->ok()) {
+                    $lastErr = $resp->json();
+                    break;
+                }
+                $data   = $resp->json();
+                $videos = data_get($data, 'data.videos', []);
+                foreach ($videos as $v) {
+                    $vid = $v['id'] ?? $v['video_id'] ?? null;
+                    if ((string)$vid === (string)$videoId) {
+                        return [$v, $page + 1, true, $lastErr];
+                    }
+                }
+                $hasMore = (bool) data_get($data, 'data.has_more', false);
+                $cursor  = data_get($data, 'data.cursor', 0);
+                $page++;
+                if (!$hasMore) break;
+            }
+            return [null, $page, true, $lastErr];
+        };
+
         $updated = [];
         $notFound = [];
+        $debug    = ['search' => [], 'query' => []];
 
-        if ($vid1) {
-            if (isset($stats[$vid1])) {
-                $st = $stats[$vid1];
-                $submission->views_1    = $st['view']    ?? $submission->views_1;
-                $submission->likes_1    = $st['like']    ?? $submission->likes_1;
-                $submission->comments_1 = $st['comment'] ?? $submission->comments_1;
-                $submission->shares_1   = $st['share']   ?? $submission->shares_1;
-                $updated['1'] = $st;
+        // Slot 1
+        if ($id1) {
+            [$v1, $qErr1] = $queryById($id1);
+            $debug['query']['1'] = ['error' => $qErr1, 'matched' => (bool)$v1];
+            if (!$v1) {
+                [$v1, $pages1, $ok1, $err1] = $findInList($id1);
+                $debug['search']['1'] = ['pages_scanned' => $pages1, 'api_ok' => $ok1, 'error' => $err1];
+            }
+            if ($v1) {
+                $submission->views_1    = $v1['view_count']    ?? $submission->views_1;
+                $submission->likes_1    = $v1['like_count']    ?? $submission->likes_1;
+                $submission->comments_1 = $v1['comment_count'] ?? $submission->comments_1;
+                $submission->shares_1   = $v1['share_count']   ?? $submission->shares_1;
+                $updated[] = 1;
             } else {
-                $notFound['1'] = $vid1;
+                $notFound['1'] = $id1;
             }
         }
 
-        if ($vid2) {
-            if (isset($stats[$vid2])) {
-                $st = $stats[$vid2];
-                $submission->views_2    = $st['view']    ?? $submission->views_2;
-                $submission->likes_2    = $st['like']    ?? $submission->likes_2;
-                $submission->comments_2 = $st['comment'] ?? $submission->comments_2;
-                $submission->shares_2   = $st['share']   ?? $submission->shares_2;
-                $updated['2'] = $st;
+        // Slot 2
+        if ($id2) {
+            [$v2, $qErr2] = $queryById($id2);
+            $debug['query']['2'] = ['error' => $qErr2, 'matched' => (bool)$v2];
+            if (!$v2) {
+                [$v2, $pages2, $ok2, $err2] = $findInList($id2);
+                $debug['search']['2'] = ['pages_scanned' => $pages2, 'api_ok' => $ok2, 'error' => $err2];
+            }
+            if ($v2) {
+                $submission->views_2    = $v2['view_count']    ?? $submission->views_2;
+                $submission->likes_2    = $v2['like_count']    ?? $submission->likes_2;
+                $submission->comments_2 = $v2['comment_count'] ?? $submission->comments_2;
+                $submission->shares_2   = $v2['share_count']   ?? $submission->shares_2;
+                $updated[] = 2;
             } else {
-                $notFound['2'] = $vid2;
+                $notFound['2'] = $id2;
             }
         }
 
-        if (!empty($updated)) {
+        if ($updated) {
             $submission->last_metrics_synced_at = now();
             $submission->save();
-        }
-
-        // 4) Hint mismatch: bandingkan handle link vs username yang kita simpan
-        $hint = [];
-        $linkHandle1 = $this->parseHandleFromUrl($submission->link_1);
-        $linkHandle2 = $this->parseHandleFromUrl($submission->link_2);
-        $reg = InfluencerRegistration::where('tiktok_user_id', $openId)->latest()->first();
-        $savedHandle = $reg ? strtolower((string)$reg->tiktok_username) : null;
-
-        if (($linkHandle1 && $savedHandle && $linkHandle1 !== $savedHandle) ||
-            ($linkHandle2 && $savedHandle && $linkHandle2 !== $savedHandle)) {
-            $hint['possible_account_mismatch'] = [
-                'saved_username' => $savedHandle,
-                'link_username_1'=> $linkHandle1,
-                'link_username_2'=> $linkHandle2,
-                'note' => 'Akun di link tampaknya berbeda dengan akun yang memberi izin OAuth. TikTok API hanya mengembalikan metrik untuk akun yang mengizinkan.',
-            ];
-        }
-
-        // (opsional) tambah oEmbed author untuk debug (tidak mengubah logika)
-        if (!empty($notFound)) {
-            $oe1 = $this->oembedAuthor($submission->link_1);
-            $oe2 = $this->oembedAuthor($submission->link_2);
-            if ($oe1 || $oe2) {
-                $hint['oembed'] = [
-                    '1' => $oe1 ? [
-                        'author_unique_id' => data_get($oe1,'author_unique_id'),
-                        'author_name'      => data_get($oe1,'author_name'),
-                    ] : null,
-                    '2' => $oe2 ? [
-                        'author_unique_id' => data_get($oe2,'author_unique_id'),
-                        'author_name'      => data_get($oe2,'author_name'),
-                    ] : null,
-                ];
-            }
+            return response()->json([
+                'message'      => 'Metrik berhasil diperbarui.',
+                'updated'      => $updated,
+                'token_owner'  => $tokenOwner,
+                'hints'        => ['oembed' => $oembedHints] + $debug,
+                'data'         => $submission->fresh(),
+            ]);
         }
 
         return response()->json([
-            'message'    => empty($updated) ? 'Tidak ada metrik yang ditemukan untuk link ini.' : 'Metrik berhasil di-refresh.',
-            'updated'    => $updated,
-            'not_found'  => $notFound,
-            'hints'      => $hint,
-            'data'       => $submission->fresh(),
-        ], 200);
+            'message'        => 'Tidak ada metrik yang ditemukan untuk link ini.',
+            'updated'        => [],
+            'not_found'      => $notFound,
+            'token_owner'    => $tokenOwner,
+            'current_scopes' => $scopes,
+            'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
+            'hints'          => ['oembed' => $oembedHints] + $debug,
+            'data'           => $submission->fresh(),
+        ]);
     }
+
+    /**
+     * Ekstrak aweme/video id dari berbagai format URL TikTok.
+     */
+    protected function extractAwemeId(?string $url): ?string
+    {
+        if (!$url) return null;
+        $u = trim($url);
+
+        // format umum: .../video/1234567890123456789
+        if (preg_match('#/video/(\d+)#', $u, $m)) {
+            return $m[1];
+        }
+
+        // kalau short link (vm.tiktok.com/...), kita tidak follow redirect di server di sini.
+        // bisa ditambahkan head request utk resolve, kalau perlu.
+
+        return null;
+    }
+
 
 
 
