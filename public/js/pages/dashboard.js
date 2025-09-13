@@ -45,41 +45,40 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
   // inject layout
   target.innerHTML = `
-    <div class="container-fluid" id="admin-dashboard-root">
+    <div id="admin-dashboard-root">
       <div id="__breadcrumb_mount"></div>
 
       <!-- KPI cards -->
       <div class="row g-3 mb-4" id="kpi-cards">
         <div class="col-md-3">
-          <div class="card text-white text-center bg-success h-100">
-            <div class="card-body">
-              <h5 class="card-title">Total Brand</h5>
-              <p class="card-text fs-3" id="kpi-brands">—</p>
+          <div class="dashboard-card text-center h-100 brand">
+            <div class="dashboard-card-body">
+              <h5 class="card-title">BRANDS</h5>
+              <p class="card-text fs-3 fw-bold" id="kpi-brands">—</p>
             </div>
           </div>
         </div>
         <div class="col-md-3">
-          <div class="card text-white text-center bg-primary h-100">
+          <div class="dashboard-card text-center h-100 campaign">
             <div class="card-body">
-              <h5 class="card-title">Total Campaign</h5>
-              <p class="card-text fs-3" id="kpi-campaigns">—</p>
+              <h5 class="card-title">CAMPAIGNS</h5>
+              <p class="card-text fs-3 fw-bold" id="kpi-campaigns">—</p>
             </div>
           </div>
         </div>
         <div class="col-md-3">
-          <div class="card text-white text-center bg-danger h-100">
+          <div class="dashboard-card  text-center h-100 registration">
             <div class="card-body">
-              <h5 class="card-title">Total KOL (registrations)</h5>
-              <p class="card-text fs-3" id="kpi-kols">—</p>
-              <div class="small text-white-50">*jumlah registrasi, bukan unik</div>
+              <h5 class="card-title">KOL</h5>
+              <p class="card-text fs-3 fw-bold" id="kpi-kols">—</p>
             </div>
           </div>
         </div>
         <div class="col-md-3">
-          <div class="card text-white text-center bg-warning h-100">
+          <div class="dashboard-card text-center h-100 content">
             <div class="card-body">
-              <h5 class="card-title">Total Submissions</h5>
-              <p class="card-text fs-3" id="kpi-posts">—</p>
+              <h5 class="card-title">POST</h5>
+              <p class="card-text fs-3 fw-bold" id="kpi-posts">—</p>
             </div>
           </div>
         </div>

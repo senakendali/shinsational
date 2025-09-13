@@ -7,6 +7,11 @@ use App\Http\Controllers\AuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Models\InfluencerAccount;
+use App\Http\Controllers\MeController;
+
+Route::post('/api/me/link-tiktok', [MeController::class, 'linkTiktok'])
+    ->name('me.link-tiktok')
+    ->middleware(['web','auth']); // sesuaikan kalau KOL belum login
 
 // ==== CSRF refresh untuk SPA (dipakai utils/csrf.js) ====
 Route::get('/refresh-csrf', fn () => response()->json(['token' => csrf_token()]));
@@ -73,6 +78,8 @@ Route::get('/me/tiktok', function (Request $request) {
 // ==== Catch-all SPA (tetap paling bawah) ====
 
     // Admin SPA (prefix /admin)
+
+
 Route::get('/admin/{any?}', [AppController::class, 'admin'])
     ->where('any', '^(?!api|js|css|images|fonts|storage|vendor).*$');
 

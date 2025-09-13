@@ -33,6 +33,7 @@ html {
 }
 
 body {
+    background-color: #F8F9FA;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
@@ -163,4 +164,61 @@ body {
 .login-input {
     padding: 11px;
     width: 320px;
+}
+
+.dashboard-card{
+    background-color: #FFFFFF;
+    border-radius: 5px;
+    
+    padding: 10px;
+    margin-bottom: 10px;
+    cursor: pointer
+}
+
+.dashboard-card.brand{
+    border-top: 1px solid #5C34B9;
+    border-right: 1px solid #5C34B9;
+    border-left: 1px solid #5C34B9;
+    border-bottom: 5px solid #5C34B9;
+    color: #5C34B9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.dashboard-card.campaign{
+    border-top: 1px solid #124693;
+    border-right: 1px solid #124693;
+    border-left: 1px solid #124693;
+    border-bottom: 5px solid #124693;
+    color: #124693;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.dashboard-card.registration{
+    border-top: 1px solid #09A8A4;
+    border-right: 1px solid #09A8A4;
+    border-left: 1px solid #09A8A4;
+    border-bottom: 5px solid #09A8A4;
+    color: #09A8A4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.dashboard-card.content{
+    border-top: 1px solid #D2548D;
+    border-right: 1px solid #D2548D;
+    border-left: 1px solid #D2548D;
+    border-bottom: 5px solid #D2548D;
+    color: #D2548D;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
 }

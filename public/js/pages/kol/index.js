@@ -1,10 +1,9 @@
 // /js/pages/kol/index.js
 export function render(target, params, query = {}, labelOverride = null) {
-    const v = window.BUILD_VERSION || Date.now();
-    console.log("[kol/index render] v=", v);
+  const v = window.BUILD_VERSION || Date.now();
+  console.log("[kol/index render] v=", v);
 
-    // Render konten dulu
-    target.innerHTML = `
+  target.innerHTML = `
     <!-- Hero Section -->
     <section class="min-vh-100 py-5 py-lg-0 d-flex align-items-center bg-black"
              style="background-image: url('/images/hero-bg.png?v=${v}'); background-size: cover; background-position: center;">
@@ -22,7 +21,7 @@ export function render(target, params, query = {}, labelOverride = null) {
               </p>
             </div>
             <div class="d-flex justify-content-center align-items-center mt-2">
-              <a href="/auth/tiktok/redirect" class="btn btn-lg py-2 mb-3" style="background-color: #FF0854; color: white;">
+              <a id="connectTiktokBtn" class="btn btn-lg py-2 mb-3" style="background-color: #FF0854; color: white;">
                 <div class="d-flex justify-content-center align-items-center">
                   <i class="bi bi-tiktok me-2"></i>
                   <span class="fw-semibold fs-6">SIGN IN WITH TIKTOK</span>
@@ -36,7 +35,7 @@ export function render(target, params, query = {}, labelOverride = null) {
 
     <!-- Guidelines Section -->
     <section class="py-5 py-lg-4 mb-lg-3 d-flex align-items-center bg-light">
-      <div class="container pt-5" >
+      <div class="container pt-5">
         <h2 class="text-center mb-5" id="guidelines">How It Works</h2>
         <div class="row">
           <div class="col-12">
@@ -127,19 +126,46 @@ export function render(target, params, query = {}, labelOverride = null) {
     </section>
   `;
 
-    // Import komponen TANPA await (biar router nggak perlu async)
-    Promise.all([
-        import(`/js/components/headerKol.js?v=${v}`),
-        import(`/js/components/footerKol.js?v=${v}`),
-    ])
-        .then(([headerMod, footerMod]) => {
-            const { renderHeaderKol } = headerMod;
-            const { renderFooterKol } = footerMod;
+  // Import komponen TANPA await (biar router nggak perlu async)
+  Promise.all([
+    import(`/js/components/headerKol.js?v=${v}`),
+    import(`/js/components/footerKol.js?v=${v}`),
+  ])
+    .then(([headerMod, footerMod]) => {
+      const { renderHeaderKol } = headerMod;
+      const { renderFooterKol } = footerMod;
 
-            renderHeaderKol("header");
-            renderFooterKol();
-        })
-        .catch((err) => {
-            console.error("[Import components failed]", err);
+      renderHeaderKol("header");
+      renderFooterKol();
+
+      // === Build TikTok connect URL dengan campaign passthrough ===
+      const u = new URL(location.href);
+      const cId   = u.searchParams.get('campaign_id');
+      const cSlug = u.searchParams.get('campaign');
+
+      const qs = new URLSearchParams();
+      if (cId)   qs.set('campaign_id', cId);
+      if (cSlug) qs.set('campaign', cSlug);
+
+      // NB: callback sekarang akan redirect ke /registration?connected=tiktok&...
+      //     Jadi tidak perlu "redirect" param di sini kecuali backend dipakai untuk override.
+      const connectUrl = `/auth/tiktok/redirect${qs.toString() ? '?' + qs.toString() : ''}`;
+
+      const btn = document.getElementById('connectTiktokBtn');
+      if (btn) {
+        // set href untuk accessibility (right-click, long-press)
+        btn.setAttribute('href', connectUrl);
+        // dan force full reload (jaga-jaga router SPA)
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          // optional: debounce supaya nggak double
+          btn.classList.add('disabled');
+          btn.setAttribute('aria-disabled', 'true');
+          window.location.assign(connectUrl);
         });
+      }
+    })
+    .catch((err) => {
+      console.error("[Import components failed]", err);
+    });
 }

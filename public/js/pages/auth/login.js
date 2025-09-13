@@ -4,7 +4,32 @@ export function render(target, params, query = {}, labelOverride = null) {
   const BASE = (window.APP_URL || window.location.origin).replace(/\/+$/, '');
   const bgUrl = `${BASE}/images/login-bg.png?v=${v}`;
 
-  // Reset body biar full
+  // === Helper: inject CSS override supaya padding-top ilang total saat login ===
+  function applyLoginStyleOverrides() {
+    const id = 'login-page-overrides';
+    let style = document.getElementById(id);
+    if (!style) {
+      style = document.createElement('style');
+      style.id = id;
+      style.textContent = `
+        /* Hilangin semua padding/margin top yang biasa dipakai layout */
+        #app, #app .main, #app main, .main, main {
+          padding-top: 0 !important;
+          margin-top: 0 !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    return () => style && style.remove();
+  }
+  const removeLoginStyleOverrides = applyLoginStyleOverrides();
+
+  // Pastikan #app tidak pakai container-fluid saat login
+  const appEl = document.getElementById('app');
+  const hadContainerFluid = !!appEl?.classList.contains('container-fluid');
+  if (appEl) appEl.classList.remove('container-fluid');
+
+  // Reset body biar full (login page nggak perlu scroll)
   document.body.style.margin = "0";
   document.body.style.padding = "0";
   document.body.style.overflow = "hidden";
@@ -48,7 +73,7 @@ export function render(target, params, query = {}, labelOverride = null) {
     </div>
   `;
 
-  // Dynamic imports ala kol/index.js
+  // Dynamic imports
   Promise.all([
     import(`/js/services/authService.js?v=${v}`),
     import(`/js/components/loader.js?v=${v}`),
@@ -61,7 +86,6 @@ export function render(target, params, query = {}, labelOverride = null) {
       const { showToast } = toastMod;
       const { showValidationErrors, clearAllErrors } = formMod;
 
-      // ✅ define form dulu baru addEventListener
       const form = document.getElementById('loginForm');
       if (!form) {
         console.error('Login form not found');
@@ -80,12 +104,19 @@ export function render(target, params, query = {}, labelOverride = null) {
 
         try {
           const fd = new FormData(form);
-          // contoh remember:
-          // if (form.querySelector('#remember')?.checked) fd.append('remember', '1');
-
           await authService.login(fd);
           showToast('Login berhasil');
 
+          // Pulihkan class container-fluid pada #app kalau awalnya ada
+          if (appEl && hadContainerFluid) {
+            appEl.classList.add('container-fluid');
+          }
+
+          // Bersihkan override CSS login & pulihkan scroll
+          removeLoginStyleOverrides();
+          document.body.style.overflow = '';
+
+          // Go to dashboard
           const next = (query && query.redirect) ? query.redirect : '/admin/dashboard';
           history.pushState(null, '', next);
           window.dispatchEvent(new PopStateEvent('popstate'));

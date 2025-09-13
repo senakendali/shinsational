@@ -11,9 +11,9 @@ export function render(target, params, query = {}, labelOverride = null) {
             <div class="card">
               <div class="card-body p-4 p-md-5">
 
-                <!-- Avatar (opsional, tampil kalau ada URL) -->
+                <!-- Avatar -->
                 <div class="text-center mb-3 d-none" id="avatarWrap">
-                  <img id="avatarImg" src="" alt="Profile Picture"
+                  <img id="avatarImg" src="" alt="TikTok Profile Picture"
                        style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,.12);">
                 </div>
 
@@ -23,6 +23,19 @@ export function render(target, params, query = {}, labelOverride = null) {
                   <input type="hidden" name="profile_pic_url" id="profile_pic_url" value="">
                   <input type="hidden" name="campaign_id" id="campaign_id" value="">
                   <input type="hidden" name="campaign" id="campaign" value="">
+
+                  <!-- Connect TikTok -->
+                  <div id="tiktokConnectBox" class="alert alert-dark d-none" role="alert">
+                    <div class="d-flex align-items-center justify-content-between">
+                      <div class="pe-3">
+                        <div class="fw-semibold">Connect your TikTok to autofill</div>
+                        <small class="text-muted">We'll only read your basic profile (name, username & avatar).</small>
+                      </div>
+                      <a id="connectTiktokBtn" class="btn btn-sm btn-light ms-3" href="#">
+                        Connect TikTok
+                      </a>
+                    </div>
+                  </div>
 
                   <div id="alreadyBox" class="alert alert-success d-none" role="alert">
                     You are already registered for this campaign. Your data has been loaded.
@@ -48,7 +61,6 @@ export function render(target, params, query = {}, labelOverride = null) {
                       <div class="invalid-feedback"></div>
                     </div>
 
-                    <!-- Address -->
                     <div class="form-group">
                       <input type="text" class="form-control form-control-lg" id="address" name="address" placeholder="Address" required>
                       <div class="invalid-feedback"></div>
@@ -99,8 +111,8 @@ export function render(target, params, query = {}, labelOverride = null) {
     const $ = (sel) => document.querySelector(sel);
 
     const form = $('#registerForm');
-    const submitBtn    = $('#submitBtn');
-    const goProfileBtn = $('#goProfileBtn');
+    const submitBtn   = $('#submitBtn');
+    const goProfileBtn= $('#goProfileBtn');
 
     // Hidden
     const tiktokIdEl     = $('#tiktok_user_id');
@@ -109,17 +121,19 @@ export function render(target, params, query = {}, labelOverride = null) {
     const campaignSlugEl = $('#campaign');
 
     // Visible
-    const fullNameEl  = $('#full_name');
-    const usernameEl  = $('#tiktok_username');
-    const phoneEl     = $('#phone');
-    const addressEl   = $('#address');
-    const birthDateEl = $('#birth_date');
+    const fullNameEl   = $('#full_name');
+    const usernameEl   = $('#tiktok_username');
+    const phoneEl      = $('#phone');
+    const addressEl    = $('#address');
+    const birthDateEl  = $('#birth_date');
 
     // UI boxes
-    const avatarWrap  = $('#avatarWrap');
-    const avatarImg   = $('#avatarImg');
-    const alreadyBox  = $('#alreadyBox');
-    const prefilledBox= $('#prefilledBox');
+    const avatarWrap = $('#avatarWrap');
+    const avatarImg  = $('#avatarImg');
+    const connectBox = $('#tiktokConnectBox');
+    const connectBtn = $('#connectTiktokBtn');
+    const alreadyBox = $('#alreadyBox');
+    const prefilledBox = $('#prefilledBox');
 
     const clearErrors = () => {
       form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
@@ -149,12 +163,12 @@ export function render(target, params, query = {}, labelOverride = null) {
 
     const fillForm = (reg) => {
       if (!reg) return;
-      if (reg.full_name)       fullNameEl.value  = reg.full_name;
-      if (reg.tiktok_username) usernameEl.value  = reg.tiktok_username;
-      if (reg.phone)           phoneEl.value     = reg.phone;
-      if (reg.address)         addressEl.value   = reg.address;
-      if (reg.birth_date)      birthDateEl.value = reg.birth_date;
-      if (reg.tiktok_user_id)  tiktokIdEl.value  = reg.tiktok_user_id;
+      if (reg.full_name) fullNameEl.value = reg.full_name;
+      if (reg.tiktok_username) usernameEl.value = reg.tiktok_username;
+      if (reg.phone) phoneEl.value = reg.phone;
+      if (reg.address) addressEl.value = reg.address;
+      if (reg.birth_date) birthDateEl.value = reg.birth_date;
+      if (reg.tiktok_user_id) tiktokIdEl.value = reg.tiktok_user_id;
       if (reg.profile_pic_url) {
         avatarUrlEl.value = reg.profile_pic_url;
         avatarImg.src = reg.profile_pic_url;
@@ -166,18 +180,14 @@ export function render(target, params, query = {}, labelOverride = null) {
     const normalizeHandle = (val) => {
       return (val || '').toString().trim().replace(/^@+/, '');
     };
-
-    // Buat pseudo open_id dari handle (deterministik)
-    const makePseudoId = (handle) => {
-      const h = normalizeHandle(handle).toLowerCase();
-      if (!h) return '';
-      return `pseudo_${h}`; // cukup unik krn username TikTok global-unik
-    };
+    usernameEl.addEventListener('blur', () => {
+      usernameEl.value = normalizeHandle(usernameEl.value);
+    });
 
     // --- Campaign dari query ---
     (function applyCampaignFromQuery() {
       const u = new URL(location.href);
-      let cId   = u.searchParams.get('campaign_id');
+      let cId = u.searchParams.get('campaign_id');
       let cSlug = u.searchParams.get('campaign');
 
       if (!cId && !cSlug) {
@@ -188,42 +198,72 @@ export function render(target, params, query = {}, labelOverride = null) {
 
       if (cId)   campaignIdEl.value = cId;
       if (cSlug) campaignSlugEl.value = cSlug;
+
+      // Link connect bawa campaign & full navigation
+      const qs = new URLSearchParams();
+      if (cId)   qs.set('campaign_id', cId);
+      if (cSlug) qs.set('campaign', cSlug);
+      connectBtn.href = `/auth/tiktok/redirect${qs.toString() ? '?' + qs.toString() : ''}`;
+      connectBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.location.assign(connectBtn.href);
+      });
+
+      // kalau balik dari OAuth
+      if (u.searchParams.get('connected') === 'tiktok') {
+        // kasih feedback kecil
+        import(`/js/utils/toast.js?v=${v}`).then(({ showToast }) => {
+          showToast('TikTok connected. Please review and submit your info.', 'success');
+        }).catch(()=>{});
+      }
     })();
 
-    // Prefill dari localStorage (biar campaign-2 mudah)
-    try {
-      const cache = JSON.parse(localStorage.getItem('kol_profile') || 'null');
-      if (cache) {
-        fillForm(cache);
+    // --- Prefill dari query (hasil callback) ---
+  (function prefillFromQueryIdentity() {
+    const u = new URL(location.href);
+    const qOpenId = u.searchParams.get('open_id');
+    const qName   = u.searchParams.get('name');
+    const qAvatar = u.searchParams.get('avatar');
+
+    if (qOpenId) {
+      // set hidden untuk submit
+      tiktokIdEl.value = qOpenId;
+
+      // isi nama kalau belum ada
+      if (qName && !fullNameEl.value) {
+        fullNameEl.value = qName;
       }
-    } catch {}
 
-    // Saat user isi username → set tiktok_user_id otomatis dan coba prefill dari server
-    async function onHandleChange() {
-      const handle = normalizeHandle(usernameEl.value);
-      usernameEl.value = handle;
-      const pid = makePseudoId(handle);
-      tiktokIdEl.value = pid;
+      // tampilkan avatar
+      if (qAvatar) {
+        avatarUrlEl.value = qAvatar;
+        avatarImg.src = qAvatar;
+        avatarWrap.classList.remove('d-none');
+      }
 
-      // Prefill dari registrasi apapun berdasar tiktok_user_id (tanpa filter campaign)
-      if (!pid) return;
-      try {
-        const q = new URLSearchParams({ tiktok_user_id: pid });
-        const res = await fetch(`/api/influencer-registrations/check?${q.toString()}`, {
-          headers: { 'Accept': 'application/json' },
-          credentials: 'same-origin'
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.exists && data?.data) {
-          fillForm(data.data);
-          setReadonly(false);
-          prefilledBox.classList.remove('d-none');
-        }
-      } catch {}
+      // sudah terhubung → sembunyikan connect box
+      connectBox.classList.add('d-none');
     }
-    usernameEl.addEventListener('blur', onHandleChange);
-    usernameEl.addEventListener('change', onHandleChange);
+  })();
+
+
+    // Prefill dari session TikTok
+    let sessionTikTok = {};
+    try {
+      const res = await fetch('/me/tiktok', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+      if (res.ok) sessionTikTok = await res.json();
+    } catch (e) {}
+
+    if (sessionTikTok?.tiktok_user_id) tiktokIdEl.value = sessionTikTok.tiktok_user_id;
+    if (sessionTikTok?.tiktok_full_name && !fullNameEl.value) fullNameEl.value = sessionTikTok.tiktok_full_name;
+    if (sessionTikTok?.tiktok_username && !usernameEl.value) usernameEl.value = normalizeHandle(sessionTikTok.tiktok_username);
+    if (sessionTikTok?.tiktok_avatar_url) {
+      avatarUrlEl.value = sessionTikTok.tiktok_avatar_url;
+      avatarImg.src = sessionTikTok.tiktok_avatar_url;
+      avatarWrap.classList.remove('d-none');
+    }
+    // Tampilkan connect box kalau BELUM terhubung (tidak punya open_id)
+    connectBox.classList.toggle('d-none', !!(tiktokIdEl.value || sessionTikTok?.tiktok_user_id));
 
     // === CEK: sudah terdaftar untuk campaign ini? ===
     async function checkAlreadyRegisteredForCampaign() {
@@ -246,6 +286,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         const data = await res.json();
 
         if (data.exists) {
+          // Sudah terdaftar di campaign ini → lock
           fillForm(data.data);
           setReadonly(true);
           // avatar fallback dari DB
@@ -262,11 +303,35 @@ export function render(target, params, query = {}, labelOverride = null) {
       }
     }
 
-    // Urutan prefill awal: set pseudo open_id dari username (kalau ada), lalu cek campaign
-    await onHandleChange();
+    // === PREFILL fallback dari registrasi manapun ===
+    async function prefillFromAnyRegistration() {
+      const openId = tiktokIdEl.value?.trim();
+      if (!openId) return;
+
+      try {
+        // panggil check TANPA campaign filter → API mengembalikan satu registrasi terakhir
+        const q = new URLSearchParams({ tiktok_user_id: openId });
+        const res = await fetch(`/api/influencer-registrations/check?${q.toString()}`, {
+          headers: { 'Accept': 'application/json' },
+          credentials: 'same-origin'
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.exists && data.data) {
+          fillForm(data.data);
+          // editable, bukan lock
+          setReadonly(false);
+          prefilledBox.classList.remove('d-none');
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Urutan prefill
     const campaignCheck = await checkAlreadyRegisteredForCampaign();
     if (!campaignCheck.exists) {
-      // kalau belum terdaftar campaign ini & localStorage sudah isi, kita sudah prefill di atas
+      await prefillFromAnyRegistration();
     }
 
     // Submit
@@ -274,50 +339,29 @@ export function render(target, params, query = {}, labelOverride = null) {
       e.preventDefault();
       clearErrors();
 
-      // pastikan open_id terisi dari handle
+      // normalize username sebelum submit
       usernameEl.value = normalizeHandle(usernameEl.value);
-      if (!tiktokIdEl.value) {
-        tiktokIdEl.value = makePseudoId(usernameEl.value);
-      }
 
       if (!form.checkValidity()) {
         form.classList.add('was-validated');
         return;
       }
 
-      const formData = new FormData(form); // address ikut otomatis
+      const formData = new FormData(form);
 
       try {
         showLoader();
         submitBtn.disabled = true;
 
-        const resp = await influencerService.create(formData); // 201 (baru) atau 200 exists:true
+        const resp = await influencerService.create(formData);
 
         hideLoader();
         submitBtn.disabled = false;
 
-        // Simpan ke localStorage agar campaign berikutnya prefill mulus
-        try {
-          const cache = {
-            full_name: fullNameEl.value,
-            tiktok_username: usernameEl.value,
-            phone: phoneEl.value,
-            address: addressEl.value,
-            birth_date: birthDateEl.value,
-            tiktok_user_id: tiktokIdEl.value,
-            profile_pic_url: avatarUrlEl.value,
-          };
-          localStorage.setItem('kol_profile', JSON.stringify(cache));
-        } catch {}
-
-        // Info kecil
-        showToast(resp?.message || (resp?.exists ? 'Sudah terdaftar.' : 'Registrasi berhasil disimpan.'), 'success');
-
-        // Prefill (opsional) lalu redirect
-        if (resp && resp.data) {
-          fillForm(resp.data);
-          setReadonly(true);
-        }
+        // sukses → ke profil
+        import(`/js/utils/toast.js?v=${v}`).then(({ showToast }) => {
+          showToast(resp.message || 'Registrasi berhasil disimpan.', 'success');
+        }).catch(()=>{});
 
         const next = '/my-profile';
         if (location.pathname !== next) {
@@ -331,7 +375,9 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (err?.status === 422 && err?.errors) {
           showErrors(err.errors);
         } else {
-          showToast(err?.message || 'Gagal menyimpan registrasi.', 'error');
+          import(`/js/utils/toast.js?v=${v}`).then(({ showToast }) => {
+            showToast(err?.message || 'Gagal menyimpan registrasi.', 'error');
+          }).catch(()=>{});
         }
       }
     });

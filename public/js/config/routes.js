@@ -340,7 +340,7 @@ export const routes = [
 
     // Login
     {
-        path: "/login",
+        path: "/admin/login",
         label: "Login",
         component: () => import("../pages/auth/login.js?v=" + BUILD_ID),
     },

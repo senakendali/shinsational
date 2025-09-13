@@ -166,48 +166,41 @@ export function render(target, params, query = {}, labelOverride = null) {
         return k.toISOString().slice(0,10);
       };
 
-      // Fallback profile (tanpa TikTok)
-      const normalizeHandle = (val) => (val || '').toString().trim().replace(/^@+/, '');
-      const makePseudoId = (handle) => {
-        const h = normalizeHandle(handle).toLowerCase();
-        return h ? `pseudo_${h}` : '';
-      };
-      const readLocalProfile = () => {
-        try { return JSON.parse(localStorage.getItem('kol_profile') || 'null'); } catch { return null; }
-      };
-      const mergeProfile = (me = {}, cache = {}) => {
-        const username = me.tiktok_username || cache?.tiktok_username || '';
-        const openId   = me.tiktok_user_id  || cache?.tiktok_user_id  || makePseudoId(username);
-        return {
-          tiktok_full_name:  me.tiktok_full_name  || cache?.full_name || 'Creator',
-          tiktok_username:   normalizeHandle(username),
-          tiktok_avatar_url: me.tiktok_avatar_url || cache?.profile_pic_url || '',
-          tiktok_user_id:    openId,
-        };
-      };
-
-      // === Viewer link helper
+      // === Viewer link helper: convert path/URL → /files?p=... (keep blob/data/external as is)
       const toFileUrl = (input) => {
         if (!hasVal(input)) return '';
         const origin = location.origin;
         let raw = String(input).trim();
+
+        // Blob/Data URL or absolute HTTP(S)
         if (/^(blob:|data:|https?:\/\/)/i.test(raw)) {
           try {
             const u = new URL(raw);
             if (u.origin === origin) {
+              // already viewer?
               if (/^\/?files/i.test(u.pathname)) return raw;
+              // /storage/... → /files?p=...
               if (/^\/?storage\//i.test(u.pathname)) {
                 const stripped = u.pathname.replace(/^\/?storage\/+/i, '');
                 return `${origin}/files?p=${encodeURIComponent(stripped)}`;
               }
             }
-            return raw;
-          } catch { return raw; }
+            return raw; // external or other same-origin path
+          } catch {
+            return raw; // not a valid URL string but starts with scheme
+          }
         }
-        if (/^\/?files\?/i.test(raw)) return `${origin}/${raw.replace(/^\/+/, '')}`;
+
+        // Relative path
+        // already /files?p=... ?
+        if (/^\/?files\?/i.test(raw)) {
+          return `${origin}/${raw.replace(/^\/+/, '')}`;
+        }
         const normalized = raw.replace(/^\/+/, '').replace(/^storage\/+/i, '');
         return `${origin}/files?p=${encodeURIComponent(normalized)}`;
       };
+
+      // Ambil URL file dari berbagai kemungkinan key → pakai viewer /files?p=...
       const getFileUrl = (rec, key) => {
         if (!rec) return '';
         const candidates = [
@@ -223,12 +216,14 @@ export function render(target, params, query = {}, labelOverride = null) {
         return '';
       };
 
+      // File controls (view vs edit) + preview lokal (blob)
       const setFileControls = (inputId, remoteUrl, { editMode = false, btnText = 'Lihat File' } = {}) => {
         const input = $("#"+inputId);
         const viewBtn = $("#"+inputId+"_view");
         if (!input || !viewBtn) return;
+
         if (hasVal(remoteUrl)) {
-          viewBtn.href = remoteUrl;
+          viewBtn.href = remoteUrl; // already converted to /files?p=...
           viewBtn.textContent = inputId.includes('screenshot') ? 'Lihat Gambar' : btnText;
           viewBtn.classList.remove('d-none');
           viewBtn.dataset.remote = '1';
@@ -237,22 +232,27 @@ export function render(target, params, query = {}, labelOverride = null) {
           viewBtn.removeAttribute('href');
           delete viewBtn.dataset.remote;
         }
-        if (editMode) input.classList.remove('d-none');
-        else {
+
+        if (editMode) {
+          input.classList.remove('d-none');
+        } else {
           if (hasVal(remoteUrl)) input.classList.add('d-none');
           else input.classList.remove('d-none');
         }
+
         if (input.classList.contains('d-none')) input.value = '';
       };
+
       const wirePreview = (inputId) => {
         const input = $("#"+inputId);
         const viewBtn = $("#"+inputId+"_view");
         if (!input || !viewBtn) return;
+
         input.addEventListener('change', () => {
           const f = input.files?.[0];
           if (f) {
             const blobUrl = URL.createObjectURL(f);
-            viewBtn.href = blobUrl;
+            viewBtn.href = blobUrl; // local preview stays blob:
             viewBtn.textContent = inputId.includes('screenshot') ? 'Preview Gambar' : 'Preview File';
             viewBtn.classList.remove('d-none');
             viewBtn.dataset.remote = '0';
@@ -266,7 +266,7 @@ export function render(target, params, query = {}, labelOverride = null) {
       };
 
       // ===== State
-      let openId = null;                // ← AKTIF per-campaign
+      let openId = null;
       let selectedCampaignId = null;
       let currentSubmission = null;
       let isEditing = false;
@@ -288,6 +288,7 @@ export function render(target, params, query = {}, labelOverride = null) {
           submitBtn.disabled = false;
           return;
         }
+
         if (isEditing) {
           editBtn.classList.add('d-none');
           cancelBtn.classList.remove('d-none');
@@ -356,6 +357,7 @@ export function render(target, params, query = {}, labelOverride = null) {
       const clearSubmissionView = () => {
         currentSubmission = null;
         isEditing = false;
+
         $("#existingNotice")?.classList.add('d-none');
         $("#submissionForm").reset();
 
@@ -371,6 +373,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         setFileControls('screenshot_2', '', { editMode: true });
         setFileControls('invoice_file', '', { editMode: true });
         setFileControls('review_proof_file', '', { editMode: true });
+
         updateButtonsVisibility();
       };
 
@@ -379,6 +382,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         isEditing = true;
         applyEditMode();
       };
+
       const exitEditMode = () => {
         if (!currentSubmission?.id) return;
         isEditing = false;
@@ -386,7 +390,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         applyViewMode();
       };
 
-      // API helpers
+      // GET by pair (list) – cache-busted
       const fetchSubmissionForCampaign = async ({ tiktok_user_id, campaign_id }) => {
         const qs = new URLSearchParams({
           tiktok_user_id,
@@ -394,16 +398,20 @@ export function render(target, params, query = {}, labelOverride = null) {
           per_page: '1',
           _: String(Date.now())
         }).toString();
+
         const r = await fetch(`/api/influencer-submissions?${qs}`, {
           headers: { 'Accept':'application/json' },
           credentials: 'same-origin',
           cache: 'no-store'
         });
         if (!r.ok) return null;
+
         const json = await r.json();
         const arr = Array.isArray(json) ? json : (json?.data || []);
         return arr[0] || null;
       };
+
+      // GET by id – cache-busted
       const fetchSubmissionById = async (id) => {
         const r = await fetch(`/api/influencer-submissions/${id}?_=${Date.now()}`, {
           headers: { 'Accept':'application/json' },
@@ -414,38 +422,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         return await r.json();
       };
 
-      // fetch regs by username (untuk pseudo / user belum connect)
-      const fetchRegsByUsername = async (uname) => {
-        if (!uname) return [];
-        const qs = new URLSearchParams({
-          tiktok_username: uname,
-          include: 'campaign',
-          per_page: '50',
-          _: String(Date.now())
-        }).toString();
-        const r = await fetch(`/api/influencer-registrations?${qs}`, {
-          headers: { 'Accept': 'application/json' },
-          credentials: 'same-origin',
-          cache: 'no-store'
-        });
-        if (!r.ok) return [];
-        const j = await r.json();
-        return Array.isArray(j) ? j : (j?.data || []);
-      };
-
-      const mergeRegsUniqueByCampaign = (a = [], b = []) => {
-        const m = new Map();
-        const push = (x) => {
-          if (!x) return;
-          const cid = x?.campaign?.id ?? x?.campaign_id ?? null;
-          if (!cid) return;
-          if (!m.has(cid)) m.set(cid, x);
-        };
-        a.forEach(push);
-        b.forEach(push);
-        return Array.from(m.values());
-      };
-
       const loadSubmissionForSelected = async () => {
         isEditing = false;
         if (!openId || !selectedCampaignId) { clearSubmissionView(); return; }
@@ -453,6 +429,7 @@ export function render(target, params, query = {}, labelOverride = null) {
           showLoader();
           const rec = await fetchSubmissionForCampaign({ tiktok_user_id: openId, campaign_id: selectedCampaignId });
           currentSubmission = rec || null;
+
           if (currentSubmission) {
             fillSubmissionValues(currentSubmission);
             applyViewMode();
@@ -480,10 +457,8 @@ export function render(target, params, query = {}, labelOverride = null) {
           const c = r.campaign || {};
           const cid = c.id ?? r.campaign_id ?? '';
           const cname = safe(c.name, r.campaign_name || `Campaign ${i + 1}`);
-          const oid = r.tiktok_user_id || '';
           return `
-            <button class="btn btn-dark text-start py-2 campaign-item ${i===0?'active':''}"
-                    data-campaign-id="${cid}" data-open-id="${oid}">
+            <button class="btn btn-dark text-start py-2 campaign-item ${i===0?'active':''}" data-campaign-id="${cid}">
               ${cname}
             </button>
           `;
@@ -492,7 +467,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         const first = listEl.querySelector('.campaign-item');
         if (first) {
           selectedCampaignId = first.getAttribute('data-campaign-id');
-          openId = first.getAttribute('data-open-id') || openId; // per-campaign openId
           setTitle(first.textContent.trim());
         }
 
@@ -501,7 +475,6 @@ export function render(target, params, query = {}, labelOverride = null) {
             listEl.querySelectorAll('.campaign-item').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             selectedCampaignId = btn.getAttribute('data-campaign-id');
-            openId = btn.getAttribute('data-open-id') || openId;
             setTitle(btn.textContent.trim());
             await loadSubmissionForSelected();
           });
@@ -514,10 +487,11 @@ export function render(target, params, query = {}, labelOverride = null) {
       $("#editBtn")?.addEventListener('click', enterEditMode);
       $("#cancelEditBtn")?.addEventListener('click', exitEditMode);
 
-      // Submit handler
+      // Submit handler (CREATE atau UPDATE)
       const form = $("#submissionForm");
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
+
         if (!form.checkValidity()) {
           e.stopPropagation();
           form.classList.add("was-validated");
@@ -532,6 +506,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         fd.set('tiktok_user_id', openId);
         fd.set('campaign_id', selectedCampaignId);
 
+        // === KIRIM SEMUA FIELD SAAT UPDATE (forceAll) ===
         const forceAll = !!(currentSubmission?.id);
         const addField = (id, key = null, force = false) => {
           const el = $("#"+id);
@@ -572,6 +547,7 @@ export function render(target, params, query = {}, labelOverride = null) {
               body: fd,
               cache: 'no-store'
             });
+
             if (!r.ok) throw new Error('Gagal update');
             resp = await r.json();
             showToast(resp?.message || 'Data berhasil diupdate');
@@ -611,63 +587,43 @@ export function render(target, params, query = {}, labelOverride = null) {
       // Preview untuk semua input file (local blob)
       ['screenshot_1','screenshot_2','invoice_file','review_proof_file'].forEach(wirePreview);
 
-      // ======== Load profile + campaigns (session-first, merged regs) ========
+      // Load profile + campaigns
       try {
-        // 1) session /me/tiktok (boleh kosong)
-        let me = {};
-        try {
-          const res = await fetch('/me/tiktok', {
-            headers: { 'Accept':'application/json' },
-            credentials: 'same-origin',
-            cache: 'no-store'
-          });
-          if (res.ok) me = await res.json();
-        } catch {}
+        const res = await fetch('/me/tiktok', {
+          headers: { 'Accept':'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store'
+        });
+        if (!res.ok) throw new Error('cannot fetch session');
+        const me = await res.json();
 
-        // 2) profile gabungan (session + cache)
-        const cache = readLocalProfile() || {};
-        const profile = mergeProfile(me, cache);
+        openId = me.tiktok_user_id || null;
+        $("#profileName").textContent = safe(me.tiktok_full_name, 'Creator');
+        $("#profileHandle").textContent = safe(me.tiktok_username ? '@'+me.tiktok_username : '', '');
 
-        // 3) render profil
-        $("#profileName").textContent = profile.tiktok_full_name || 'Creator';
-        $("#profileHandle").textContent = profile.tiktok_username ? '@' + profile.tiktok_username : '';
-        if (profile.tiktok_avatar_url) {
+        if (me.tiktok_avatar_url) {
           $("#profileAvatarIcon")?.classList.add('d-none');
           const img = $("#profileAvatarImg");
-          img.src = profile.tiktok_avatar_url;
+          img.src = me.tiktok_avatar_url;
           img.classList.remove('d-none');
         }
 
-        // 4) ambil regs by-ID & by-username, lalu merge
-        let regsById = [];
-        if (profile.tiktok_user_id) {
+        if (openId) {
           const result = await influencerService.getAll({
-            tiktok_user_id: profile.tiktok_user_id,
+            tiktok_user_id: openId,
             include: 'campaign',
             per_page: 50,
             _: Date.now()
           });
-          regsById = Array.isArray(result) ? result : (result?.data || []);
+          const regs = Array.isArray(result) ? result : (result.data || []);
+          renderCampaignButtons(regs);
+        } else {
+          renderCampaignButtons([]);
         }
-        const regsByUname = profile.tiktok_username ? await fetchRegsByUsername(profile.tiktok_username) : [];
-        const regs = mergeRegsUniqueByCampaign(regsById, regsByUname);
-
-        // 5) render campaign list
-        renderCampaignButtons(regs);
       } catch (e) {
-        console.warn('Load profile/campaigns failed (merged):', e);
+        console.warn('Load profile/campaigns failed:', e);
         renderCampaignButtons([]);
       }
-      // ========================================================================
-
-      // Logout
-      $("#logoutBtn")?.addEventListener('click', async () => {
-        try {
-          await fetch('/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }});
-        } catch {}
-        localStorage.removeItem('kol_profile');
-        location.assign('/');
-      });
     })
     .catch((err) => console.error('[my-profile] Failed dynamic imports:', err));
 }

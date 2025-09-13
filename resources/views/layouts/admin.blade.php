@@ -14,7 +14,7 @@
 
 
 </head>
-<body class="bg-light">
+<body>
     <div id="header" class="app-header"></div>
     <main id="app" class="main container-fluid"></main>
     <div id="footer"></div>

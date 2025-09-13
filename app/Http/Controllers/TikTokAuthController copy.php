@@ -11,7 +11,6 @@ use Illuminate\Support\Str;
 use App\Models\InfluencerAccount;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Cookie;
-use App\Services\LinkTiktokService;
 
 
 
@@ -91,9 +90,9 @@ class TikTokAuthController extends Controller
         $code  = (string) $request->query('code', '');
         $state = (string) $request->query('state', '');
 
-        // --- Validasi state: session + cache (sekali pakai) ---
-        $sessionState = $request->session()->pull('tiktok_state');
-        $cacheMeta    = Cache::pull("oauth:tiktok:state:{$state}");
+        // --- Validasi state: session + cache (fallback) ---
+        $sessionState = $request->session()->pull('tiktok_state');                 // sekali pakai
+        $cacheMeta    = Cache::pull("oauth:tiktok:state:{$state}");                // sekali pakai
 
         if ($state === '' || (!$sessionState && !$cacheMeta) || ($sessionState && $state !== $sessionState)) {
             Log::warning('tiktok_invalid_state', [
@@ -144,7 +143,7 @@ class TikTokAuthController extends Controller
         $missing = array_diff($need, $granted);
         if ($missing) {
             Log::warning('tiktok_missing_scopes', compact('granted','missing'));
-            // lanjut; username/avatar bisa kosong bila scope kurang
+            // lanjutkan; username/avatar mungkin kosong bila scope kurang
         }
 
         // --- 2) Profil user ---
@@ -188,26 +187,13 @@ class TikTokAuthController extends Controller
             ]
         );
 
-        // --- 3b) LINK & MIGRATE (idempotent) ---
-        try {
-            if ($username) {
-                $migrated = \App\Services\LinkTiktokService::run($openId, $username);
-                Log::info('tiktok_link_migrated', ['open_id'=>$openId, 'username'=>$username, 'migrated'=>$migrated]);
-            } else {
-                Log::warning('tiktok_link_skip_no_username', ['open_id'=>$openId]);
-            }
-        } catch (\Throwable $e) {
-            Log::error('tiktok_link_failed', ['open_id'=>$openId, 'err'=>$e->getMessage()]);
-            // tidak blokir user; lanjut set session & redirect
-        }
-
         // --- 4) Session ringan untuk FE (prefill) ---
         $request->session()->put('tiktok_user_id',    $openId);
         $request->session()->put('tiktok_username',   $username);
         $request->session()->put('tiktok_full_name',  $display);
         $request->session()->put('tiktok_avatar_url', $avatar);
 
-        // --- 5) Tentukan redirect target ---
+        // --- 5) Build redirect + set cookie tkoid (fallback tanpa session) ---
         $campaignId   = $request->session()->pull('pending_campaign_id')   ?? data_get($cacheMeta, 'campaign_id');
         $campaignSlug = $request->session()->pull('pending_campaign_slug') ?? data_get($cacheMeta, 'campaign_slug');
 
@@ -220,14 +206,10 @@ class TikTokAuthController extends Controller
         if ($campaignId)   $qs['campaign_id'] = $campaignId;
         if ($campaignSlug) $qs['campaign']    = $campaignSlug;
 
-        // Jika ada pending campaign → balik ke /registration (prefill),
-        // kalau tidak → ke /my-profile supaya safety-net juga jalan.
-        $redirectBase = ($campaignId || $campaignSlug) ? '/registration' : '/my-profile';
-        $redirectUrl  = $redirectBase . '?' . http_build_query($qs);
-
-        $cookieDomain = $request->getHost();
-        $secure       = $request->isSecure();
-        $minutes      = 60 * 24 * 30; // 30 hari
+        $redirectUrl  = '/registration?' . http_build_query($qs);
+        $cookieDomain = $request->getHost();           // samakan domain dengan host yang dipakai
+        $secure       = $request->isSecure();          // true di https
+        $minutes      = 60 * 24 * 30;                  // 30 hari
 
         Log::info('tiktok_callback_ok', [
             'open_id'  => $openId,
@@ -248,7 +230,6 @@ class TikTokAuthController extends Controller
                 'Lax'              // same-site
             );
     }
-
 
     public function reset(Request $request)
     {

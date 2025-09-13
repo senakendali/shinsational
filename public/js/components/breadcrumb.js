@@ -50,7 +50,7 @@ export function renderBreadcrumb(target, currentPath = window.location.pathname,
 
   container.innerHTML = `
     <div>
-      <ol class="breadcrumb mb-0 align-items-center">
+      <ol class="breadcrumb mb-0 align-items-center text-uppercase">
         <li class="breadcrumb-item active d-flex align-items-center gap-2">
           <i class="bi bi-folder2-open"></i> ${label}
         </li>
