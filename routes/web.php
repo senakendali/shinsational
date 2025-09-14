@@ -8,6 +8,67 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Models\InfluencerAccount;
 use App\Http\Controllers\MeController;
+use App\Http\Controllers\Admin\RoleController;
+use App\Http\Controllers\Admin\PermissionController;
+use App\Http\Controllers\Admin\UserController;
+
+
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+|
+| Here is where you can register web routes for your application. These
+| routes are loaded by the RouteServiceProvider within a group which
+| contains the "web" middleware group. Now create something great!
+|
+*/
+
+Route::middleware(['web', 'auth'])->prefix('api')->name('api.')->group(function () {
+    // ==== CSRF helper (dipakai utils/csrf.js) ====
+    Route::post('/csrf/refresh', function (Request $request) {
+        $request->session()->regenerateToken();
+        return response()->json(['token' => csrf_token()]);
+    })->name('csrf.refresh');
+
+    // ==== Current user + abilities (dipakai navbar) ====
+    Route::get('/me', function (Request $request) {
+        $u = $request->user()->loadMissing(['roles:id,name,guard_name']);
+        $abilities = $u->getAllPermissions()->pluck('name')->values(); // Spatie
+        // 1 user = 1 role (ambil pertama kalau ada)
+        $roleName = optional($u->roles->first())->name;
+
+        return response()->json([
+            'id'         => $u->id,
+            'name'       => $u->name,
+            'email'      => $u->email,
+            'role'       => $roleName,
+            'roles'      => $u->roles->pluck('name')->values(), // kalau mau lihat juga
+            'abilities'  => $abilities,
+        ]);
+    })->name('me');
+
+    // ==== Permissions ====
+    Route::apiResource('permissions', PermissionController::class)
+        ->only(['index','store','show','update','destroy']);
+
+    // ==== Roles (+sync-permissions) ====
+    Route::apiResource('roles', RoleController::class)
+        ->only(['index','store','show','update','destroy']);
+
+    Route::post('roles/{role}/sync-permissions', [RoleController::class, 'syncPermissions'])
+        ->name('roles.sync-permissions');
+
+    // ==== Users (single role) ====
+    Route::apiResource('users', UserController::class)
+        ->only(['index','store','show','update','destroy']);
+
+    // optional endpoints kalau kamu mau pakai helper terpisah
+    Route::post('users/{user}/sync-roles', [UserController::class, 'syncRoles'])
+        ->name('users.sync-roles');
+    Route::post('users/{user}/sync-permissions', [UserController::class, 'syncPermissions'])
+        ->name('users.sync-permissions');
+});
 
 Route::post('/api/me/link-tiktok', [MeController::class, 'linkTiktok'])
     ->name('me.link-tiktok')
@@ -40,6 +101,37 @@ Route::get('/files', function (Request $request) {
 
     // Stream ke browser dengan content-type yang tepat
     return Storage::disk('public')->response($p);
+});
+
+// Group API yang tetap pakai session ('auth' web), tanpa Sanctum
+Route::middleware(['auth'])->prefix('api')->group(function () {
+    // Roles
+    Route::get   ('/roles',                    [RoleController::class, 'index']);
+    Route::post  ('/roles',                    [RoleController::class, 'store']);
+    Route::get   ('/roles/{role}',             [RoleController::class, 'show']);
+    Route::patch ('/roles/{role}',             [RoleController::class, 'update']);
+    Route::delete('/roles/{role}',             [RoleController::class, 'destroy']);
+
+    // ===== Permissions
+    Route::get   ('/permissions',                 [PermissionController::class, 'index']);
+    Route::post  ('/permissions',                 [PermissionController::class, 'store']);
+    Route::get   ('/permissions/{permission}',    [PermissionController::class, 'show']);
+    Route::patch ('/permissions/{permission}',    [PermissionController::class, 'update']);
+    Route::delete('/permissions/{permission}',    [PermissionController::class, 'destroy']);
+
+    // ===== Users
+    Route::get   ('/users',                       [UserController::class, 'index']);
+    Route::post  ('/users',                       [UserController::class, 'store']);
+    Route::get   ('/users/{user}',                [UserController::class, 'show']);
+    Route::put ('/users/{user}',                [UserController::class, 'update']);
+    Route::delete('/users/{user}',                [UserController::class, 'destroy']);
+
+    // (opsional) Endpoints khusus sync—kalau mau pisah dari update:
+    Route::post  ('/users/{user}/sync-roles',         [UserController::class, 'syncRoles']);
+    Route::post  ('/users/{user}/sync-permissions',   [UserController::class, 'syncPermissions']);
+
+    // Assign/sync permissions ke role
+    Route::post  ('/roles/{role}/sync-permissions', [RoleController::class, 'syncPermissions']);
 });
 
 // ==== Auth (SPA) ====

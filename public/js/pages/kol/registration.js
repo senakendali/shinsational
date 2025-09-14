@@ -33,29 +33,52 @@ export function render(target, params, query = {}, labelOverride = null) {
                   </div>
 
                   <div class="d-flex flex-column gap-3">
-                    <div class="form-group">
-                      <input type="text" class="form-control form-control-lg" id="full_name" name="full_name" placeholder="Full Name" required>
-                      <div class="invalid-feedback"></div>
+                    <div class="d-flex gap-3">
+                      <div class="form-group">
+                        <input type="text" class="form-control form-control-lg" id="full_name" name="full_name" placeholder="Full Name" required>
+                        <div class="invalid-feedback"></div>
+                      </div>
+
+                      <div class="form-group">
+                        <input type="text" class="form-control form-control-lg" id="tiktok_username" name="tiktok_username" placeholder="TikTok Username (without @)" required>
+                        <div class="invalid-feedback"></div>
+                      </div>
                     </div>
 
-                    <div class="form-group">
-                      <input type="text" class="form-control form-control-lg" id="tiktok_username" name="tiktok_username" placeholder="TikTok Username (without @)" required>
-                      <div class="invalid-feedback"></div>
+                    <div class="d-flex gap-3">
+                      <div class="form-group">
+                        <input type="tel" class="form-control form-control-lg" id="phone" name="phone" placeholder="Phone Number" required>
+                        <div class="invalid-feedback"></div>
+                      </div>
+
+                      <div class="form-group">
+                        <input type="email" class="form-control form-control-lg" id="email" name="email" placeholder="Email" required>
+                        <div class="invalid-feedback"></div>
+                      </div>
                     </div>
 
-                    <div class="form-group">
-                      <input type="tel" class="form-control form-control-lg" id="phone" name="phone" placeholder="Phone Number" required>
-                      <div class="invalid-feedback"></div>
+                    <div class="d-flex gap-3">
+
+                      <div class="form-group">
+                        <input type="date" class="form-control form-control-lg" id="birth_date" name="birth_date" placeholder="Birth Date" required>
+                        <div class="invalid-feedback"></div>
+                      </div>
+
+                      <!-- Gender -->
+                      <div class="form-group">
+                        <select class="form-control form-control-lg" id="gender" name="gender">
+                          <option value="">Gender</option>
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                        </select>
+                        <div class="invalid-feedback"></div>
+                      </div>
+
                     </div>
 
                     <!-- Address -->
                     <div class="form-group">
-                      <input type="text" class="form-control form-control-lg" id="address" name="address" placeholder="Address" required>
-                      <div class="invalid-feedback"></div>
-                    </div>
-
-                    <div class="form-group">
-                      <input type="date" class="form-control form-control-lg" id="birth_date" name="birth_date" placeholder="Birth Date" required>
+                      <textarea class="form-control form-control-lg" id="address" name="address" placeholder="Address" required></textarea>
                       <div class="invalid-feedback"></div>
                     </div>
                   </div>
@@ -112,8 +135,10 @@ export function render(target, params, query = {}, labelOverride = null) {
     const fullNameEl  = $('#full_name');
     const usernameEl  = $('#tiktok_username');
     const phoneEl     = $('#phone');
+    const emailEl     = $('#email');
     const addressEl   = $('#address');
     const birthDateEl = $('#birth_date');
+    const genderEl    = $('#gender');
 
     // UI boxes
     const avatarWrap  = $('#avatarWrap');
@@ -142,6 +167,11 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (flag) el.setAttribute('readonly', 'readonly');
         else el.removeAttribute('readonly');
       });
+      // select tidak punya readonly -> gunakan disabled
+      if (genderEl) {
+        if (flag) genderEl.setAttribute('disabled','disabled');
+        else genderEl.removeAttribute('disabled');
+      }
       submitBtn.classList.toggle('d-none', flag);
       goProfileBtn.classList.toggle('d-none', !flag);
       alreadyBox.classList.toggle('d-none', !flag);
@@ -152,8 +182,10 @@ export function render(target, params, query = {}, labelOverride = null) {
       if (reg.full_name)       fullNameEl.value  = reg.full_name;
       if (reg.tiktok_username) usernameEl.value  = reg.tiktok_username;
       if (reg.phone)           phoneEl.value     = reg.phone;
+      if (reg.email)           emailEl.value     = reg.email;
       if (reg.address)         addressEl.value   = reg.address;
       if (reg.birth_date)      birthDateEl.value = reg.birth_date;
+      if (reg.gender)          genderEl.value    = reg.gender;
       if (reg.tiktok_user_id)  tiktokIdEl.value  = reg.tiktok_user_id;
       if (reg.profile_pic_url) {
         avatarUrlEl.value = reg.profile_pic_url;
@@ -171,7 +203,7 @@ export function render(target, params, query = {}, labelOverride = null) {
     const makePseudoId = (handle) => {
       const h = normalizeHandle(handle).toLowerCase();
       if (!h) return '';
-      return `pseudo_${h}`; // cukup unik krn username TikTok global-unik
+      return `pseudo_${h}`;
     };
 
     // --- Campaign dari query ---
@@ -205,7 +237,6 @@ export function render(target, params, query = {}, labelOverride = null) {
       const pid = makePseudoId(handle);
       tiktokIdEl.value = pid;
 
-      // Prefill dari registrasi apapun berdasar tiktok_user_id (tanpa filter campaign)
       if (!pid) return;
       try {
         const q = new URLSearchParams({ tiktok_user_id: pid });
@@ -248,7 +279,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (data.exists) {
           fillForm(data.data);
           setReadonly(true);
-          // avatar fallback dari DB
           if (!avatarUrlEl.value && data.data?.profile_pic_url) {
             avatarUrlEl.value = data.data.profile_pic_url;
             avatarImg.src = data.data.profile_pic_url;
@@ -262,11 +292,11 @@ export function render(target, params, query = {}, labelOverride = null) {
       }
     }
 
-    // Urutan prefill awal: set pseudo open_id dari username (kalau ada), lalu cek campaign
+    // Prefill awal
     await onHandleChange();
     const campaignCheck = await checkAlreadyRegisteredForCampaign();
     if (!campaignCheck.exists) {
-      // kalau belum terdaftar campaign ini & localStorage sudah isi, kita sudah prefill di atas
+      // belum terdaftar; biarkan user isi normal
     }
 
     // Submit
@@ -285,7 +315,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         return;
       }
 
-      const formData = new FormData(form); // address ikut otomatis
+      const formData = new FormData(form); // gender ikut otomatis
 
       try {
         showLoader();
@@ -296,24 +326,24 @@ export function render(target, params, query = {}, labelOverride = null) {
         hideLoader();
         submitBtn.disabled = false;
 
-        // Simpan ke localStorage agar campaign berikutnya prefill mulus
+        // Simpan ke localStorage untuk prefill campaign lain
         try {
           const cache = {
             full_name: fullNameEl.value,
             tiktok_username: usernameEl.value,
             phone: phoneEl.value,
+            email: emailEl.value,
             address: addressEl.value,
             birth_date: birthDateEl.value,
+            gender: genderEl.value,
             tiktok_user_id: tiktokIdEl.value,
             profile_pic_url: avatarUrlEl.value,
           };
           localStorage.setItem('kol_profile', JSON.stringify(cache));
         } catch {}
 
-        // Info kecil
         showToast(resp?.message || (resp?.exists ? 'Sudah terdaftar.' : 'Registrasi berhasil disimpan.'), 'success');
 
-        // Prefill (opsional) lalu redirect
         if (resp && resp.data) {
           fillForm(resp.data);
           setReadonly(true);

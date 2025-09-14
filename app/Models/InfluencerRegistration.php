@@ -12,8 +12,10 @@ class InfluencerRegistration extends Model
         'full_name',
         'tiktok_username',
         'phone',
+        'email',
         'address',
         'birth_date',
+        'gender',
         'profile_pic_url',
         'campaign_id',
 

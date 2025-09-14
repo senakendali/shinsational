@@ -46,6 +46,9 @@ Route::get('/project-terms/{id}/download-invoice', [InvoiceController::class, 'd
 
 // Influencer Registration
 Route::post('/influencer-registrations', [InfluencerRegistrationController::class, 'store']);
+Route::post('/influencer-registrations/{id}', [InfluencerRegistrationController::class, 'update']);
+Route::patch('/influencer-registrations/{id}', [InfluencerRegistrationController::class, 'update']);
+
 
 // List registrations (dengan filter & include relasi campaign)
 Route::get('/influencer-registrations', [InfluencerRegistrationController::class, 'index']);

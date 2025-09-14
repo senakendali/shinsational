@@ -13,9 +13,47 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
   if (container.dataset.navRendering === '1') return;
   container.dataset.navRendering = '1';
 
+  // ==== Permission helpers ====
+  async function getAbilities() {
+    if (window.__ABILITIES_SET instanceof Set) return window.__ABILITIES_SET;
+
+    // 1) pakai preload global kalau ada
+    if (Array.isArray(window.ABILITIES)) {
+      window.__ABILITIES_SET = new Set(window.ABILITIES);
+      return window.__ABILITIES_SET;
+    }
+
+    // 2) fallback: fetch /api/me (butuh backend yang sediakan abilities)
+    try {
+      const res = await fetch('/api/me', {
+        headers: { Accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (res.ok) {
+        const me = await res.json();
+        window.__ABILITIES_SET = new Set(Array.isArray(me.abilities) ? me.abilities : []);
+        return window.__ABILITIES_SET;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // 3) gagal → set kosong (sembunyikan item yang butuh permission)
+    window.__ABILITIES_SET = new Set();
+    return window.__ABILITIES_SET;
+  }
+
+  function canShow(spec, abilities) {
+    if (!spec) return true;                 // tanpa can => tampil
+    if (Array.isArray(spec)) {
+      // OR: punya salah satu permission
+      return spec.some(p => abilities.has(p));
+    }
+    return abilities.has(spec);
+  }
+
   try {
-    // Pastikan kita BENAR-BENAR render ke <ul id="navbar-menu">
-    // Kalau bukan UL, cari UL di dalamnya; kalau tetap nggak ada, buat UL baru.
+    // Pastikan target UL ada
     let hostUL = container;
     if (hostUL.tagName?.toLowerCase() !== 'ul') {
       hostUL = container.querySelector('ul#navbar-menu') || container.querySelector('ul');
@@ -29,21 +67,19 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
     // Kelas standar
     hostUL.classList.add('navbar-nav', 'ms-auto');
 
-    // ==== BERSIHKAN total (idempotent) ====
-    // Hindari nested UL / duplikasi item
+    // Bersihkan isi
     while (hostUL.firstChild) hostUL.removeChild(hostUL.firstChild);
 
-    // Ambil menu realtime (pakai cache buster)
+    // Ambil menu realtime
     let ownerMenu = [];
     try {
       const mod = await import(`/js/config/menu.js?v=${v}`);
       ownerMenu = mod.ownerMenu || mod.default || [];
     } catch (e) {
       console.error('[navbar] Failed to import menu.js', e);
+      // fallback minimal
       ownerMenu = [
-        { label: 'Dashboard',   path: '/admin',            icon: 'bi-speedometer2' },
-        { label: 'Campaigns',   path: '/admin/campaigns',  icon: 'bi-megaphone'    },
-        { label: 'Submissions', path: '/admin/submissions',icon: 'bi-collection'   },
+        { label: 'Dashboard', path: '/admin/dashboard', icon: 'bi-speedometer2', can: ['dashboard.view', 'dashboard.viewAny'] },
       ];
     }
 
@@ -53,7 +89,20 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
     currentPath = normalize(currentPath);
     const isActive = (p) => normalize(p) === currentPath;
 
-    // Helper
+    // Filter by permission
+    const abilities = await getAbilities();
+    const filteredMenu = ownerMenu
+      .map(item => {
+        if (Array.isArray(item.children) && item.children.length) {
+          const children = item.children.filter(ch => canShow(ch.can, abilities));
+          if (!children.length && !canShow(item.can, abilities)) return null; // parent & all children hidden
+          return { ...item, children };
+        }
+        return canShow(item.can, abilities) ? item : null;
+      })
+      .filter(Boolean);
+
+    // Helper DOM
     const makeLI = (...cls) => {
       const li = document.createElement('li');
       li.className = ['nav-item', ...cls].filter(Boolean).join(' ');
@@ -68,7 +117,7 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
     };
 
     // Render items
-    ownerMenu.forEach((item) => {
+    filteredMenu.forEach((item) => {
       if (Array.isArray(item.children) && item.children.length) {
         const li = makeLI('dropdown');
 
@@ -130,9 +179,7 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
     hostUL.appendChild(logoutLi);
 
     // === SPA nav: DELEGASI pada UL (hindari multi-binding per render) ===
-    // Hapus handler lama bila ada
     if (hostUL._onNavClick) hostUL.removeEventListener('click', hostUL._onNavClick);
-
     hostUL._onNavClick = (e) => {
       const a = e.target.closest('a.app-link');
       if (!a) return;
@@ -147,7 +194,6 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
     // Logout
     const logoutLink = hostUL.querySelector('#logoutNavLink');
     if (logoutLink) {
-      // Hapus handler lama bila ada
       if (logoutLink._onClick) logoutLink.removeEventListener('click', logoutLink._onClick);
       logoutLink._onClick = async (e) => {
         e.preventDefault();
@@ -160,7 +206,7 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
         } catch (_e) {
           /* ignore */
         } finally {
-          location.href = '/login';
+          location.href = '/admin/login';
         }
       };
       logoutLink.addEventListener('click', logoutLink._onClick);

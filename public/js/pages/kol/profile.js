@@ -45,9 +45,37 @@ export function render(target, params, query = {}, labelOverride = null) {
           <div class="p-4 flex-grow-1">
             <h4 class="mb-4" id="mainCampaignTitle">My Campaign</h4>
 
+            <!-- Notice existing -->
             <div id="existingNotice" class="alert alert-info d-none">
               Kamu sudah pernah mengirim data untuk campaign ini. Field yang sudah terisi dikunci.
               Klik <strong>Edit</strong> untuk mengganti, atau lengkapi bagian yang belum lengkap lalu tekan <strong>Update</strong>.
+            </div>
+
+            <!-- ===== Kontak KOL ===== -->
+            <div class="card mb-4">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h6 class="mb-0">Data Kontak</h6>
+                  <button type="button" id="saveContactBtn" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-save"></i> Simpan Kontak
+                  </button>
+                </div>
+                <div class="row g-3">
+                  <div class="col-md-4">
+                    <label for="contact_phone" class="form-label text-muted">No. Telepon / WhatsApp</label>
+                    <input type="text" class="form-control" id="contact_phone" placeholder="+62xxxxxxxxxx">
+                  </div>
+                  <div class="col-md-4">
+                    <label for="contact_email" class="form-label text-muted">Email</label>
+                    <input type="email" class="form-control" id="contact_email" placeholder="nama@email.com">
+                  </div>
+                  <div class="col-md-4">
+                    <label for="contact_address" class="form-label text-muted">Alamat</label>
+                    <input type="text" class="form-control" id="contact_address" placeholder="Alamat lengkap">
+                  </div>
+                </div>
+                
+              </div>
             </div>
 
             <form id="submissionForm" class="needs-validation" novalidate>
@@ -74,11 +102,11 @@ export function render(target, params, query = {}, labelOverride = null) {
                   </div>
                 </div>
 
-                <!-- BARIS 2 (opsional) -->
+                <!-- BARIS 2 -->
                 <div class="col-12">
                   <div class="row g-3 align-items-end">
                     <div class="col-md-4">
-                      <label for="link-2" class="form-label text-muted">Link Postingan 2 (Opsional)</label>
+                      <label for="link-2" class="form-label text-muted">Link Postingan 2</label>
                       <input type="url" class="form-control" id="link-2" placeholder="https://www.tiktok.com/...">
                       <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
                     </div>
@@ -95,14 +123,117 @@ export function render(target, params, query = {}, labelOverride = null) {
                   </div>
                 </div>
 
-                <!-- Beli di mana -->
+                <!-- BARIS 3 (hidden by default) -->
+                <div id="row-slot-3" class="col-12 d-none">
+                  <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                      <label for="link-3" class="form-label text-muted">Link Postingan 3</label>
+                      <input type="url" class="form-control" id="link-3" placeholder="https://www.tiktok.com/...">
+                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="post_date_3" class="form-label text-muted">Tanggal Postingan 3</label>
+                      <input type="date" class="form-control" id="post_date_3">
+                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="screenshot_3" class="form-label text-muted">Screenshot Postingan 3</label>
+                      <input type="file" class="form-control" id="screenshot_3" accept="image/*">
+                      <a id="screenshot_3_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BARIS 4 (hidden by default) -->
+                <div id="row-slot-4" class="col-12 d-none">
+                  <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                      <label for="link-4" class="form-label text-muted">Link Postingan 4</label>
+                      <input type="url" class="form-control" id="link-4" placeholder="https://www.tiktok.com/...">
+                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="post_date_4" class="form-label text-muted">Tanggal Postingan 4</label>
+                      <input type="date" class="form-control" id="post_date_4">
+                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="screenshot_4" class="form-label text-muted">Screenshot Postingan 4</label>
+                      <input type="file" class="form-control" id="screenshot_4" accept="image/*">
+                      <a id="screenshot_4_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- BARIS 5 (hidden by default) -->
+                <div id="row-slot-5" class="col-12 d-none">
+                  <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                      <label for="link-5" class="form-label text-muted">Link Postingan 5</label>
+                      <input type="url" class="form-control" id="link-5" placeholder="https://www.tiktok.com/...">
+                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="post_date_5" class="form-label text-muted">Tanggal Postingan 5</label>
+                      <input type="date" class="form-control" id="post_date_5">
+                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label for="screenshot_5" class="form-label text-muted">Screenshot Postingan 5</label>
+                      <input type="file" class="form-control" id="screenshot_5" accept="image/*">
+                      <a id="screenshot_5_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Add more button -->
+                <div class="col-12">
+                  <button type="button" id="addMoreBtn" class="btn btn-outline-dark btn-sm">
+                    + Tambah Postingan
+                  </button>
+                </div>
+
+                <!-- CARA MENDAPATKAN PRODUK -->
                 <div class="col-md-6">
-                  <label for="purchase_platform" class="form-label text-muted">Beli di mana</label>
-                  <select id="purchase_platform" class="form-select">
+                  <label for="acquisition_method" class="form-label text-muted">Cara Mendapatkan Produk</label>
+                  <select id="acquisition_method" class="form-select">
                     <option value="">-- Pilih --</option>
-                    <option value="tiktokshop">TikTok Shop</option>
-                    <option value="shopee">Shopee</option>
+                    <option value="buy">Beli sendiri</option>
+                    <option value="sent_by_brand">Dikirim oleh Brand</option>
                   </select>
+                </div>
+
+                <!-- FIELD: BELI -->
+                <div id="purchaseFields" class="col-12 d-none">
+                  <div class="row g-3 align-items-end">
+                    <div class="col-md-6">
+                      <label for="purchase_platform" class="form-label text-muted">Beli di mana</label>
+                      <select id="purchase_platform" class="form-select">
+                        <option value="">-- Pilih --</option>
+                        <option value="tiktokshop">TikTok Shop</option>
+                        <option value="shopee">Shopee</option>
+                      </select>
+                    </div>
+                    <div class="col-md-6">
+                      <label for="purchase_price" class="form-label text-muted">Harga Beli</label>
+                      <input type="number" min="0" step="0.01" class="form-control" id="purchase_price" placeholder="0">
+                    </div>
+                  </div>
+                </div>
+
+                <!-- FIELD: DIKIRIM BRAND (VIEW-ONLY) -->
+                <div id="shippingFields" class="col-12 d-none">
+                  <div class="row g-3 align-items-end">
+                    <div class="col-md-6">
+                      <label class="form-label text-muted">Nama Ekspedisi</label>
+                      <input type="text" class="form-control" id="shipping_courier" placeholder="Diisi oleh admin" disabled>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label text-muted">Nomor Resi</label>
+                      <input type="text" class="form-control" id="shipping_tracking_number" placeholder="Diisi oleh admin" disabled>
+                    </div>
+                  </div>
+                  <div class="text-muted small mt-1">Ekspedisi & Nomor Resi akan diisi oleh admin.</div>
                 </div>
 
                 <!-- Invoice & Bukti Review -->
@@ -128,7 +259,6 @@ export function render(target, params, query = {}, labelOverride = null) {
                 </div>
               </div>
             </form>
-
           </div>
         </main>
       </div>
@@ -166,7 +296,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         return k.toISOString().slice(0,10);
       };
 
-      // Fallback profile (tanpa TikTok)
       const normalizeHandle = (val) => (val || '').toString().trim().replace(/^@+/, '');
       const makePseudoId = (handle) => {
         const h = normalizeHandle(handle).toLowerCase();
@@ -186,7 +315,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         };
       };
 
-      // === Viewer link helper
+      // file viewer helpers
       const toFileUrl = (input) => {
         if (!hasVal(input)) return '';
         const origin = location.origin;
@@ -222,7 +351,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (rec?.files && hasVal(rec.files[key])) return toFileUrl(rec.files[key]);
         return '';
       };
-
       const setFileControls = (inputId, remoteUrl, { editMode = false, btnText = 'Lihat File' } = {}) => {
         const input = $("#"+inputId);
         const viewBtn = $("#"+inputId+"_view");
@@ -266,14 +394,87 @@ export function render(target, params, query = {}, labelOverride = null) {
       };
 
       // ===== State
-      let openId = null;                // ← AKTIF per-campaign
+      let openId = null;
       let selectedCampaignId = null;
       let currentSubmission = null;
       let isEditing = false;
 
+      // Registrations per campaign
+      let regsMapByCampaign = new Map(); // campaign_id -> registration record
+      let currentRegistration = null;
+
+      // ===== Multi-slot posts
+      const MAX_SLOTS = 5;
+      let visibleSlots = 2;
+      const slotRow = (i) => document.querySelector(`#row-slot-${i}`);
+      const showSlot = (i) => { const row = slotRow(i); if (row) row.classList.remove('d-none'); if (visibleSlots < i) visibleSlots = i; updateAddMoreBtn(); };
+      const hideSlot = (i) => { const row = slotRow(i); if (row) row.classList.add('d-none'); };
+      const updateAddMoreBtn = () => { const btn = $("#addMoreBtn"); if (!btn) return; btn.classList.toggle('d-none', visibleSlots >= MAX_SLOTS); };
+      const revealNextSlot = () => { if (visibleSlots < MAX_SLOTS) showSlot(visibleSlots + 1); };
+      $("#addMoreBtn")?.addEventListener('click', revealNextSlot);
+      const slotHasData = (rec, i) => {
+        const has = (k) => rec && rec[k] != null && String(rec[k]).trim() !== '';
+        return has(`link_${i}`) || has(`post_date_${i}`) || has(`screenshot_${i}_url`) || has(`screenshot_${i}_path`);
+      };
+      const resetSlotVisibility = () => { visibleSlots = 2; for (let i = 3; i <= MAX_SLOTS; i++) hideSlot(i); updateAddMoreBtn(); };
+
       // ===== UI helpers
       const setTitle = (txt) => { $("#mainCampaignTitle").textContent = txt || 'My Campaign'; };
       const isComplete = (rec) => hasVal(rec?.link_1) && hasVal(rec?.post_date_1);
+
+      // Acquisition elements
+      const acquisitionEl = $("#acquisition_method");
+      const purchaseWrap = $("#purchaseFields");
+      const purchasePlatformEl = $("#purchase_platform");
+      const purchasePriceEl = $("#purchase_price");
+      const shippingWrap = $("#shippingFields");
+      const shippingCourierEl = $("#shipping_courier");
+      const shippingResiEl = $("#shipping_tracking_number");
+      // Invoice
+      const invoiceEl = $("#invoice_file");
+      const invoiceView = $("#invoice_file_view");
+      const invoiceCol = invoiceEl?.closest(".col-md-6");
+
+      // === Contact DOM
+      const contactPhoneEl = $("#contact_phone");
+      const contactEmailEl = $("#contact_email");
+      const contactAddressEl = $("#contact_address");
+      const saveContactBtn = $("#saveContactBtn");
+
+      const applyAcquisitionVisibility = () => {
+        const mode = acquisitionEl.value;
+        const showBuy = mode === 'buy';
+        const showShip = mode === 'sent_by_brand';
+        const hasInvoiceRemote = !!getFileUrl(currentSubmission, 'invoice_file');
+
+        // Purchase
+        purchaseWrap.classList.toggle('d-none', !showBuy);
+        [purchasePlatformEl, purchasePriceEl].forEach(el => {
+          if (!el) return;
+          if (showBuy) { el.removeAttribute('disabled'); el.setAttribute('required','required'); }
+          else { el.setAttribute('disabled','disabled'); el.removeAttribute('required'); el.value = ''; }
+        });
+
+        // Invoice visibility with BUY
+        if (invoiceCol) invoiceCol.classList.toggle('d-none', !showBuy);
+        if (invoiceEl) {
+          if (showBuy) { invoiceEl.removeAttribute('disabled'); if (!hasInvoiceRemote) invoiceEl.setAttribute('required','required'); else invoiceEl.removeAttribute('required'); }
+          else {
+            invoiceEl.setAttribute('disabled','disabled');
+            invoiceEl.removeAttribute('required'); invoiceEl.value = '';
+            if (invoiceView) { invoiceView.classList.add('d-none'); invoiceView.removeAttribute('href'); delete invoiceView.dataset.remote; }
+          }
+        }
+
+        // Shipping VIEW-ONLY (never editable)
+        shippingWrap.classList.toggle('d-none', !showShip);
+        [shippingCourierEl, shippingResiEl].forEach(el => {
+          if (!el) return;
+          el.setAttribute('disabled','disabled');
+          el.removeAttribute('required');
+        });
+      };
+      acquisitionEl.addEventListener('change', applyAcquisitionVisibility);
 
       const updateButtonsVisibility = () => {
         const hasRecord = !!currentSubmission?.id;
@@ -306,37 +507,98 @@ export function render(target, params, query = {}, labelOverride = null) {
         $("#link-2").value = safe(rec.link_2, '');
         $("#post_date_1").value = toInputDate(rec.post_date_1);
         $("#post_date_2").value = toInputDate(rec.post_date_2);
-        $("#purchase_platform").value = safe(rec.purchase_platform, '');
+        for (let i = 3; i <= MAX_SLOTS; i++) {
+          $("#link-"+i).value = safe(rec[`link_${i}`], '');
+          $("#post_date_"+i).value = toInputDate(rec[`post_date_${i}`]);
+        }
+        $("#acquisition_method").value         = safe(rec.acquisition_method, '');
+        $("#purchase_platform").value          = safe(rec.purchase_platform, '');
+        $("#purchase_price").value             = safe(rec.purchase_price, '');
+        $("#shipping_courier").value           = safe(rec.shipping_courier, '');
+        $("#shipping_tracking_number").value   = safe(rec.shipping_tracking_number, '');
+
+        resetSlotVisibility();
+        for (let i = 3; i <= MAX_SLOTS; i++) if (slotHasData(rec, i)) showSlot(i);
+        updateAddMoreBtn();
+
+        applyAcquisitionVisibility();
+      };
+
+      // Contact helpers
+      const pickFirst = (obj, keys = []) => {
+        if (!obj) return '';
+        for (const k of keys) if (Object.prototype.hasOwnProperty.call(obj, k) && hasVal(obj[k])) return String(obj[k]);
+        return '';
+      };
+      const getContactFrom = (rec) => {
+        // Try typical keys
+        const phone = pickFirst(rec, ['phone','phone_number','whatsapp','wa','mobile','telp','no_hp','contact_phone']);
+        const email = pickFirst(rec, ['email','contact_email','kol_email']);
+        const addr  = pickFirst(rec, ['address','alamat','street_address','shipping_address','domicile','address_line','full_address']);
+        return { phone, email, addr };
+      };
+      const fillContactFields = (reg, fallback = {}) => {
+        const fromReg = getContactFrom(reg || {});
+        const phone = fromReg.phone || fallback.phone || '';
+        const email = fromReg.email || fallback.email || '';
+        const addr  = fromReg.addr  || fallback.addr  || '';
+        contactPhoneEl.value = phone;
+        contactEmailEl.value = email;
+        contactAddressEl.value = addr;
       };
 
       const applyViewMode = () => {
         const controls = [
-          { id: 'link-1',              key: 'link_1',            required: true  },
-          { id: 'post_date_1',         key: 'post_date_1',       required: true  },
-          { id: 'link-2',              key: 'link_2',            required: false },
-          { id: 'post_date_2',         key: 'post_date_2',       required: false },
-          { id: 'purchase_platform',   key: 'purchase_platform', required: false },
+          // slots 1–5
+          { id: 'link-1',  key: 'link_1',  required: true  },
+          { id: 'post_date_1', key: 'post_date_1', required: true  },
+          { id: 'link-2',  key: 'link_2',  required: false },
+          { id: 'post_date_2', key: 'post_date_2', required: false },
+          { id: 'link-3',  key: 'link_3',  required: false },
+          { id: 'post_date_3', key: 'post_date_3', required: false },
+          { id: 'link-4',  key: 'link_4',  required: false },
+          { id: 'post_date_4', key: 'post_date_4', required: false },
+          { id: 'link-5',  key: 'link_5',  required: false },
+          { id: 'post_date_5', key: 'post_date_5', required: false },
+          // acquisition (shipping tetap view-only)
+          { id: 'acquisition_method', key: 'acquisition_method', required: false },
+          { id: 'purchase_platform',  key: 'purchase_platform',  required: false },
+          { id: 'purchase_price',     key: 'purchase_price',     required: false },
         ];
         controls.forEach(({ id, key, required }) => {
           const el = $("#"+id);
           if (!el) return;
           const filled = hasVal(currentSubmission?.[key]);
           el.disabled = filled;
-          if (!filled && required) el.setAttribute('required','required');
-          else el.removeAttribute('required');
+          if (!filled && required) el.setAttribute('required','required'); else el.removeAttribute('required');
         });
 
-        setFileControls('screenshot_1',     getFileUrl(currentSubmission, 'screenshot_1'),     { editMode: false });
-        setFileControls('screenshot_2',     getFileUrl(currentSubmission, 'screenshot_2'),     { editMode: false });
-        setFileControls('invoice_file',     getFileUrl(currentSubmission, 'invoice_file'),     { editMode: false, btnText: 'Lihat File' });
-        setFileControls('review_proof_file',getFileUrl(currentSubmission, 'review_proof_file'),{ editMode: false, btnText: 'Lihat File' });
+        // shipping inputs ALWAYS disabled (view-only)
+        [shippingCourierEl, shippingResiEl].forEach(el => { el?.setAttribute('disabled','disabled'); el?.removeAttribute('required'); });
+
+        // file controls
+        setFileControls('screenshot_1', getFileUrl(currentSubmission, 'screenshot_1'), { editMode: false });
+        setFileControls('screenshot_2', getFileUrl(currentSubmission, 'screenshot_2'), { editMode: false });
+        setFileControls('screenshot_3', getFileUrl(currentSubmission, 'screenshot_3'), { editMode: false });
+        setFileControls('screenshot_4', getFileUrl(currentSubmission, 'screenshot_4'), { editMode: false });
+        setFileControls('screenshot_5', getFileUrl(currentSubmission, 'screenshot_5'), { editMode: false });
+        setFileControls('invoice_file',  getFileUrl(currentSubmission, 'invoice_file'),  { editMode: false, btnText: 'Lihat File' });
+        setFileControls('review_proof_file', getFileUrl(currentSubmission, 'review_proof_file'), { editMode: false, btnText: 'Lihat File' });
 
         $("#existingNotice")?.classList.remove('d-none');
+        applyAcquisitionVisibility();
         updateButtonsVisibility();
+        updateAddMoreBtn();
       };
 
       const applyEditMode = () => {
-        ['link-1','post_date_1','link-2','post_date_2','purchase_platform'].forEach(id => {
+        [
+          // slots 1–5
+          'link-1','post_date_1','link-2','post_date_2',
+          'link-3','post_date_3','link-4','post_date_4','link-5','post_date_5',
+          // acquisition (shipping tetap tidak diedit)
+          'acquisition_method','purchase_platform','purchase_price'
+        ].forEach(id => {
           const el = $("#"+id);
           if (!el) return;
           el.disabled = false;
@@ -344,13 +606,21 @@ export function render(target, params, query = {}, labelOverride = null) {
           else el.removeAttribute('required');
         });
 
-        setFileControls('screenshot_1',     getFileUrl(currentSubmission, 'screenshot_1'),     { editMode: true });
-        setFileControls('screenshot_2',     getFileUrl(currentSubmission, 'screenshot_2'),     { editMode: true });
-        setFileControls('invoice_file',     getFileUrl(currentSubmission, 'invoice_file'),     { editMode: true, btnText: 'Lihat File' });
-        setFileControls('review_proof_file',getFileUrl(currentSubmission, 'review_proof_file'),{ editMode: true, btnText: 'Lihat File' });
+        // shipping: tetap disabled (view-only)
+        [shippingCourierEl, shippingResiEl].forEach(el => { el?.setAttribute('disabled','disabled'); el?.removeAttribute('required'); });
+
+        setFileControls('screenshot_1', getFileUrl(currentSubmission, 'screenshot_1'), { editMode: true });
+        setFileControls('screenshot_2', getFileUrl(currentSubmission, 'screenshot_2'), { editMode: true });
+        setFileControls('screenshot_3', getFileUrl(currentSubmission, 'screenshot_3'), { editMode: true });
+        setFileControls('screenshot_4', getFileUrl(currentSubmission, 'screenshot_4'), { editMode: true });
+        setFileControls('screenshot_5', getFileUrl(currentSubmission, 'screenshot_5'), { editMode: true });
+        setFileControls('invoice_file',  getFileUrl(currentSubmission, 'invoice_file'),  { editMode: true, btnText: 'Lihat File' });
+        setFileControls('review_proof_file', getFileUrl(currentSubmission, 'review_proof_file'), { editMode: true, btnText: 'Lihat File' });
 
         $("#existingNotice")?.classList.remove('d-none');
+        applyAcquisitionVisibility();
         updateButtonsVisibility();
+        updateAddMoreBtn();
       };
 
       const clearSubmissionView = () => {
@@ -359,7 +629,11 @@ export function render(target, params, query = {}, labelOverride = null) {
         $("#existingNotice")?.classList.add('d-none');
         $("#submissionForm").reset();
 
-        ['link-1','post_date_1','link-2','post_date_2','purchase_platform'].forEach(id => {
+        [
+          'link-1','post_date_1','link-2','post_date_2',
+          'link-3','post_date_3','link-4','post_date_4','link-5','post_date_5',
+          'acquisition_method','purchase_platform','purchase_price'
+        ].forEach(id => {
           const el = $("#"+id);
           if (!el) return;
           el.disabled = false;
@@ -367,24 +641,24 @@ export function render(target, params, query = {}, labelOverride = null) {
           else el.removeAttribute('required');
         });
 
+        // keep shipping view-only
+        [shippingCourierEl, shippingResiEl].forEach(el => { el?.setAttribute('disabled','disabled'); el?.removeAttribute('required'); el.value=''; });
+
         setFileControls('screenshot_1', '', { editMode: true });
         setFileControls('screenshot_2', '', { editMode: true });
+        setFileControls('screenshot_3', '', { editMode: true });
+        setFileControls('screenshot_4', '', { editMode: true });
+        setFileControls('screenshot_5', '', { editMode: true });
         setFileControls('invoice_file', '', { editMode: true });
         setFileControls('review_proof_file', '', { editMode: true });
+
+        applyAcquisitionVisibility();
+        resetSlotVisibility();
         updateButtonsVisibility();
       };
 
-      const enterEditMode = () => {
-        if (!currentSubmission?.id) return;
-        isEditing = true;
-        applyEditMode();
-      };
-      const exitEditMode = () => {
-        if (!currentSubmission?.id) return;
-        isEditing = false;
-        fillSubmissionValues(currentSubmission);
-        applyViewMode();
-      };
+      const enterEditMode = () => { if (currentSubmission?.id) { isEditing = true; applyEditMode(); } };
+      const exitEditMode  = () => { if (currentSubmission?.id) { isEditing = false; fillSubmissionValues(currentSubmission); applyViewMode(); } };
 
       // API helpers
       const fetchSubmissionForCampaign = async ({ tiktok_user_id, campaign_id }) => {
@@ -414,7 +688,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         return await r.json();
       };
 
-      // fetch regs by username (untuk pseudo / user belum connect)
       const fetchRegsByUsername = async (uname) => {
         if (!uname) return [];
         const qs = new URLSearchParams({
@@ -448,17 +721,18 @@ export function render(target, params, query = {}, labelOverride = null) {
 
       const loadSubmissionForSelected = async () => {
         isEditing = false;
-        if (!openId || !selectedCampaignId) { clearSubmissionView(); return; }
+        if (!openId || !selectedCampaignId) { clearSubmissionView(); fillContactFields(null, {}); return; }
         try {
           showLoader();
+          // set currentRegistration for this campaign
+          currentRegistration = regsMapByCampaign.get(Number(selectedCampaignId)) || null;
+          const contactFallback = getContactFrom(currentRegistration || {});
+          fillContactFields(currentRegistration, contactFallback);
+
           const rec = await fetchSubmissionForCampaign({ tiktok_user_id: openId, campaign_id: selectedCampaignId });
           currentSubmission = rec || null;
-          if (currentSubmission) {
-            fillSubmissionValues(currentSubmission);
-            applyViewMode();
-          } else {
-            clearSubmissionView();
-          }
+          if (currentSubmission) { fillSubmissionValues(currentSubmission); applyViewMode(); }
+          else { clearSubmissionView(); }
         } catch (e) {
           console.warn('fetchSubmissionForCampaign error', e);
           clearSubmissionView();
@@ -469,6 +743,7 @@ export function render(target, params, query = {}, labelOverride = null) {
 
       function renderCampaignButtons(items) {
         const listEl = $("#campaignList");
+        regsMapByCampaign = new Map();
         if (!Array.isArray(items) || items.length === 0) {
           listEl.innerHTML = `<div class="text-muted small">Belum ada campaign yang diikuti.</div>`;
           setTitle('My Campaign');
@@ -476,9 +751,11 @@ export function render(target, params, query = {}, labelOverride = null) {
           return;
         }
 
+        // build map & UI
         listEl.innerHTML = items.map((r, i) => {
           const c = r.campaign || {};
           const cid = c.id ?? r.campaign_id ?? '';
+          regsMapByCampaign.set(Number(cid), r);
           const cname = safe(c.name, r.campaign_name || `Campaign ${i + 1}`);
           const oid = r.tiktok_user_id || '';
           return `
@@ -492,7 +769,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         const first = listEl.querySelector('.campaign-item');
         if (first) {
           selectedCampaignId = first.getAttribute('data-campaign-id');
-          openId = first.getAttribute('data-open-id') || openId; // per-campaign openId
+          openId = first.getAttribute('data-open-id') || openId;
           setTitle(first.textContent.trim());
         }
 
@@ -510,11 +787,68 @@ export function render(target, params, query = {}, labelOverride = null) {
         loadSubmissionForSelected();
       }
 
+      // Save Contact button
+      saveContactBtn?.addEventListener('click', async () => {
+        if (!currentRegistration?.id) {
+          showToast('Registrasi untuk campaign ini tidak ditemukan.', 'error');
+          return;
+        }
+        const phone = contactPhoneEl.value.trim();
+        const email = contactEmailEl.value.trim();
+        const addr  = contactAddressEl.value.trim();
+
+        // minimal validation email jika diisi
+        if (email && !/^\S+@\S+\.\S+$/.test(email)) {
+          showToast('Format email tidak valid.', 'error');
+          return;
+        }
+
+        const fd = new FormData();
+        // terima berbagai key umum di backend (pilih yang didukung)
+        fd.set('_method', 'PATCH');
+        if (phone) { fd.set('phone', phone); fd.set('contact_phone', phone); }
+        if (email) { fd.set('email', email); fd.set('contact_email', email); }
+        if (addr)  { fd.set('address', addr); fd.set('alamat', addr); fd.set('shipping_address', addr); }
+
+        try {
+          showLoader();
+          let resp;
+          if (typeof influencerService?.update === 'function') {
+            resp = await influencerService.update(currentRegistration.id, fd);
+          } else {
+            const r = await fetch(`/api/influencer-registrations/${currentRegistration.id}`, {
+              method: 'POST',
+              credentials: 'same-origin',
+              body: fd,
+              cache: 'no-store'
+            });
+            if (!r.ok) throw new Error('Gagal menyimpan kontak');
+            resp = await r.json();
+          }
+          showToast(resp?.message || 'Kontak berhasil disimpan');
+          // refresh reg in map (optional)
+          try {
+            const r = await fetch(`/api/influencer-registrations/${currentRegistration.id}?_=${Date.now()}`, {
+              headers: { 'Accept':'application/json' }, credentials:'same-origin', cache:'no-store'
+            });
+            if (r.ok) {
+              const freshReg = await r.json();
+              regsMapByCampaign.set(Number(selectedCampaignId), freshReg);
+              currentRegistration = freshReg;
+            }
+          } catch {}
+        } catch (err) {
+          showToast(err.message || 'Gagal menyimpan kontak', 'error');
+        } finally {
+          hideLoader();
+        }
+      });
+
       // Tombol Edit/Batal
       $("#editBtn")?.addEventListener('click', enterEditMode);
       $("#cancelEditBtn")?.addEventListener('click', exitEditMode);
 
-      // Submit handler
+      // Submit handler (submission only; shipping tidak pernah dikirim dari KOL)
       const form = $("#submissionForm");
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -537,24 +871,41 @@ export function render(target, params, query = {}, labelOverride = null) {
           const el = $("#"+id);
           if (!el) return;
           const name = key || id.replace(/-/g,'_');
-          if (force) {
-            if (hasVal(el.value)) fd.set(name, el.value.trim());
-          } else {
-            if (!el.disabled && hasVal(el.value)) fd.set(name, el.value.trim());
-          }
+          if (force) { if (hasVal(el.value)) fd.set(name, el.value.trim()); }
+          else { if (!el.disabled && hasVal(el.value)) fd.set(name, el.value.trim()); }
         };
+
+        // slot 1–5
         addField('link-1','link_1', forceAll);
         addField('post_date_1','post_date_1', forceAll);
         addField('link-2','link_2', forceAll);
         addField('post_date_2','post_date_2', forceAll);
-        addField('purchase_platform','purchase_platform', forceAll);
+        addField('link-3','link_3', forceAll);
+        addField('post_date_3','post_date_3', forceAll);
+        addField('link-4','link_4', forceAll);
+        addField('post_date_4','post_date_4', forceAll);
+        addField('link-5','link_5', forceAll);
+        addField('post_date_5','post_date_5', forceAll);
 
+        // acquisition (TANPA shipping)
+        addField('acquisition_method','acquisition_method', forceAll);
+        addField('purchase_platform','purchase_platform', forceAll);
+        addField('purchase_price','purchase_price', forceAll);
+        // NOTE: shipping_courier & shipping_tracking_number tidak dikirim dari KOL
+
+        // Files
         const sc1 = $("#screenshot_1")?.files?.[0];
         const sc2 = $("#screenshot_2")?.files?.[0];
+        const sc3 = $("#screenshot_3")?.files?.[0];
+        const sc4 = $("#screenshot_4")?.files?.[0];
+        const sc5 = $("#screenshot_5")?.files?.[0];
         const inv = $("#invoice_file")?.files?.[0];
         const rev = $("#review_proof_file")?.files?.[0];
         if (sc1) fd.set('screenshot_1', sc1);
         if (sc2) fd.set('screenshot_2', sc2);
+        if (sc3) fd.set('screenshot_3', sc3);
+        if (sc4) fd.set('screenshot_4', sc4);
+        if (sc5) fd.set('screenshot_5', sc5);
         if (inv) fd.set('invoice_file', inv);
         if (rev) fd.set('review_proof_file', rev);
 
@@ -609,11 +960,11 @@ export function render(target, params, query = {}, labelOverride = null) {
       });
 
       // Preview untuk semua input file (local blob)
-      ['screenshot_1','screenshot_2','invoice_file','review_proof_file'].forEach(wirePreview);
+      ['screenshot_1','screenshot_2','screenshot_3','screenshot_4','screenshot_5','invoice_file','review_proof_file'].forEach(wirePreview);
 
-      // ======== Load profile + campaigns (session-first, merged regs) ========
+      // ======== Load profile + campaigns ========
       try {
-        // 1) session /me/tiktok (boleh kosong)
+        // 1) session /me/tiktok
         let me = {};
         try {
           const res = await fetch('/me/tiktok', {
@@ -638,7 +989,7 @@ export function render(target, params, query = {}, labelOverride = null) {
           img.classList.remove('d-none');
         }
 
-        // 4) ambil regs by-ID & by-username, lalu merge
+        // 4) regs by open_id + by username → merge unik per campaign
         let regsById = [];
         if (profile.tiktok_user_id) {
           const result = await influencerService.getAll({
@@ -652,13 +1003,15 @@ export function render(target, params, query = {}, labelOverride = null) {
         const regsByUname = profile.tiktok_username ? await fetchRegsByUsername(profile.tiktok_username) : [];
         const regs = mergeRegsUniqueByCampaign(regsById, regsByUname);
 
-        // 5) render campaign list
         renderCampaignButtons(regs);
       } catch (e) {
         console.warn('Load profile/campaigns failed (merged):', e);
         renderCampaignButtons([]);
       }
-      // ========================================================================
+
+      // Init visibility
+      applyAcquisitionVisibility();
+      resetSlotVisibility();
 
       // Logout
       $("#logoutBtn")?.addEventListener('click', async () => {

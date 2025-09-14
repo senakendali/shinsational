@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Validator;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -605,77 +606,67 @@ protected function oembedAuthor(?string $url): ?array
 
 
 
+    // App\Http\Controllers\Api\InfluencerSubmissionController.php
+
     public function index(Request $request)
     {
-        $perPage  = (int) $request->get('per_page', 15);
-        $include  = (string) $request->get('include', ''); // "campaign" kalau mau ikut relasi
+        $perPage = (int) $request->input('per_page', 10);
 
-        // Subquery: registrasi terbaru per (tiktok_user_id, campaign_id)
-        $latestPerPair = \App\Models\InfluencerRegistration::query()
-            ->selectRaw('tiktok_user_id, campaign_id, MAX(id) as latest_id')
-            ->groupBy('tiktok_user_id', 'campaign_id');
+        $q = \App\Models\InfluencerSubmission::query()
+            ->select([
+                'influencer_submissions.*', // semua kolom submission, termasuk acquisition/shipping
+                \DB::raw('influencer_submissions.created_at as submission_created_at'),
+                \DB::raw('influencer_submissions.updated_at as submission_updated_at'),
+            ])
+            ->addSelect([
+                // identitas dasar
+                'full_name' => \App\Models\InfluencerRegistration::select('full_name')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+                'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+                'profile_pic_url' => \App\Models\InfluencerRegistration::select('profile_pic_url')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
 
-        // Base: ambil row registrasi TERBARU per pair
-        $query = \App\Models\InfluencerRegistration::query()
-            ->from('influencer_registrations as ir')
-            ->joinSub($latestPerPair, 'lp', function ($join) {
-                $join->on('lp.tiktok_user_id', '=', 'ir.tiktok_user_id')
-                    ->on('lp.campaign_id', '=', 'ir.campaign_id')
-                    ->on('lp.latest_id', '=', 'ir.id');
-            });
+                // kontak
+                'phone' => \App\Models\InfluencerRegistration::select('phone')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+                'email' => \App\Models\InfluencerRegistration::select('email')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+                'address' => \App\Models\InfluencerRegistration::select('address')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+            ])
+            ->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name']);
 
-        // Filter
+        // filter opsional
         if ($request->filled('tiktok_user_id')) {
-            $query->where('ir.tiktok_user_id', (string) $request->string('tiktok_user_id'));
+            $q->where('influencer_submissions.tiktok_user_id', $request->input('tiktok_user_id'));
         }
         if ($request->filled('campaign_id')) {
-            $query->where('ir.campaign_id', (int) $request->integer('campaign_id'));
+            $q->where('influencer_submissions.campaign_id', (int) $request->input('campaign_id'));
         }
 
-        // LEFT JOIN submissions → kalau belum submit, kolom2 submission = NULL
-        $query->leftJoin('influencer_submissions as s', function ($join) {
-            $join->on('s.tiktok_user_id', '=', 'ir.tiktok_user_id')
-                ->on('s.campaign_id', '=', 'ir.campaign_id');
-        });
+        // urutkan terbaru di-update
+        $q->latest('influencer_submissions.updated_at');
 
-        // Select kolom profil dari registrasi + kolom submission (alias id submission → "id")
-        $query->select([
-            'ir.tiktok_user_id',
-            'ir.campaign_id',
-            'ir.full_name',
-            'ir.tiktok_username',
-            'ir.profile_pic_url',
-
-            // kolom submission; "id" diset dari s.id agar kompatibel dengan UI (edit/refresh)
-            \DB::raw('s.id as id'),
-            's.link_1', 's.post_date_1', 's.screenshot_1_path',
-            's.link_2', 's.post_date_2', 's.screenshot_2_path',
-            's.purchase_platform',
-            's.invoice_file_path', 's.review_proof_file_path',
-
-            's.views_1','s.likes_1','s.comments_1','s.shares_1',
-            's.views_2','s.likes_2','s.comments_2','s.shares_2',
-
-            \DB::raw('s.created_at as submission_created_at'),
-            \DB::raw('s.updated_at as submission_updated_at'),
-
-            // flag bantu untuk UI: 0 = belum ada submission
-            \DB::raw('CASE WHEN s.id IS NULL THEN 0 ELSE 1 END AS has_submission'),
-        ]);
-
-        // Include relasi campaign (dari model InfluencerRegistration → belongsTo Campaign)
-        if ($include === 'campaign') {
-            $query->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name']);
+        if ($perPage === 0) {
+            return response()->json($q->get());
         }
-
-        // Urutan: yang ada submission (updated terbaru) dulu, lalu yang belum submit (urut berdasarkan registrasi)
-        $query->orderByRaw('has_submission DESC')
-            ->orderByDesc(\DB::raw('COALESCE(s.updated_at, ir.id)'));
-
-        return response()->json(
-            $query->paginate($perPage)
-        );
+        return response()->json($q->paginate($perPage));
     }
+
+
 
 
     /**
@@ -683,30 +674,55 @@ protected function oembedAuthor(?string $url): ?array
      */
     public function show($id)
     {
-        $submission = InfluencerSubmission::query()
+        $submission = \App\Models\InfluencerSubmission::query()
             ->select('influencer_submissions.*')
             ->addSelect([
+                // identitas dasar
                 'full_name' => \App\Models\InfluencerRegistration::select('full_name')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()
-                    ->limit(1),
+                    ->latest()->limit(1),
                 'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()
-                    ->limit(1),
+                    ->latest()->limit(1),
                 'profile_pic_url' => \App\Models\InfluencerRegistration::select('profile_pic_url')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()
-                    ->limit(1),
+                    ->latest()->limit(1),
+
+                // kontak
+                'phone' => \App\Models\InfluencerRegistration::select('phone')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+                'email' => \App\Models\InfluencerRegistration::select('email')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+                'address' => \App\Models\InfluencerRegistration::select('address')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
             ])
             ->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])
             ->findOrFail($id);
 
+        // pastikan accessor URL ikut keluar (kalau model $appends belum mencakup semuanya)
+        $submission->append([
+            'screenshot_1_url',
+            'screenshot_2_url',
+            'screenshot_3_url',
+            'screenshot_4_url',
+            'screenshot_5_url',
+            'invoice_file_url',
+            'review_proof_file_url',
+        ]);
+
         return response()->json($submission);
     }
+
+
 
 
     /**
@@ -717,107 +733,192 @@ protected function oembedAuthor(?string $url): ?array
      * - purchase_platform (tiktokshop|shopee)
      * - invoice_file (file), review_proof_file (file)
      */
+    
+
+
     public function store(Request $request)
     {
-        // Validasi dasar + METRIK
-        $validated = $request->validate(
-            [
-                'tiktok_user_id'  => ['required','string','max:100'],
-                'campaign_id'     => ['required','integer','exists:campaigns,id'],
+        // --- Cari existing submission dulu (buat relaksasi syarat invoice kalau sudah ada) ---
+        $existing = InfluencerSubmission::query()
+            ->where('campaign_id', $request->input('campaign_id'))
+            ->where('tiktok_user_id', $request->input('tiktok_user_id'))
+            ->first();
 
-                'link_1'          => ['required','url','max:2048'],
-                'post_date_1'     => ['nullable','date'],
-                'screenshot_1'    => ['nullable','file','mimes:jpg,jpeg,png,webp','max:5120'],
+        // ---------- VALIDATION ----------
+        $rules = [
+            'tiktok_user_id'  => ['required','string','max:100'],
+            'campaign_id'     => ['required','integer','exists:campaigns,id'],
 
-                'link_2'          => ['nullable','url','max:2048'],
-                'post_date_2'     => ['nullable','date'],
-                'screenshot_2'    => ['nullable','file','mimes:jpg,jpeg,png,webp','max:5120'],
+            // slot 1
+            'link_1'          => ['required','url','max:2048'],
+            'post_date_1'     => ['nullable','date'],
+            'screenshot_1'    => ['nullable','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
-                'purchase_platform'   => ['nullable', Rule::in(['tiktokshop','shopee'])],
-                'invoice_file'        => ['nullable','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
-                'review_proof_file'   => ['nullable','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
+            // slot 2
+            'link_2'          => ['nullable','url','max:2048'],
+            'post_date_2'     => ['nullable','date'],
+            'screenshot_2'    => ['nullable','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
-                // KPI lama (opsional)
-                'yellow_cart'     => ['nullable','integer','min:0'],
-                'product_sold'    => ['nullable','integer','min:0'],
-                'gmv'             => ['nullable','numeric','min:0'],
+            // slot 3–5 (opsional)
+            'link_3'          => ['nullable','url','max:2048'],
+            'post_date_3'     => ['nullable','date'],
+            'screenshot_3'    => ['nullable','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
-                // 🔽 METRIK BARU per slot (opsional)
-                'views_1'         => ['nullable','integer','min:0'],
-                'likes_1'         => ['nullable','integer','min:0'],
-                'comments_1'      => ['nullable','integer','min:0'],
-                'shares_1'        => ['nullable','integer','min:0'],
+            'link_4'          => ['nullable','url','max:2048'],
+            'post_date_4'     => ['nullable','date'],
+            'screenshot_4'    => ['nullable','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
-                'views_2'         => ['nullable','integer','min:0'],
-                'likes_2'         => ['nullable','integer','min:0'],
-                'comments_2'      => ['nullable','integer','min:0'],
-                'shares_2'        => ['nullable','integer','min:0'],
-            ],
-            [
-                'tiktok_user_id.required' => 'ID TikTok wajib diisi.',
-                'campaign_id.required'    => 'Campaign wajib dipilih.',
-                'link_1.required'         => 'Link postingan 1 wajib diisi.',
-                // 'link_2.required'      => 'Link postingan 2 wajib diisi.', // opsional
-            ]
-        );
+            'link_5'          => ['nullable','url','max:2048'],
+            'post_date_5'     => ['nullable','date'],
+            'screenshot_5'    => ['nullable','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
-        // Pastikan campaign ada (optional double-check)
-        $campaign = Campaign::findOrFail($validated['campaign_id']);
+            // purchase & docs
+            'purchase_platform' => ['nullable', Rule::in(['tiktokshop','shopee'])],
+            'invoice_file'      => ['nullable','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
+            'review_proof_file' => ['nullable','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
 
-        // Idempotent: satu submission per (campaign_id, tiktok_user_id)
-        $submission = InfluencerSubmission::firstOrNew([
-            'campaign_id'    => $validated['campaign_id'],
-            'tiktok_user_id' => $validated['tiktok_user_id'],
+            // KPI lama (opsional)
+            'yellow_cart'     => ['nullable','integer','min:0'],
+            'product_sold'    => ['nullable','integer','min:0'],
+            'gmv'             => ['nullable','numeric','min:0'],
+
+            // Metrik baru (opsional, masih slot 1–2)
+            'views_1'         => ['nullable','integer','min:0'],
+            'likes_1'         => ['nullable','integer','min:0'],
+            'comments_1'      => ['nullable','integer','min:0'],
+            'shares_1'        => ['nullable','integer','min:0'],
+            'views_2'         => ['nullable','integer','min:0'],
+            'likes_2'         => ['nullable','integer','min:0'],
+            'comments_2'      => ['nullable','integer','min:0'],
+            'shares_2'        => ['nullable','integer','min:0'],
+
+            // ★ acquisition & shipping
+            'acquisition_method'       => ['nullable', Rule::in(['buy','sent_by_brand'])],
+            'purchase_price'           => ['nullable','numeric','min:0'],
+            'shipping_courier'         => ['nullable','string','max:100'],
+            'shipping_tracking_number' => ['nullable','string','max:100'],
+        ];
+
+        $messages = [
+            'tiktok_user_id.required' => 'ID TikTok wajib diisi.',
+            'campaign_id.required'    => 'Campaign wajib dipilih.',
+            'link_1.required'         => 'Link postingan 1 wajib diisi.',
+        ];
+
+        $v = Validator::make($request->all(), $rules, $messages);
+
+        // BUY ⇒ wajib platform & price
+        $v->sometimes(['purchase_platform','purchase_price'], 'required', function ($input) {
+            return ($input->acquisition_method === 'buy');
+        });
+        // BUY ⇒ invoice wajib HANYA jika belum ada invoice sebelumnya
+        $v->sometimes('invoice_file', 'required', function ($input) use ($existing) {
+            return ($input->acquisition_method === 'buy') && !($existing && $existing->invoice_file_path);
+        });
+        // SENT_BY_BRAND ⇒ wajib shipping fields
+        /*$v->sometimes(['shipping_courier','shipping_tracking_number'], 'required', function ($input) {
+            return ($input->acquisition_method === 'sent_by_brand');
+        });*/
+
+        $validated = $v->validate();
+
+        // ---------- UPSERT RECORD ----------
+        $submission = $existing ?: InfluencerSubmission::firstOrNew([
+            'campaign_id'    => (int) $validated['campaign_id'],
+            'tiktok_user_id' => (string) $validated['tiktok_user_id'],
         ]);
 
-        // Helper simpan file
+        // ---------- FILE HELPERS ----------
         $baseDir = "submissions/{$validated['campaign_id']}/{$validated['tiktok_user_id']}";
         $saveFile = function (? \Illuminate\Http\UploadedFile $file, string $prefix) use ($baseDir) {
             if (!$file) return null;
-            $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+            $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
             $name = $prefix . '_' . Str::uuid() . '.' . $ext;
-            return $file->storeAs($baseDir, $name, 'public'); // path relatif di disk 'public'
+            return $file->storeAs($baseDir, $name, 'public'); // relative path on 'public'
         };
 
-        // Jika update & ada file baru → hapus file lama
-        if ($request->hasFile('screenshot_1') && $submission->screenshot_1_path) {
-            Storage::disk('public')->delete($submission->screenshot_1_path);
-        }
-        if ($request->hasFile('screenshot_2') && $submission->screenshot_2_path) {
-            Storage::disk('public')->delete($submission->screenshot_2_path);
-        }
-        if ($request->hasFile('invoice_file') && $submission->invoice_file_path) {
-            Storage::disk('public')->delete($submission->invoice_file_path);
-        }
-        if ($request->hasFile('review_proof_file') && $submission->review_proof_file_path) {
-            Storage::disk('public')->delete($submission->review_proof_file_path);
+        // Hapus file lama bila upload baru
+        foreach ([
+            'screenshot_1' => 'screenshot_1_path',
+            'screenshot_2' => 'screenshot_2_path',
+            'screenshot_3' => 'screenshot_3_path',
+            'screenshot_4' => 'screenshot_4_path',
+            'screenshot_5' => 'screenshot_5_path',
+            'invoice_file' => 'invoice_file_path',
+            'review_proof_file' => 'review_proof_file_path',
+        ] as $inputName => $column) {
+            if ($request->hasFile($inputName) && $submission->$column) {
+                Storage::disk('public')->delete($submission->$column);
+            }
         }
 
-        // Simpan file baru (jika ada)
-        $s1Path = $saveFile($request->file('screenshot_1'), 's1');
-        $s2Path = $saveFile($request->file('screenshot_2'), 's2');
+        // Simpan file baru
+        $s1Path  = $saveFile($request->file('screenshot_1'), 's1');
+        $s2Path  = $saveFile($request->file('screenshot_2'), 's2');
+        $s3Path  = $saveFile($request->file('screenshot_3'), 's3');
+        $s4Path  = $saveFile($request->file('screenshot_4'), 's4');
+        $s5Path  = $saveFile($request->file('screenshot_5'), 's5');
         $invPath = $saveFile($request->file('invoice_file'), 'invoice');
         $revPath = $saveFile($request->file('review_proof_file'), 'review');
 
-        // Set kolom-kolom utama
-        $submission->link_1              = $validated['link_1'];
-        $submission->post_date_1         = $validated['post_date_1'] ?? null;
-        $submission->link_2              = $validated['link_2'] ?? null;
-        $submission->post_date_2         = $validated['post_date_2'] ?? null;
-        $submission->purchase_platform   = $validated['purchase_platform'] ?? null;
+        // ---------- ASSIGN FIELDS ----------
+        // slot 1–2
+        $submission->link_1      = $validated['link_1'];
+        $submission->post_date_1 = $validated['post_date_1'] ?? null;
+        $submission->link_2      = $validated['link_2'] ?? $submission->link_2;
+        $submission->post_date_2 = $validated['post_date_2'] ?? $submission->post_date_2;
 
-        // Optional KPI lama
-        $submission->yellow_cart   = $validated['yellow_cart']  ?? $submission->yellow_cart;
-        $submission->product_sold  = $validated['product_sold'] ?? $submission->product_sold;
-        $submission->gmv           = $validated['gmv']          ?? $submission->gmv;
+        // slot 3–5 (opsional)
+        foreach ([3,4,5] as $i) {
+            $linkKey = "link_$i";
+            $dateKey = "post_date_$i";
+            if (array_key_exists($linkKey, $validated)) {
+                $submission->$linkKey = $validated[$linkKey];
+            }
+            if (array_key_exists($dateKey, $validated)) {
+                $submission->$dateKey = $validated[$dateKey];
+            }
+        }
 
-        // Path file (overwrite jika ada file baru)
+        // Acquisition
+        $submission->acquisition_method = $validated['acquisition_method'] ?? $submission->acquisition_method;
+
+        if (($validated['acquisition_method'] ?? null) === 'buy') {
+            $submission->purchase_platform = $validated['purchase_platform'] ?? null;
+            $submission->purchase_price    = $validated['purchase_price'] ?? null;
+            // shipping dikosongkan
+            $submission->shipping_courier         = null;
+            $submission->shipping_tracking_number = null;
+        } elseif (($validated['acquisition_method'] ?? null) === 'sent_by_brand') {
+            // kosongkan pembelian
+            $submission->purchase_platform = null;
+            $submission->purchase_price    = null;
+            // isi shipping
+            $submission->shipping_courier         = $validated['shipping_courier'] ?? null;
+            $submission->shipping_tracking_number = $validated['shipping_tracking_number'] ?? null;
+        } else {
+            // belum dipilih—biarkan sesuai input (jika ada)
+            $submission->purchase_platform = $validated['purchase_platform'] ?? $submission->purchase_platform;
+            $submission->purchase_price    = $validated['purchase_price'] ?? $submission->purchase_price;
+            $submission->shipping_courier         = $validated['shipping_courier'] ?? $submission->shipping_courier;
+            $submission->shipping_tracking_number = $validated['shipping_tracking_number'] ?? $submission->shipping_tracking_number;
+        }
+
+        // KPI lama
+        $submission->yellow_cart  = $validated['yellow_cart']  ?? $submission->yellow_cart;
+        $submission->product_sold = $validated['product_sold'] ?? $submission->product_sold;
+        $submission->gmv          = $validated['gmv']          ?? $submission->gmv;
+
+        // Path file (replace if new)
         if ($s1Path)  $submission->screenshot_1_path     = $s1Path;
         if ($s2Path)  $submission->screenshot_2_path     = $s2Path;
+        if ($s3Path)  $submission->screenshot_3_path     = $s3Path;
+        if ($s4Path)  $submission->screenshot_4_path     = $s4Path;
+        if ($s5Path)  $submission->screenshot_5_path     = $s5Path;
         if ($invPath) $submission->invoice_file_path      = $invPath;
         if ($revPath) $submission->review_proof_file_path = $revPath;
 
-        // 🔽 Set METRIK per slot (jika dikirim)
+        // Metrik (slot 1–2)
         $metricKeys = [
             'views_1','likes_1','comments_1','shares_1',
             'views_2','likes_2','comments_2','shares_2',
@@ -837,52 +938,88 @@ protected function oembedAuthor(?string $url): ?array
 
         return response()->json([
             'message' => 'Submission berhasil disimpan.',
-            'data'    => $submission->fresh(),
+            'data'    => $submission->fresh()->loadMissing(['campaign:id,name,slug,brand_id','campaign.brand:id,name']),
         ], $submission->wasRecentlyCreated ? 201 : 200);
     }
 
-
-    // App\Http\Controllers\Api\InfluencerSubmissionController.php
 
     public function update(Request $request, $id)
     {
         $submission = InfluencerSubmission::findOrFail($id);
 
-        // Validasi (semua optional/sometimes)
-        $validated = $request->validate([
+        // ---------- VALIDATION ----------
+        $rules = [
             'tiktok_user_id'    => ['sometimes','string','max:100'],
             'campaign_id'       => ['sometimes','integer','exists:campaigns,id'],
 
+            // slot 1
             'link_1'            => ['sometimes','nullable','url','max:2048'],
             'post_date_1'       => ['sometimes','nullable','date'],
             'screenshot_1'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
+            // slot 2
             'link_2'            => ['sometimes','nullable','url','max:2048'],
             'post_date_2'       => ['sometimes','nullable','date'],
             'screenshot_2'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
 
-            'purchase_platform' => ['sometimes','nullable', \Illuminate\Validation\Rule::in(['tiktokshop','shopee'])],
+            // slot 3–5
+            'link_3'            => ['sometimes','nullable','url','max:2048'],
+            'post_date_3'       => ['sometimes','nullable','date'],
+            'screenshot_3'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
+
+            'link_4'            => ['sometimes','nullable','url','max:2048'],
+            'post_date_4'       => ['sometimes','nullable','date'],
+            'screenshot_4'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
+
+            'link_5'            => ['sometimes','nullable','url','max:2048'],
+            'post_date_5'       => ['sometimes','nullable','date'],
+            'screenshot_5'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
+
+            // purchase & docs
+            'purchase_platform' => ['sometimes','nullable', Rule::in(['tiktokshop','shopee'])],
             'invoice_file'      => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
             'review_proof_file' => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
 
-            // KPI lama (opsional)
+            // KPI lama
             'yellow_cart'       => ['sometimes','nullable','integer','min:0'],
             'product_sold'      => ['sometimes','nullable','integer','min:0'],
             'gmv'               => ['sometimes','nullable','numeric','min:0'],
 
-            // 🔽 METRIK BARU per slot
+            // Metrik (slot 1–2)
             'views_1'           => ['sometimes','nullable','integer','min:0'],
             'likes_1'           => ['sometimes','nullable','integer','min:0'],
             'comments_1'        => ['sometimes','nullable','integer','min:0'],
             'shares_1'          => ['sometimes','nullable','integer','min:0'],
-
             'views_2'           => ['sometimes','nullable','integer','min:0'],
             'likes_2'           => ['sometimes','nullable','integer','min:0'],
             'comments_2'        => ['sometimes','nullable','integer','min:0'],
             'shares_2'          => ['sometimes','nullable','integer','min:0'],
-        ]);
 
-        // Base dir bisa berubah kalau campaign_id/tiktok_user_id ikut diupdate
+            // ★ acquisition & shipping
+            'acquisition_method'       => ['sometimes','nullable', Rule::in(['buy','sent_by_brand'])],
+            'purchase_price'           => ['sometimes','nullable','numeric','min:0'],
+            'shipping_courier'         => ['sometimes','nullable','string','max:100'],
+            'shipping_tracking_number' => ['sometimes','nullable','string','max:100'],
+        ];
+
+        $v = Validator::make($request->all(), $rules);
+
+        // BUY ⇒ wajib platform & price
+        $v->sometimes(['purchase_platform','purchase_price'], 'required', function ($input) {
+            return ($input->acquisition_method === 'buy');
+        });
+        // BUY ⇒ invoice wajib hanya bila belum ada sebelumnya
+        $v->sometimes('invoice_file', 'required', function ($input) use ($submission) {
+            return ($input->acquisition_method === 'buy') && !$submission->invoice_file_path;
+        });
+        // SENT_BY_BRAND ⇒ wajib shipping fields
+        $v->sometimes(['shipping_courier','shipping_tracking_number'], 'required', function ($input) {
+            return ($input->acquisition_method === 'sent_by_brand');
+        });
+
+        $validated = $v->validate();
+
+        // Base dir (kalau campaign/user ganti, arahkan ke folder baru)
         $campaignId   = $validated['campaign_id']    ?? $submission->campaign_id;
         $tiktokUserId = $validated['tiktok_user_id'] ?? $submission->tiktok_user_id;
         $baseDir = "submissions/{$campaignId}/{$tiktokUserId}";
@@ -890,49 +1027,66 @@ protected function oembedAuthor(?string $url): ?array
         $saveFile = function (? \Illuminate\Http\UploadedFile $file, string $prefix) use ($baseDir) {
             if (!$file) return null;
             $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-            $name = $prefix . '_' . \Illuminate\Support\Str::uuid() . '.' . $ext;
+            $name = $prefix . '_' . Str::uuid() . '.' . $ext;
             return $file->storeAs($baseDir, $name, 'public');
         };
 
-        // Ganti file jika ada upload baru
-        if ($request->hasFile('screenshot_1')) {
-            if ($submission->screenshot_1_path) \Storage::disk('public')->delete($submission->screenshot_1_path);
-            $submission->screenshot_1_path = $saveFile($request->file('screenshot_1'), 's1');
-        }
-        if ($request->hasFile('screenshot_2')) {
-            if ($submission->screenshot_2_path) \Storage::disk('public')->delete($submission->screenshot_2_path);
-            $submission->screenshot_2_path = $saveFile($request->file('screenshot_2'), 's2');
-        }
-        if ($request->hasFile('invoice_file')) {
-            if ($submission->invoice_file_path) \Storage::disk('public')->delete($submission->invoice_file_path);
-            $submission->invoice_file_path = $saveFile($request->file('invoice_file'), 'invoice');
-        }
-        if ($request->hasFile('review_proof_file')) {
-            if ($submission->review_proof_file_path) \Storage::disk('public')->delete($submission->review_proof_file_path);
-            $submission->review_proof_file_path = $saveFile($request->file('review_proof_file'), 'review');
+        // Replace file jika ada upload baru
+        foreach ([
+            'screenshot_1' => 'screenshot_1_path',
+            'screenshot_2' => 'screenshot_2_path',
+            'screenshot_3' => 'screenshot_3_path',
+            'screenshot_4' => 'screenshot_4_path',
+            'screenshot_5' => 'screenshot_5_path',
+            'invoice_file' => 'invoice_file_path',
+            'review_proof_file' => 'review_proof_file_path',
+        ] as $inputName => $column) {
+            if ($request->hasFile($inputName)) {
+                if ($submission->$column) Storage::disk('public')->delete($submission->$column);
+                $prefix = str_starts_with($inputName, 'screenshot_')
+                    ? 's' . substr($inputName, -1) // screenshot_1 -> s1, dst
+                    : ($inputName === 'invoice_file' ? 'invoice' : 'review');
+                $submission->$column = $saveFile($request->file($inputName), $prefix);
+            }
         }
 
-        // Assign field biasa
+        // Assign simple fields (termasuk slot 3–5 kalau ada di payload)
         foreach ([
             'tiktok_user_id','campaign_id',
             'link_1','post_date_1',
             'link_2','post_date_2',
+            'link_3','post_date_3',
+            'link_4','post_date_4',
+            'link_5','post_date_5',
             'purchase_platform',
             'yellow_cart','product_sold','gmv',
-            // 🔽 metrik
             'views_1','likes_1','comments_1','shares_1',
             'views_2','likes_2','comments_2','shares_2',
+            'acquisition_method','purchase_price',
+            'shipping_courier','shipping_tracking_number',
         ] as $field) {
             if (array_key_exists($field, $validated)) {
                 $submission->$field = $validated[$field];
             }
         }
 
-        // Set last_metrics_synced_at kalau ada metrik ikut diupdate
-        if (collect([
+        // Jika acquisition_method diubah, bersihkan kolom yang tidak relevan
+        if (array_key_exists('acquisition_method', $validated)) {
+            if ($validated['acquisition_method'] === 'buy') {
+                $submission->shipping_courier = null;
+                $submission->shipping_tracking_number = null;
+            } elseif ($validated['acquisition_method'] === 'sent_by_brand') {
+                $submission->purchase_platform = null;
+                $submission->purchase_price    = null;
+            }
+        }
+
+        // Update timestamp metrik bila ada metrik yang dikirim
+        $metricTouched = collect([
             'views_1','likes_1','comments_1','shares_1',
             'views_2','likes_2','comments_2','shares_2',
-        ])->some(fn($k) => array_key_exists($k, $validated))) {
+        ])->some(fn($k) => array_key_exists($k, $validated));
+        if ($metricTouched) {
             $submission->last_metrics_synced_at = now();
         }
 
@@ -944,122 +1098,6 @@ protected function oembedAuthor(?string $url): ?array
         ]);
     }
 
-
-    public function update__(Request $request, $id)
-    {
-        // sementara di awal update():
-        \Log::info('UPDATE payload', [
-        'all' => $request->all(),
-        'files' => array_map(fn($f) => $f?->getClientOriginalName(), $request->allFiles())
-        ]);
-
-        $submission = InfluencerSubmission::findOrFail($id);
-
-        // =======================
-        // 1) Validasi (PATCH-friendly)
-        // =======================
-        $validated = $request->validate([
-            'tiktok_user_id'    => ['sometimes','string','max:100'],
-            'campaign_id'       => ['sometimes','integer','exists:campaigns,id'],
-
-            'link_1'            => ['sometimes','nullable','url','max:2048'],
-            'post_date_1'       => ['sometimes','nullable','date'],
-            'screenshot_1'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
-
-            'link_2'            => ['sometimes','nullable','url','max:2048'],
-            'post_date_2'       => ['sometimes','nullable','date'],
-            'screenshot_2'      => ['sometimes','file','mimes:jpg,jpeg,png,webp','max:5120'],
-
-            'purchase_platform' => ['sometimes','nullable', Rule::in(['tiktokshop','shopee'])],
-            'invoice_file'      => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
-            'review_proof_file' => ['sometimes','file','mimes:pdf,jpg,jpeg,png,webp','max:10240'],
-
-            'yellow_cart'       => ['sometimes','nullable','integer','min:0'],
-            'product_sold'      => ['sometimes','nullable','integer','min:0'],
-            'gmv'               => ['sometimes','nullable','numeric','min:0'],
-        ]);
-
-        // =======================
-        // 2) Normalisasi nilai kosong → null (supaya bisa “hapus” nilai)
-        // =======================
-        foreach (['link_1','link_2','purchase_platform','post_date_1','post_date_2'] as $k) {
-            if ($request->has($k) && $request->input($k) === '') {
-                $validated[$k] = null;
-            }
-        }
-
-        // =======================
-        // 3) Setup penyimpanan file
-        // =======================
-        $campaignId   = $validated['campaign_id']    ?? $submission->campaign_id;
-        $tiktokUserId = $validated['tiktok_user_id'] ?? $submission->tiktok_user_id;
-        $baseDir = "submissions/{$campaignId}/{$tiktokUserId}";
-
-        $saveFile = function (? \Illuminate\Http\UploadedFile $file, string $prefix) use ($baseDir) {
-            if (!$file) return null;
-            $ext  = strtolower($file->getClientOriginalExtension() ?: $file->extension());
-            $name = $prefix . '_' . \Illuminate\Support\Str::uuid() . '.' . $ext;
-            return $file->storeAs($baseDir, $name, 'public'); // simpan di disk 'public'
-        };
-
-        // =======================
-        // 4) Ganti file (hapus lama jika ada upload baru)
-        // =======================
-        if ($request->hasFile('screenshot_1')) {
-            if ($submission->screenshot_1_path) Storage::disk('public')->delete($submission->screenshot_1_path);
-            $submission->screenshot_1_path = $saveFile($request->file('screenshot_1'), 's1');
-        }
-        if ($request->hasFile('screenshot_2')) {
-            if ($submission->screenshot_2_path) Storage::disk('public')->delete($submission->screenshot_2_path);
-            $submission->screenshot_2_path = $saveFile($request->file('screenshot_2'), 's2');
-        }
-        if ($request->hasFile('invoice_file')) {
-            if ($submission->invoice_file_path) Storage::disk('public')->delete($submission->invoice_file_path);
-            $submission->invoice_file_path = $saveFile($request->file('invoice_file'), 'invoice');
-        }
-        if ($request->hasFile('review_proof_file')) {
-            if ($submission->review_proof_file_path) Storage::disk('public')->delete($submission->review_proof_file_path);
-            $submission->review_proof_file_path = $saveFile($request->file('review_proof_file'), 'review');
-        }
-
-        // =======================
-        // 5) Assign field non-file hanya jika ada di $validated (PATCH semantics)
-        // =======================
-        foreach ([
-            'tiktok_user_id','campaign_id',
-            'link_1','post_date_1',
-            'link_2','post_date_2',
-            'purchase_platform',
-            'yellow_cart','product_sold','gmv',
-        ] as $field) {
-            if (array_key_exists($field, $validated)) {
-                $submission->$field = $validated[$field];
-            }
-        }
-
-        // Cek apa yang berubah (sebelum save)
-        $dirty = $submission->getDirty();
-
-        // Kalau benar-benar tidak ada apa pun yang berubah DAN tidak ada file baru, kasih respon khusus
-        $hasNewFile = $request->hasFile('screenshot_1') || $request->hasFile('screenshot_2') || $request->hasFile('invoice_file') || $request->hasFile('review_proof_file');
-        if (empty($dirty) && !$hasNewFile) {
-            return response()->json([
-                'message' => 'Tidak ada perubahan data.',
-                'received_fields' => array_keys($validated),
-                'updated_fields'  => [],
-                'data'    => $submission->fresh()->loadMissing(['campaign:id,name,slug,brand_id','campaign.brand:id,name']),
-            ], 200);
-        }
-
-        $submission->save();
-
-        return response()->json([
-            'message' => 'Submission berhasil diupdate.',
-            'received_fields' => array_keys($validated),
-            'updated_fields'  => array_keys($dirty), // ini field yg benar2 berubah
-            'data'    => $submission->fresh()->loadMissing(['campaign:id,name,slug,brand_id','campaign.brand:id,name']),
-        ], 200);
-    }
 
 
 
