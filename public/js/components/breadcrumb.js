@@ -45,7 +45,7 @@ export function renderBreadcrumb(target, currentPath = window.location.pathname,
   container.className = 'mb-3 d-flex justify-content-between align-items-center';
   container.style.background = '#fff';
   container.style.padding = '1rem';
-  container.style.borderRadius = '0.5rem';
+  container.style.borderRadius = '5px';
   container.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
 
   container.innerHTML = `

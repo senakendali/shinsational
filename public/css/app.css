@@ -33,13 +33,17 @@ html {
 }
 
 body {
-    background-color: #F8F9FA;
+    background-color: #F1F5FB;
+   /* background-color: #F8FAFB;*/
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     margin: 0;
     padding: 0;
     box-sizing: border-box;
 }
+
+
+
 
 .card-income {
     background-color: var(--color-income);
@@ -59,8 +63,8 @@ body {
 }
 
 #header {
-    background-color: #000000;
-    border-top: 10px solid #000000;
+    background-color: #FFFFFF;
+   
     text-transform: uppercase;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
@@ -102,12 +106,12 @@ body {
 }
 
 .navbar {
-    background-color: #000000;
+    background-color: #FFFFFF;
 }
 
 .navbar-expand-lg .navbar-nav .nav-link {
     font-size: 14px;
-    color: #ffffff;
+    color: #000000;
 }
 
 .dropdown-item {

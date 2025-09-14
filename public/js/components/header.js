@@ -11,7 +11,7 @@ export async function renderHeader(targetId = "header") {
         <div class="container-fluid d-flex justify-content-between align-items-center">
           <div class="d-flex align-items-center gap-4">
             <a class="navbar-brand app-link" data-href="/admin" href="/admin">
-              <img src="/images/logo-admin.png" alt="Logo" class="d-inline-block align-text-top logo">
+              <img src="/images/beauty-tech-logo-1.png" alt="Logo" class="d-inline-block align-text-top logo">
             </a>
           </div>
 

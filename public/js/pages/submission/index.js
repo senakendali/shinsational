@@ -228,7 +228,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
         // Header per KOL: nama + alamat (kecil) + tombol aksi
         rowsHtml.push(`
-          <tr class="table-active">
+          <tr>
             <td colspan="9">
               <div class="d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-start gap-2">

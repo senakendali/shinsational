@@ -119,7 +119,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
                 <i class="bi bi-upload"></i> Upload
               </button>
             </div>
-            <div class="text-muted small mt-2">Format: JPG/PNG. Maks ~2MB (sesuaikan di backend).</div>
+            <div class="text-muted small mt-2">Format: JPG/PNG. Maks ~2MB.</div>
           </div>
         </div>
       </div>
