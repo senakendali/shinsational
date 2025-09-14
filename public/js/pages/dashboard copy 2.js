@@ -89,7 +89,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         <div class="flex-grow-1">
           <div class="d-flex justify-content-between align-items-start mb-3">
             <div>
-              <h6 class="mb-1 text-uppercase fw-bold"><i class="bi bi-pie-chart-fill"></i> Campaign Engagement</h6>
+              <h6 class="mb-1">Campaign Engagement</h6>
               <div class="small text-muted" id="selectedBrandLine">-</div>
             </div>
             <div class="d-flex gap-2 align-items-start">
@@ -164,15 +164,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
         </div>
 
         <div class="w-100 w-lg-50" style="max-width:540px">
+        
+          
 
-          <!-- Selected campaign: total posted contents -->
-          <div id="selected-campaign-posts" class="mb-3 campaign-posts">
-            <div class="dashboard-card text-center h-100">
-              <div class="card-body">
-                
-                 <h6 class="card-title">TOTAL CONTENT</h6>
-                <div class="fs-3 fw-bold" id="kpi-posts-selected">-</div>
-              </div>
+          <div id="selected-campaign-posts" class="text-center campaign-posts">
+            <div class="card-body">
+              <h6 class="card-title">TOTAL CONTENT</h6>
+              <p class="card-text fs-3 fw-bold" id="kpi-campaigns">-</p>
             </div>
           </div>
 
@@ -523,11 +521,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
       renderKpiDonuts(lastTotals, lastKpi);
     });
 
-    // NEW: toggle box "TOTAL CONTENT"
-    const box    = $('#selected-campaign-posts');
-    const boxVal = $('#kpi-posts-selected');
-    const boxCap = $('#cap-posts-selected');
-
     if (!campaignId) {
       lastTotals = { views:0, likes:0, comments:0, shares:0 };
       renderKpiDonuts(lastTotals, lastKpi);
@@ -536,15 +529,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       $('#es-likes').textContent = '-';
       $('#es-comments').textContent = '-';
       $('#es-shares').textContent = '-';
-
-      // NEW: sembunyikan box saat belum pilih campaign
-      if (box) box.classList.add('d-none');
       return;
-    } else {
-      // NEW: tampilkan box saat campaign dipilih
-      if (box) box.classList.remove('d-none');
-      if (boxCap) boxCap.textContent = 'Campaign terpilih';
-      if (boxVal) boxVal.textContent = '…';
     }
 
     let page = 1;
@@ -552,7 +537,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     let lastPage = 1;
 
     const agg = { views: 0, likes: 0, comments: 0, shares: 0 };
-    let totalPostedContents = 0; // NEW
 
     do {
       const res = await submissionService.getAll({
@@ -570,9 +554,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
         agg.likes    += safe(Number(s.likes_1))    + safe(Number(s.likes_2));
         agg.comments += safe(Number(s.comments_1)) + safe(Number(s.comments_2));
         agg.shares   += safe(Number(s.shares_1))   + safe(Number(s.shares_2));
-
-        // NEW: akumulasi total konten dari link_1..link_5
-        totalPostedContents += countSubmissionPosts(s);
       });
 
       lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
@@ -587,14 +568,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#es-likes').textContent = fmt(agg.likes);
     $('#es-comments').textContent = fmt(agg.comments);
     $('#es-shares').textContent = fmt(agg.shares);
-
-    // NEW: set nilai ke box
-    if (boxVal) {
-      boxVal.textContent = fmt(totalPostedContents);
-      boxVal.title = 'Total konten terdeteksi dari kolom link_1 s/d link_5';
-    }
   }
-
 
   // initial
   await loadCampaignEngagement(currentCampaignId);
@@ -699,28 +673,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
       </li>
     `).join('');
   }
-
-  // === helpers: hitung total konten dari link_1..link_5 ===
-  // === helpers: hitung total konten dari link_1..link_5 ===
-  function isFilled(v) {
-    if (v == null) return false;
-    const s = String(v).trim();
-    if (!s) return false;
-    if (s.toUpperCase() === 'NULL') return false; // antisipasi "NULL" dari DB
-    return true;
-  }
-
-  function countSubmissionPosts(sub) {
-    if (!sub || typeof sub !== 'object') return 0;
-    let count = 0;
-    for (let i = 1; i <= 5; i++) {
-      const key = `link_${i}`;
-      if (isFilled(sub[key])) count += 1;
-    }
-    return count;
-  }
-
-
 }
 
 /** load Chart.js once (fallback kalau belum disertakan di layout) */

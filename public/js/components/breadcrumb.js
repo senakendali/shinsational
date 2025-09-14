@@ -73,8 +73,10 @@ export async function renderBreadcrumb(target, currentPath = window.location.pat
   container.className = 'mb-3 d-flex align-items-center';
   container.style.background = '#fff';
   container.style.padding = '1rem';
-  container.style.borderRadius = '5px';
+  container.style.borderBottomLeftRadius = '5px';
+  container.style.borderBottomRightRadius = '5px';
   container.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+  container.style.borderTop = '5px solid #CCCCCC';
 
   const listHtml = crumbs.map(c => c.active
     ? `<li class="breadcrumb-item active d-flex align-items-center gap-2" aria-current="page">
