@@ -8,6 +8,7 @@ use App\Services\LinkTiktokService;
 
 class MeController extends Controller
 {
+    
     public function linkTiktok(Request $request)
     {
         // Ambil open_id dari session/cookie/body (urut prioritas)

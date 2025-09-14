@@ -188,11 +188,11 @@ body {
 }
 
 .dashboard-card.campaign{
-    border-top: 1px solid #124693;
-    border-right: 1px solid #124693;
-    border-left: 1px solid #124693;
-    border-bottom: 5px solid #124693;
-    color: #124693;
+    border-top: 1px solid #FFA914;
+    border-right: 1px solid #FFA914;
+    border-left: 1px solid #FFA914;
+    border-bottom: 5px solid #FFA914;
+    color: #FFA914;
     display: flex;
     align-items: center;
     justify-content: center;

@@ -1,54 +1,70 @@
 // /js/components/navbar.js
 export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride = null) {
   const v = window.BUILD_VERSION || Date.now();
+  const PROFILE_PATH = '/admin/profile';
+  const LOGIN_PATH = '/admin/login';
 
-  // Resolve container: boleh CSS selector atau langsung element
+  // Resolve container
   const container = (typeof containerOrEl === 'string')
     ? document.querySelector(containerOrEl)
     : containerOrEl;
-
   if (!container) return;
 
-  // ==== GUARD anti double-render cepat (race) ====
+  // ==== GUARD anti double-render cepat ====
   if (container.dataset.navRendering === '1') return;
   container.dataset.navRendering = '1';
 
-  // ==== Permission helpers ====
-  async function getAbilities() {
-    if (window.__ABILITIES_SET instanceof Set) return window.__ABILITIES_SET;
+  // ==== Small helpers ====
+  const escapeHtml = (s) => String(s ?? '')
+    .replaceAll('&','&amp;').replaceAll('<','&lt;')
+    .replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'", '&#39;');
 
-    // 1) pakai preload global kalau ada
-    if (Array.isArray(window.ABILITIES)) {
-      window.__ABILITIES_SET = new Set(window.ABILITIES);
-      return window.__ABILITIES_SET;
-    }
-
-    // 2) fallback: fetch /api/me (butuh backend yang sediakan abilities)
+  // ==== Me / Abilities cache & loaders ====
+  async function getMe() {
+    if (window.__ME && typeof window.__ME === 'object') return window.__ME;
     try {
       const res = await fetch('/api/me', {
         headers: { Accept: 'application/json' },
         credentials: 'same-origin',
       });
-      if (res.ok) {
-        const me = await res.json();
-        window.__ABILITIES_SET = new Set(Array.isArray(me.abilities) ? me.abilities : []);
-        return window.__ABILITIES_SET;
+      if (!res.ok) throw new Error('not ok');
+      const me = await res.json();
+      window.__ME = me || {};
+      // Seed abilities cache too if available
+      if (Array.isArray(me?.abilities)) {
+        window.__ABILITIES_SET = new Set(me.abilities);
       }
-    } catch (e) {
-      // ignore
+      return window.__ME;
+    } catch {
+      window.__ME = null;
+      return null;
+    }
+  }
+
+  async function getAbilities() {
+    if (window.__ABILITIES_SET instanceof Set) return window.__ABILITIES_SET;
+
+    // 1) pakai preload global
+    if (Array.isArray(window.ABILITIES)) {
+      window.__ABILITIES_SET = new Set(window.ABILITIES);
+      return window.__ABILITIES_SET;
     }
 
-    // 3) gagal → set kosong (sembunyikan item yang butuh permission)
+    // 2) coba dari /api/me (sekalian cache me)
+    const me = await getMe();
+    if (Array.isArray(me?.abilities)) {
+      window.__ABILITIES_SET = new Set(me.abilities);
+      return window.__ABILITIES_SET;
+    }
+
+    // 3) gagal → set kosong
     window.__ABILITIES_SET = new Set();
     return window.__ABILITIES_SET;
   }
 
   function canShow(spec, abilities) {
     if (!spec) return true;                 // tanpa can => tampil
-    if (Array.isArray(spec)) {
-      // OR: punya salah satu permission
-      return spec.some(p => abilities.has(p));
-    }
+    if (Array.isArray(spec)) return spec.some(p => abilities.has(p));
     return abilities.has(spec);
   }
 
@@ -116,7 +132,7 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
       return a;
     };
 
-    // Render items
+    // Render menu items (kiri → tengah)
     filteredMenu.forEach((item) => {
       if (Array.isArray(item.children) && item.children.length) {
         const li = makeLI('dropdown');
@@ -169,16 +185,67 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
       }
     });
 
-    // Logout
-    const logoutLi = makeLI();
-    logoutLi.innerHTML = `
-      <a class="nav-link d-flex align-items-center gap-2" href="#" id="logoutNavLink">
-        <i class="bi bi-box-arrow-right"></i> Logout
-      </a>
-    `;
-    hostUL.appendChild(logoutLi);
+    // === User dropdown di kanan ===
+    const me = await getMe();
+    const liUser = makeLI('dropdown');
 
-    // === SPA nav: DELEGASI pada UL (hindari multi-binding per render) ===
+    if (me) {
+      const displayName = escapeHtml(me?.name || me?.user?.name || me?.email || me?.user?.email || 'Account');
+
+      const toggle = makeLink(
+        '#',
+        `<i class="bi bi-person-circle"></i>
+         <span class="d-inline-block text-truncate" style="max-width: 180px;">${displayName}</span>`,
+        'nav-link dropdown-toggle d-flex align-items-center gap-2'
+      );
+      toggle.setAttribute('role', 'button');
+      toggle.setAttribute('data-bs-toggle', 'dropdown');
+      toggle.setAttribute('aria-expanded', 'false');
+
+      const dropdown = document.createElement('ul');
+      dropdown.className = 'dropdown-menu dropdown-menu-end';
+
+      // My Profile
+      const liProfile = document.createElement('li');
+      const aProfile = makeLink(
+        PROFILE_PATH,
+        `<i class="bi bi-person"></i> My Profile`,
+        'dropdown-item d-flex align-items-center gap-2 app-link'
+      );
+      aProfile.setAttribute('data-href', PROFILE_PATH);
+      liProfile.appendChild(aProfile);
+      dropdown.appendChild(liProfile);
+
+      // Divider
+      const liDiv = document.createElement('li');
+      liDiv.innerHTML = `<hr class="dropdown-divider">`;
+      dropdown.appendChild(liDiv);
+
+      // Logout
+      const liLogout = document.createElement('li');
+      liLogout.innerHTML = `
+        <a class="dropdown-item d-flex align-items-center gap-2" href="#" id="logoutNavLink">
+          <i class="bi bi-box-arrow-right"></i> Logout
+        </a>
+      `;
+      dropdown.appendChild(liLogout);
+
+      liUser.appendChild(toggle);
+      liUser.appendChild(dropdown);
+    } else {
+      // Belum login → tampilkan tombol Login
+      const aLogin = makeLink(
+        LOGIN_PATH,
+        `<i class="bi bi-box-arrow-in-right"></i> Login`,
+        'nav-link d-flex align-items-center gap-2 app-link'
+      );
+      aLogin.setAttribute('data-href', LOGIN_PATH);
+      liUser.appendChild(aLogin);
+    }
+
+    hostUL.appendChild(liUser);
+
+    // === SPA nav: delegasi klik ke UL ===
     if (hostUL._onNavClick) hostUL.removeEventListener('click', hostUL._onNavClick);
     hostUL._onNavClick = (e) => {
       const a = e.target.closest('a.app-link');
@@ -191,29 +258,40 @@ export async function renderNavbar(containerOrEl = '#navbar-menu', pathOverride 
     };
     hostUL.addEventListener('click', hostUL._onNavClick);
 
-    // Logout
+    // === Logout handler (pakai CSRF + retry 419) ===
     const logoutLink = hostUL.querySelector('#logoutNavLink');
     if (logoutLink) {
       if (logoutLink._onClick) logoutLink.removeEventListener('click', logoutLink._onClick);
       logoutLink._onClick = async (e) => {
         e.preventDefault();
         try {
-          await fetch('/logout', {
+          const { getCsrfToken, refreshCsrfToken } = await import(`../utils/csrf.js?v=${v}`);
+          const attempt = async () => fetch('/logout', {
             method: 'POST',
-            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            headers: {
+              'Accept': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest',
+              'X-CSRF-TOKEN': getCsrfToken(),
+            },
             credentials: 'same-origin',
           });
-        } catch (_e) {
-          /* ignore */
+          let res = await attempt();
+          if (res.status === 419) {
+            await refreshCsrfToken();
+            res = await attempt();
+          }
+        } catch (_) {
+          // ignore
         } finally {
-          location.href = '/admin/login';
+          // optional: set flash untuk login
+          try { sessionStorage.setItem('FLASH_INFO', 'Kamu sudah logout.'); } catch {}
+          location.href = LOGIN_PATH;
         }
       };
       logoutLink.addEventListener('click', logoutLink._onClick);
     }
 
   } finally {
-    // Lepas guard
     container.dataset.navRendering = '0';
   }
 }

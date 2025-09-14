@@ -1,154 +1,91 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\AppController;
-use App\Http\Controllers\TikTokAuthController;
-use App\Http\Controllers\AuthController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use App\Models\InfluencerAccount;
-use App\Http\Controllers\MeController;
+use Illuminate\Http\Request;
+
+use App\Http\Controllers\AppController;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\TikTokAuthController;
+
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\UserController;
 
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\MeController;
+use App\Models\InfluencerAccount;
 
 /*
 |--------------------------------------------------------------------------
-| Web Routes
+| Web Routes (SPA + Session Guard)
 |--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider within a group which
-| contains the "web" middleware group. Now create something great!
-|
+| - Semua endpoint API yang butuh session/login taruh di sini (middleware web)
+| - Admin SPA di /admin/**
 */
 
-Route::middleware(['web', 'auth'])->prefix('api')->name('api.')->group(function () {
-    // ==== CSRF helper (dipakai utils/csrf.js) ====
+/** -----------------------------------------------------------------
+ *  CSRF refresh untuk SPA (boleh tanpa auth, tapi butuh session "web")
+ *  utils/csrf.js akan hit ke sini saat 419
+ *  ----------------------------------------------------------------- */
+Route::prefix('api')->middleware(['web'])->group(function () {
     Route::post('/csrf/refresh', function (Request $request) {
         $request->session()->regenerateToken();
         return response()->json(['token' => csrf_token()]);
-    })->name('csrf.refresh');
+    })->name('api.csrf.refresh');
+});
 
-    // ==== Current user + abilities (dipakai navbar) ====
-    Route::get('/me', function (Request $request) {
-        $u = $request->user()->loadMissing(['roles:id,name,guard_name']);
-        $abilities = $u->getAllPermissions()->pluck('name')->values(); // Spatie
-        // 1 user = 1 role (ambil pertama kalau ada)
-        $roleName = optional($u->roles->first())->name;
+/** -----------------------------------------------------------------
+ *  API PROTECTED (butuh login) — session guard "web"
+ *  ----------------------------------------------------------------- */
+Route::prefix('api')->middleware(['web','auth'])->group(function () {
 
-        return response()->json([
-            'id'         => $u->id,
-            'name'       => $u->name,
-            'email'      => $u->email,
-            'role'       => $roleName,
-            'roles'      => $u->roles->pluck('name')->values(), // kalau mau lihat juga
-            'abilities'  => $abilities,
-        ]);
-    })->name('me');
+    // ===== Current user + abilities (dipakai navbar / guard)
+    Route::get('/me', [ProfileController::class, 'show'])->name('api.me');
+    Route::patch('/me', [ProfileController::class, 'updateProfile'])->name('api.me.update');
+    Route::patch('/me/password', [ProfileController::class, 'updatePassword'])->name('api.me.password');
+    Route::post('/me/avatar', [ProfileController::class, 'updateAvatar'])->name('api.me.avatar.upload');
+    Route::delete('/me/avatar', [ProfileController::class, 'deleteAvatar'])->name('api.me.avatar.delete');
 
-    // ==== Permissions ====
+    // (opsional) integrasi tiktok milik user login
+    Route::post('/me/link-tiktok', [MeController::class, 'linkTiktok'])->name('api.me.link-tiktok');
+
+    // ===== Permissions
     Route::apiResource('permissions', PermissionController::class)
         ->only(['index','store','show','update','destroy']);
 
-    // ==== Roles (+sync-permissions) ====
+    // ===== Roles (+sync-permissions)
     Route::apiResource('roles', RoleController::class)
         ->only(['index','store','show','update','destroy']);
-
     Route::post('roles/{role}/sync-permissions', [RoleController::class, 'syncPermissions'])
-        ->name('roles.sync-permissions');
+        ->name('api.roles.sync-permissions');
 
-    // ==== Users (single role) ====
+    // ===== Users (single role enforced di controller)
     Route::apiResource('users', UserController::class)
         ->only(['index','store','show','update','destroy']);
-
-    // optional endpoints kalau kamu mau pakai helper terpisah
-    Route::post('users/{user}/sync-roles', [UserController::class, 'syncRoles'])
-        ->name('users.sync-roles');
-    Route::post('users/{user}/sync-permissions', [UserController::class, 'syncPermissions'])
-        ->name('users.sync-permissions');
+    // optional helpers
+    Route::post('users/{user}/sync-roles', [UserController::class, 'syncRoles'])->name('api.users.sync-roles');
+    Route::post('users/{user}/sync-permissions', [UserController::class, 'syncPermissions'])->name('api.users.sync-permissions');
 });
 
-Route::post('/api/me/link-tiktok', [MeController::class, 'linkTiktok'])
-    ->name('me.link-tiktok')
-    ->middleware(['web','auth']); // sesuaikan kalau KOL belum login
-
-// ==== CSRF refresh untuk SPA (dipakai utils/csrf.js) ====
-Route::get('/refresh-csrf', fn () => response()->json(['token' => csrf_token()]));
-
-Route::get('/storage/{path}', function (string $path) {
-    // keamanan minimal: batasi hanya folder tertentu
-    // if (!str_starts_with($path, 'submissions/')) abort(403);
-
-    if (!Storage::disk('public')->exists($path)) {
-        abort(404);
-    }
-    // untuk gambar/file statis:
-    return Storage::disk('public')->response($path); // set Content-Type otomatis
-})->where('path', '.*');
-
-Route::get('/files', function (Request $request) {
-    $p = $request->query('p');
-    if (!$p) abort(404);
-
-    // Keamanan basic
-    if (str_contains($p, '..')) abort(403);
-    // kalau semua upload kamu ada di folder "submissions", batasi di sana:
-    if (!str_starts_with($p, 'submissions/')) abort(403);
-
-    if (!Storage::disk('public')->exists($p)) abort(404);
-
-    // Stream ke browser dengan content-type yang tepat
-    return Storage::disk('public')->response($p);
-});
-
-// Group API yang tetap pakai session ('auth' web), tanpa Sanctum
-Route::middleware(['auth'])->prefix('api')->group(function () {
-    // Roles
-    Route::get   ('/roles',                    [RoleController::class, 'index']);
-    Route::post  ('/roles',                    [RoleController::class, 'store']);
-    Route::get   ('/roles/{role}',             [RoleController::class, 'show']);
-    Route::patch ('/roles/{role}',             [RoleController::class, 'update']);
-    Route::delete('/roles/{role}',             [RoleController::class, 'destroy']);
-
-    // ===== Permissions
-    Route::get   ('/permissions',                 [PermissionController::class, 'index']);
-    Route::post  ('/permissions',                 [PermissionController::class, 'store']);
-    Route::get   ('/permissions/{permission}',    [PermissionController::class, 'show']);
-    Route::patch ('/permissions/{permission}',    [PermissionController::class, 'update']);
-    Route::delete('/permissions/{permission}',    [PermissionController::class, 'destroy']);
-
-    // ===== Users
-    Route::get   ('/users',                       [UserController::class, 'index']);
-    Route::post  ('/users',                       [UserController::class, 'store']);
-    Route::get   ('/users/{user}',                [UserController::class, 'show']);
-    Route::put ('/users/{user}',                [UserController::class, 'update']);
-    Route::delete('/users/{user}',                [UserController::class, 'destroy']);
-
-    // (opsional) Endpoints khusus sync—kalau mau pisah dari update:
-    Route::post  ('/users/{user}/sync-roles',         [UserController::class, 'syncRoles']);
-    Route::post  ('/users/{user}/sync-permissions',   [UserController::class, 'syncPermissions']);
-
-    // Assign/sync permissions ke role
-    Route::post  ('/roles/{role}/sync-permissions', [RoleController::class, 'syncPermissions']);
-});
-
-// ==== Auth (SPA) ====
-Route::post('/login',  [AuthController::class, 'login'])->name('login');
+/** -----------------------------------------------------------------
+ *  Auth endpoints (SPA)
+ *  ----------------------------------------------------------------- */
+Route::post('/login',  [AuthController::class, 'login'])->name('auth.login');
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-Route::get('/me',      [AuthController::class, 'me'])->name('me'); // optional untuk cek sesi
 
-// ==== TikTok ====
+// ✅ Route GET bernama "login" untuk redirect middleware Authenticate
+//    Arahkan ke halaman SPA admin login
+Route::get('/admin/login', [AppController::class, 'admin'])->name('login');
+
+/** -----------------------------------------------------------------
+ *  TikTok OAuth
+ *  ----------------------------------------------------------------- */
 Route::get('/auth/tiktok/redirect', [TikTokAuthController::class, 'redirect']);
 Route::get('/auth/tiktok/callback', [TikTokAuthController::class, 'callback']);
-
 Route::get('/auth/tiktok/reset', [TikTokAuthController::class, 'reset']);
 
-
-
 Route::get('/me/tiktok', function (Request $request) {
-    // urutan prioritas: session → cookie → null
     $openId = $request->session()->get('tiktok_user_id') ?: $request->cookie('tkoid');
 
     $acc = null;
@@ -165,16 +102,31 @@ Route::get('/me/tiktok', function (Request $request) {
     ]);
 });
 
+/** -----------------------------------------------------------------
+ *  File serving helper (publik)
+ *  ----------------------------------------------------------------- */
+Route::get('/storage/{path}', function (string $path) {
+    if (!Storage::disk('public')->exists($path)) abort(404);
+    return Storage::disk('public')->response($path);
+})->where('path', '.*');
 
+Route::get('/files', function (Request $request) {
+    $p = $request->query('p');
+    if (!$p) abort(404);
+    if (str_contains($p, '..')) abort(403);
+    if (!str_starts_with($p, 'submissions/')) abort(403);
+    if (!Storage::disk('public')->exists($p)) abort(404);
+    return Storage::disk('public')->response($p);
+});
 
-// ==== Catch-all SPA (tetap paling bawah) ====
+/** -----------------------------------------------------------------
+ *  Catch-all SPA (taruh paling bawah)
+ *  ----------------------------------------------------------------- */
 
-    // Admin SPA (prefix /admin)
-
-
+// Admin SPA (prefix /admin)
 Route::get('/admin/{any?}', [AppController::class, 'admin'])
     ->where('any', '^(?!api|js|css|images|fonts|storage|vendor).*$');
 
-// KOL SPA (root)
+// KOL / public SPA (root)
 Route::get('/{any?}', [AppController::class, 'index'])
     ->where('any', '^(?!api|js|css|images|fonts|storage|vendor|admin).*$');

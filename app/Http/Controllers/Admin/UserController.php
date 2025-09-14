@@ -12,6 +12,7 @@ use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
 use Illuminate\Routing\Attributes\Middleware; // <-- penting untuk attribute middleware
 
+
 #[Middleware('permission:user.viewAny', only: ['index','show'])]
 #[Middleware('permission:user.create', only: ['store'])]
 #[Middleware('permission:user.update', only: ['update','syncRoles','syncPermissions'])]

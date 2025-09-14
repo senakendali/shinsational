@@ -26,6 +26,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'avatar_path',
     ];
 
     /**
@@ -38,6 +39,10 @@ class User extends Authenticatable
         'remember_token',
     ];
 
+    protected $appends = ['avatar_url'];
+
+    
+
     /**
      * Get the attributes that should be cast.
      *
@@ -49,5 +54,22 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Buat URL viewer aman: /files?p=...
+     */
+    protected function fileViewerUrl(?string $path): ?string
+    {
+        return $path ? url('/files?p=' . urlencode($path)) : null;
+    }
+
+    /**
+     * Accessor: avatar_url
+     * Contoh hasil: https://domainmu/files?p=avatars/abc.png
+     */
+    public function getAvatarUrlAttribute(): ?string
+    {
+        return $this->fileViewerUrl($this->avatar_path);
     }
 }

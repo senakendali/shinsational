@@ -73,6 +73,22 @@ export function render(target, params, query = {}, labelOverride = null) {
     </div>
   `;
 
+  // Ambil flash dari guard (kalau sebelumnya di-redirect dari halaman admin)
+  const flashError = (() => {
+    try {
+      const msg = sessionStorage.getItem('FLASH_ERROR');
+      if (msg) sessionStorage.removeItem('FLASH_ERROR');
+      return msg;
+    } catch { return null; }
+  })();
+  const flashInfo = (() => {
+    try {
+      const msg = sessionStorage.getItem('FLASH_INFO');
+      if (msg) sessionStorage.removeItem('FLASH_INFO');
+      return msg;
+    } catch { return null; }
+  })();
+
   // Dynamic imports
   Promise.all([
     import(`/js/services/authService.js?v=${v}`),
@@ -85,6 +101,10 @@ export function render(target, params, query = {}, labelOverride = null) {
       const { showLoader, hideLoader } = loaderMod;
       const { showToast } = toastMod;
       const { showValidationErrors, clearAllErrors } = formMod;
+
+      // Tampilkan toast flash (kalau ada)
+      if (flashError) showToast(flashError, 'error');
+      if (flashInfo) showToast(flashInfo);
 
       const form = document.getElementById('loginForm');
       if (!form) {
@@ -116,8 +136,17 @@ export function render(target, params, query = {}, labelOverride = null) {
           removeLoginStyleOverrides();
           document.body.style.overflow = '';
 
-          // Go to dashboard
-          const next = (query && query.redirect) ? query.redirect : '/admin/dashboard';
+          // Tentukan halaman tujuan:
+          // 1) AFTER_LOGIN_REDIRECT dari guard
+          // 2) ?redirect= dari query
+          // 3) default: /admin/dashboard
+          let next =
+            (() => { try { return sessionStorage.getItem('AFTER_LOGIN_REDIRECT') || ''; } catch { return ''; } })()
+            || (query && query.redirect) || '/admin/dashboard';
+
+          // Bersihkan AFTER_LOGIN_REDIRECT biar nggak kepakai lagi
+          try { sessionStorage.removeItem('AFTER_LOGIN_REDIRECT'); } catch {}
+
           history.pushState(null, '', next);
           window.dispatchEvent(new PopStateEvent('popstate'));
         } catch (err) {

@@ -136,6 +136,11 @@ export const routes = [
         component: () => import("../pages/users/index.js?v=" + BUILD_ID),
     },
     {
+        path: "/admin/profile",
+        label: "Profile",
+        component: () => import("../pages/users/profile.js?v=" + BUILD_ID),
+    },
+    {
         path: "/admin/users/create",
         label: "Create User",
         component: () => import("../pages/users/form.js?v=" + BUILD_ID),

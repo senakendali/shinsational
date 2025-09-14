@@ -1,27 +1,25 @@
+// /js/app.js
+
 // import { renderHeader } from './components/header.js'; // tetap off
 import { showLoader, hideLoader } from './components/loader.js';
 import { installNavbarBackgroundController, applyNavbarBackgroundNow } from './components/headerScroll.js';
+import { installAuthInterceptor } from './utils/auth-guard.js';
 
 let routes = []; // akan diisi setelah dynamic import
 
 function ensureScrollable() {
   try {
-    // Pulihkan scroll yang mungkin dikunci loader/modal
     document.documentElement.style.overflowY = 'auto';
     document.body.style.overflowY = 'auto';
     document.body.classList.remove('overflow-hidden', 'modal-open');
-
-    // Jangan kunci tinggi; biarkan konten menambah tinggi halaman
     document.documentElement.style.height = '';
     document.body.style.height = '';
-
-    // Bersihkan style yang mungkin diset sebelumnya pada #app
     const app = document.getElementById('app');
     if (app) {
-      app.style.paddingTop = '';     // we don’t need top padding
-      app.style.minHeight = '';      // biarkan natural height
-      app.style.overflow = '';       // biarkan ikut body
-      app.style.height = '';         // no fixed height
+      app.style.paddingTop = '';
+      app.style.minHeight = '';
+      app.style.overflow = '';
+      app.style.height = '';
     }
   } catch {}
 }
@@ -44,8 +42,45 @@ function matchRoute(pathname) {
   return null;
 }
 
+// ==== Admin guard helpers ====
+const LOGIN_PATH = '/admin/login';
+const ADMIN_PREFIX = '/admin';
+
+// admin route? (kecuali halaman login)
+function isAdminPath(pathname) {
+  if (!pathname) return false;
+  return pathname.startsWith(ADMIN_PREFIX) && !pathname.startsWith(LOGIN_PATH);
+}
+
+// pre-check auth sebelum render halaman admin
+async function assertAuthenticatedFor(pathname) {
+  if (!isAdminPath(pathname)) return true; // non-admin: skip
+  try {
+    const res = await fetch('/api/me', {
+      headers: { Accept: 'application/json' },
+      credentials: 'same-origin',
+    });
+    if (res.status === 401) {
+      try {
+        sessionStorage.setItem('FLASH_ERROR', 'Harus login dulu.');
+        sessionStorage.setItem('AFTER_LOGIN_REDIRECT', location.pathname + location.search);
+      } catch {}
+      location.replace(LOGIN_PATH);
+      return false;
+    }
+    // kalau 200 OK (atau 403/404 non-ideal), biarkan SPA lanjut.
+    return true;
+  } catch {
+    // network error: biarkan lanjut, fetch lain akan diintercept juga
+    return true;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   installNavbarBackgroundController();
+
+  // 🔐 pasang fetch 401 interceptor khusus area /admin
+  installAuthInterceptor({ loginPath: LOGIN_PATH, adminPrefix: ADMIN_PREFIX });
 
   const content = document.getElementById('app');
   const v = window.BUILD_VERSION || Date.now();
@@ -67,6 +102,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const url = new URL(path, location.origin);
     const pathname = url.pathname;
     const query = Object.fromEntries(url.searchParams.entries());
+
+    // ⛔ pre-auth check utk halaman admin
+    const ok = await assertAuthenticatedFor(pathname);
+    if (!ok) {
+      hideLoader();
+      ensureScrollable();
+      return; // sudah di-redirect ke login oleh guard
+    }
 
     let match = matchRoute(pathname);
     if (!match && pathname !== '/') {
