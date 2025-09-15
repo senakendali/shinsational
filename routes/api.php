@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\InfluencerRegistrationController;
 use App\Http\Controllers\Api\BrandController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\InfluencerSubmissionController;
+use App\Http\Controllers\TiktokDebugController;
 
 
 // Brand
@@ -94,6 +95,9 @@ Route::post(
 Route::post('/_ping-refresh/{id}', function ($id) {
     return response()->json(['ok' => true, 'id' => (int) $id]);
 })->whereNumber('id');
+
+Route::match(['GET','POST'], 'debug/tiktok/video-stats', [TiktokDebugController::class, 'videoStats'])
+    ->name('api.debug.tiktok.video-stats');
 
 
 
