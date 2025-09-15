@@ -30,4 +30,9 @@ class Brand extends Model
         return $this->hasMany(Campaign::class);
     }
 
+    public function users()
+    {
+        return $this->hasMany(User::class);
+    }
+
 }

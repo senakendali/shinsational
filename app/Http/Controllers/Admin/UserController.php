@@ -95,27 +95,42 @@ class UserController extends Controller
             'role'        => ['nullable','string','max:150'],
             'roles'       => ['nullable','array'],
             'permissions' => ['nullable','array'],
+            'brand_id'    => ['nullable','integer','exists:brands,id'], // NEW
         ]);
-
-        $user = new User();
-        $user->name  = $validated['name'];
-        $user->email = $validated['email'];
-        $user->password = Hash::make($validated['password']);
-        $user->save();
 
         $guard = 'web';
 
-        // Single role (preferred). Jika tidak ada, fallback ke roles[]
+        // Tentukan target role (single)
         $rolesInput = $request->has('role')
             ? [ (string) $request->input('role') ]
             : (array) $request->input('roles', []);
 
-        if ($request->has('role') || $request->has('roles')) {
-            $resolved = $this->resolveRoles($rolesInput, $guard)->take(1); // enforce 1 user = 1 role
-            $user->syncRoles($resolved);
+        $resolvedRoles  = $this->resolveRoles($rolesInput, $guard)->take(1);
+        $targetRoleName = optional($resolvedRoles->first())->name;
+
+        // Validasi: jika role = Brand maka brand_id wajib
+        $isBrandRole = $targetRoleName ? (strcasecmp($targetRoleName, 'brand') === 0) : false;
+        if ($isBrandRole && !$request->filled('brand_id')) {
+            return response()->json([
+                'message' => 'Validasi gagal.',
+                'errors'  => ['brand_id' => ['Brand wajib dipilih untuk role Brand.']],
+            ], 422);
         }
 
-        // Opsional: direct permissions
+        // Create user
+        $user = new User();
+        $user->name      = $validated['name'];
+        $user->email     = $validated['email'];
+        $user->password  = Hash::make($validated['password']);
+        $user->brand_id  = $isBrandRole ? (int) $request->input('brand_id') : null; // NEW
+        $user->save();
+
+        // Assign single role (jika dikirim)
+        if ($resolvedRoles->isNotEmpty()) {
+            $user->syncRoles($resolvedRoles);
+        }
+
+        // Opsional: direct permissions (UI read-only tapi tetap aman kalau dikirim)
         if ($request->has('permissions')) {
             $items = (array) $request->input('permissions', []);
             $user->syncPermissions($this->resolvePermissions($items, $guard));
@@ -125,9 +140,14 @@ class UserController extends Controller
 
         return response()->json([
             'message' => 'User berhasil dibuat.',
-            'data'    => $user->load('roles:id,name,guard_name', 'permissions:id,name,guard_name'),
+            'data'    => $user->load(
+                'roles:id,name,guard_name',
+                'permissions:id,name,guard_name',
+                'brand:id,name' // NEW: kirim brand di response
+            ),
         ], 201);
     }
+
 
     /**
      * GET /api/users/{user}
@@ -162,26 +182,62 @@ class UserController extends Controller
             'role'        => ['nullable','string','max:150'],
             'roles'       => ['nullable','array'],
             'permissions' => ['nullable','array'],
+            'brand_id'    => ['nullable','integer','exists:brands,id'], // NEW
         ]);
 
+        $guard = 'web';
+
+        // Tentukan target role setelah update:
+        // - jika request mengirim role/roles → gunakan itu
+        // - kalau tidak, gunakan role user saat ini
+        $rolesInput = $request->has('role')
+            ? [ (string) $request->input('role') ]
+            : (array) $request->input('roles', []);
+
+        $resolvedRoles  = $this->resolveRoles($rolesInput, $guard)->take(1);
+        $targetRoleName = $resolvedRoles->isNotEmpty()
+            ? $resolvedRoles->first()->name
+            : optional($user->roles()->first())->name;
+
+        $isBrandRole = $targetRoleName ? (strcasecmp($targetRoleName, 'brand') === 0) : false;
+
+        // Jika role (target) adalah Brand → brand_id wajib (pakai request atau existing)
+        if ($isBrandRole) {
+            $incomingBrandId = $request->input('brand_id', $user->brand_id);
+            if (empty($incomingBrandId)) {
+                return response()->json([
+                    'message' => 'Validasi gagal.',
+                    'errors'  => ['brand_id' => ['Brand wajib dipilih untuk role Brand.']],
+                ], 422);
+            }
+        }
+
+        // Update basic fields
         if (array_key_exists('name', $validated))  $user->name  = $validated['name'];
         if (array_key_exists('email', $validated)) $user->email = $validated['email'];
         if (!empty($validated['password'])) {
             $user->password = Hash::make($validated['password']);
         }
-        $user->save();
 
-        $guard = 'web';
-
-        $rolesInput = $request->has('role')
-            ? [ (string) $request->input('role') ]
-            : (array) $request->input('roles', []);
-
-        if ($request->has('role') || $request->has('roles')) {
-            $resolved = $this->resolveRoles($rolesInput, $guard)->take(1); // enforce 1 user = 1 role
-            $user->syncRoles($resolved);
+        // Set brand_id sesuai role target
+        if ($isBrandRole) {
+            if ($request->has('brand_id')) {
+                $user->brand_id = (int) $request->input('brand_id');
+            }
+            // kalau tidak dikirim, biarkan brand_id existing (sudah diverifikasi ada di check di atas)
+        } else {
+            // Jika bukan Brand, kosongkan supaya konsisten
+            $user->brand_id = null;
         }
 
+        $user->save();
+
+        // Sync role kalau dikirim
+        if ($resolvedRoles->isNotEmpty()) {
+            $user->syncRoles($resolvedRoles);
+        }
+
+        // Sync direct permissions kalau dikirim
         if ($request->has('permissions')) {
             $items = (array) $request->input('permissions', []);
             $user->syncPermissions($this->resolvePermissions($items, $guard));
@@ -191,9 +247,14 @@ class UserController extends Controller
 
         return response()->json([
             'message' => 'User berhasil diperbarui.',
-            'data'    => $user->load('roles:id,name,guard_name', 'permissions:id,name,guard_name'),
+            'data'    => $user->load(
+                'roles:id,name,guard_name',
+                'permissions:id,name,guard_name',
+                'brand:id,name' // NEW: kirim brand di response
+            ),
         ]);
     }
+
 
     /**
      * DELETE /api/users/{user}

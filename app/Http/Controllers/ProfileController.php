@@ -26,7 +26,10 @@ class ProfileController extends Controller
             'avatar_url'  => $u->avatar_path ? Storage::disk('public')->url($u->avatar_path) : null,
             'role'       => $roleName,
             'roles'      => $u->roles->pluck('name')->values(),
+            'brand_id'    => $u->brand_id,
+            'brand'       => $u->brand ? $u->brand->only(['id','name']) : null,
             'abilities'  => $abilities,
+            
         ]);
     }
 

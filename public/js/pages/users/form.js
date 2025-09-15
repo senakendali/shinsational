@@ -12,6 +12,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     formMod,
     { userService },
     { roleService },
+    { brandService },
   ] = await Promise.all([
     import(`../../components/header.js?v=${v}`),
     import(`../../components/breadcrumb.js?v=${v}`),
@@ -20,6 +21,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     import(`../../utils/form.js?v=${v}`),
     import(`../../services/userService.js?v=${v}`),
     import(`../../services/roleService.js?v=${v}`),
+    import(`../../services/brandService.js?v=${v}`),
   ]);
 
   const { showLoader, hideLoader } = loaderMod;
@@ -81,6 +83,18 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         </div>
       </div>
 
+      <!-- Brand selector (wajib jika role = Brand) -->
+      <div class="row g-3 mt-1">
+        <div class="col-md-6 d-none" id="brandSelectWrap">
+          <label for="brandSelect" class="form-label">Brand <span class="text-danger">*</span></label>
+          <select id="brandSelect" class="form-select">
+            <option value="">— Pilih brand —</option>
+          </select>
+          <div class="invalid-feedback d-block" id="error-brand"></div>
+          <div class="text-muted small mt-1">Wajib diisi jika role pengguna adalah <strong>Brand</strong>.</div>
+        </div>
+      </div>
+
       <div class="d-flex gap-2 justify-content-end mt-4">
         <button type="button" class="btn btn-secondary" id="cancelBtn">
           <i class="bi bi-x-square"></i> Batal
@@ -94,6 +108,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
   // ===== Helpers
   const $  = (s) => document.querySelector(s);
+  const $$ = (s) => Array.from(document.querySelectorAll(s));
 
   $('#cancelBtn')?.addEventListener('click', () => {
     history.pushState(null, '', '/admin/users');
@@ -102,9 +117,22 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
   // ===== State
   let allRoles = [];            // [{id, name}]
-  let userData = null;          // {roles:[{name}], permissions:[{name}]}
+  let allBrands = [];           // [{id, name}]
+  let userData = null;          // {roles:[{name}], permissions:[{name}], brand_id?, brand?}
   let rolePerms = [];           // permissions dari role terpilih [{id?, name}]
 
+  function isBrandRoleName(name) {
+    return String(name || '').toLowerCase() === 'brand';
+  }
+  function roleIdIsBrand(rid) {
+    const r = allRoles.find(x => String(x.id) === String(rid));
+    return r ? isBrandRoleName(r.name) : false;
+  }
+  function toggleBrandSelect(show) {
+    const wrap = $('#brandSelectWrap');
+    if (!wrap) return;
+    wrap.classList.toggle('d-none', !show);
+  }
   function renderRolePerms(filter = '') {
     const wrap = $('#rolePermList');
     const q = filter.trim().toLowerCase();
@@ -152,22 +180,25 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
   // ===== Init
   try {
-    const [roleRes, userRes] = await Promise.all([
+    const [roleRes, userRes, brandRes] = await Promise.all([
       roleService.getAll({ per_page: 500 }),                             // daftar role
-      isEdit ? userService.get(params.id, { include: 'roles,permissions' }) : Promise.resolve(null),
+      isEdit ? userService.get(params.id, { include: 'roles,permissions,brand' }) : Promise.resolve(null),
+      brandService.getAll({ per_page: 500, status: '' }),                // daftar brand
     ]);
 
     allRoles = (roleRes?.data || roleRes || []).map(r => ({ id: r.id ?? r.name, name: r.name }));
-    userData = userRes ? {
-      id: userRes.id,
-      name: userRes.name || '',
-      email: userRes.email || '',
-      roles: (userRes.roles || []).map(r => ({ name: r.name })),
-      permissions: (userRes.permissions || []).map(p => ({ name: p.name })),
-    } : null;
+    allBrands = (brandRes?.data || brandRes || []).map(b => ({ id: b.id, name: b.name || `Brand ${b.id}` }));
 
     // Prefill fields
-    if (userData) {
+    if (userRes) {
+      userData = {
+        id: userRes.id,
+        name: userRes.name || '',
+        email: userRes.email || '',
+        roles: (userRes.roles || []).map(r => ({ name: r.name })),
+        permissions: (userRes.permissions || []).map(p => ({ name: p.name })),
+        brand_id: userRes.brand_id ?? userRes.brandId ?? userRes.brand?.id ?? null,
+      };
       const fill = (id, val) => { const el = $('#'+id); if (el) el.value = val ?? ''; };
       fill('name', userData.name);
       fill('email', userData.email);
@@ -178,27 +209,45 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     roleSelect.innerHTML = `<option value="">— Pilih role —</option>` +
       allRoles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
 
-    // Prefill selected role kalau edit
+    // Render Brand select
+    const brandSelect = $('#brandSelect');
+    brandSelect.innerHTML = `<option value="">— Pilih brand —</option>` +
+      allBrands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+
+    // Prefill selected role & permissions kalau edit
     if (userData?.roles?.length) {
       const currentName = userData.roles[0].name;
       const current = allRoles.find(r => r.name === currentName);
       if (current) {
         roleSelect.value = String(current.id);
         await fetchRolePermsByRoleId(current.id);
+
+        // Tampilkan brand selector jika role saat ini adalah Brand
+        const showBrand = isBrandRoleName(current.name);
+        toggleBrandSelect(showBrand);
+
+        // Prefill brand kalau ada
+        if (showBrand && userData.brand_id) {
+          brandSelect.value = String(userData.brand_id);
+        }
       }
     } else {
       renderRolePerms('');
+      toggleBrandSelect(false);
     }
 
-    // Filter viewer
+    // Filter permissions viewer
     $('#permSearch')?.addEventListener('input', (e) => {
       renderRolePerms(e.target.value);
     });
 
-    // Ganti role → refresh permissions viewer
+    // Ganti role → refresh permissions viewer & toggle brand selector
     roleSelect?.addEventListener('change', async (e) => {
       const chosenId = e.target.value ? Number(e.target.value) : null;
       await fetchRolePermsByRoleId(chosenId);
+      toggleBrandSelect(roleIdIsBrand(chosenId));
+      // clear brand error saat toggle
+      const errEl = $('#error-brand'); if (errEl) errEl.textContent = '';
     });
   } catch {
     $('#rolePermList').innerHTML = `<div class="text-danger small">Gagal memuat data.</div>`;
@@ -217,6 +266,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     const pass  = ($('#password')?.value || '').trim();
     const pass2 = ($('#password_confirmation')?.value || '').trim();
     const roleId = ($('#roleSelect')?.value || '').trim();
+    const brandId = ($('#brandSelect')?.value || '').trim();
 
     if (name) fd.set('name', name);
     if (email) fd.set('email', email);
@@ -224,9 +274,25 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     if (pass2) fd.set('password_confirmation', pass2);
 
     // single role → kirim nama (bukan id), biar kompatibel resolver by name
+    let chosenRoleName = null;
     if (roleId) {
       const r = (allRoles.find(x => String(x.id) === String(roleId)));
-      if (r) fd.set('role', r.name);
+      if (r) {
+        chosenRoleName = r.name;
+        fd.set('role', r.name);
+      }
+    }
+
+    // Validasi brand kalau role = Brand
+    if (chosenRoleName && isBrandRoleName(chosenRoleName)) {
+      if (!brandId) {
+        const el = document.getElementById('error-brand');
+        if (el) el.textContent = 'Brand wajib dipilih untuk role Brand.';
+        showToast('Pilih brand untuk user Brand.', 'error');
+        return; // stop submit
+      }
+      // kirim brand_id (nanti disesuaikan dengan migration di backend)
+      fd.set('brand_id', brandId);
     }
 
     const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -249,6 +315,11 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         if (err.errors.role) {
           const el = document.getElementById('error-role');
           el.textContent = Array.isArray(err.errors.role) ? err.errors.role[0] : String(err.errors.role);
+        }
+        if (err.errors.brand || err.errors.brand_id) {
+          const el = document.getElementById('error-brand');
+          const msg = err.errors.brand_id ?? err.errors.brand;
+          el.textContent = Array.isArray(msg) ? msg[0] : String(msg);
         }
       }
       showToast(err?.message || 'Gagal menyimpan user.', 'error');

@@ -42,6 +42,14 @@ body {
     box-sizing: border-box;
 }
 
+.table th{
+    color:#444444;
+    text-transform: uppercase;
+    font-size: 14px;
+    font-weight: 700;
+   
+}
+
 
 
 
@@ -243,4 +251,8 @@ body {
     align-items: center;
     justify-content: center;
     text-align: center;
+}
+
+h6{
+    color:#444444;
 }

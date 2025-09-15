@@ -27,6 +27,7 @@ class User extends Authenticatable
         'password',
         'role',
         'avatar_path',
+        'brand_id',
     ];
 
     /**
@@ -71,5 +72,10 @@ class User extends Authenticatable
     public function getAvatarUrlAttribute(): ?string
     {
         return $this->fileViewerUrl($this->avatar_path);
+    }
+
+    public function brand()
+    {
+        return $this->belongsTo(Brand::class);
     }
 }

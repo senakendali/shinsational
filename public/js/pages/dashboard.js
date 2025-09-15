@@ -48,37 +48,57 @@ export async function render(target, path, query = {}, labelOverride = null) {
     <div id="admin-dashboard-root">
       <div id="__breadcrumb_mount"></div>
 
-      <!-- KPI cards -->
+      <!-- KPI cards (dengan ikon di sebelah kiri) -->
       <div class="row g-3 mb-4" id="kpi-cards">
         <div class="col-md-3">
-          <div class="dashboard-card text-center h-100 brand">
-            <div class="dashboard-card-body">
-              <h6 class="card-title">BRANDS</h6>
-              <p class="card-text fs-3 fw-bold" id="kpi-brands">-</p>
+          <div class="dashboard-card h-100 brand">
+            <div class="card-body d-flex align-items-center gap-3">
+              <div class="flex-shrink-0">
+                <i class="bi bi-building fs-1"></i>
+              </div>
+              <div class="flex-grow-1 text-end w-100">
+                <h6 class="card-title mb-1">BRANDS</h6>
+                <div class="fs-3 fw-bold" id="kpi-brands">-</div>
+              </div>
             </div>
           </div>
         </div>
         <div class="col-md-3">
-          <div class="dashboard-card text-center h-100 campaign">
-            <div class="card-body">
-              <h6 class="card-title">CAMPAIGNS</h6>
-              <p class="card-text fs-3 fw-bold" id="kpi-campaigns">-</p>
+          <div class="dashboard-card h-100 campaign">
+            <div class="card-body d-flex align-items-center gap-3">
+              <div class="flex-shrink-0">
+                <i class="bi bi-megaphone fs-1"></i>
+              </div>
+              <div class="flex-grow-1 text-end w-100">
+                <h6 class="card-title mb-1">CAMPAIGNS</h6>
+                <div class="fs-3 fw-bold" id="kpi-campaigns">-</div>
+              </div>
             </div>
           </div>
         </div>
         <div class="col-md-3">
-          <div class="dashboard-card  text-center h-100 registration">
-            <div class="card-body">
-              <h6 class="card-title">KOL</h6>
-              <p class="card-text fs-3 fw-bold" id="kpi-kols">-</p>
+          <div class="dashboard-card h-100 registration">
+            <div class="card-body d-flex align-items-center gap-3">
+              <div class="flex-shrink-0">
+                <i class="bi bi-people fs-1"></i>
+              </div>
+              <div class="flex-grow-1 text-end w-100">
+                <h6 class="card-title mb-1">KOL</h6>
+                <div class="fs-3 fw-bold" id="kpi-kols">-</div>
+              </div>
             </div>
           </div>
         </div>
         <div class="col-md-3">
-          <div class="dashboard-card text-center h-100 content">
-            <div class="card-body">
-              <h6 class="card-title">POST</h6>
-              <p class="card-text fs-3 fw-bold" id="kpi-posts">-</p>
+          <div class="dashboard-card h-100 content">
+            <div class="card-body d-flex align-items-center gap-3">
+              <div class="flex-shrink-0">
+                <i class="bi bi-file-earmark-text fs-1"></i>
+              </div>
+              <div class="flex-grow-1 text-end w-100">
+                <h6 class="card-title mb-1">POST</h6>
+                <div class="fs-3 fw-bold" id="kpi-posts">-</div>
+              </div>
             </div>
           </div>
         </div>
@@ -90,7 +110,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
           <div class="d-flex justify-content-between align-items-start mb-3">
             <div>
               <h6 class="mb-1 text-uppercase fw-bold"><i class="bi bi-pie-chart-fill"></i> Campaign Engagement</h6>
-              <div class="small text-muted" id="selectedBrandLine">-</div>
+              <div class="small text-muted d-none" id="selectedBrandLine">-</div>
             </div>
             <div class="d-flex gap-2 align-items-start">
               <select id="campaignFilter" class="form-select form-select-sm" style="min-width:280px">
@@ -169,8 +189,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
           <div id="selected-campaign-posts" class="mb-3 campaign-posts">
             <div class="dashboard-card text-center h-100">
               <div class="card-body">
-                
-                 <h6 class="card-title">TOTAL CONTENT</h6>
+                <h6 class="card-title">TOTAL CONTENT</h6>
                 <div class="fs-3 fw-bold" id="kpi-posts-selected">-</div>
               </div>
             </div>
@@ -230,18 +249,18 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
   // === Load KPI (global totals) ===
   try {
-    const [brands, campaigns, submissions] = await Promise.all([
+    // ambil total data untuk brands & campaigns (cukup metadata)
+    const [brands, campaigns] = await Promise.all([
       brandService.getAll({ page: 1, per_page: 1 }),
       campaignService.getAll({ page: 1, per_page: 1 }),
-      submissionService.getAll({ page: 1, per_page: 1 }),
     ]);
 
     if (target.dataset.dashInstance !== INSTANCE_KEY) return;
 
     const totalBrands = brands?.total ?? brands?.meta?.total ?? brands?.pagination?.total ?? (brands?.data?.length || 0);
     const totalCampaigns = campaigns?.total ?? campaigns?.meta?.total ?? campaigns?.pagination?.total ?? (campaigns?.data?.length || 0);
-    const totalSubmissions = submissions?.total ?? submissions?.meta?.total ?? submissions?.pagination?.total ?? (submissions?.data?.length || 0);
 
+    // === KOL total (tetap: dari registration service bila ada, fallback distinct dari submissions halaman pertama)
     let totalKols = null;
     try {
       const regMod = await import(`/js/services/influencerRegistrationService.js?v=${v}`);
@@ -249,15 +268,41 @@ export async function render(target, path, query = {}, labelOverride = null) {
       const regs = await regMod.influencerService.getAll({ page: 1, per_page: 1 });
       totalKols = regs?.total ?? regs?.meta?.total ?? regs?.pagination?.total ?? null;
     } catch {
-      const firstPage = submissions?.data || [];
-      const distinct = new Set(firstPage.map(s => s.tiktok_user_id).filter(Boolean));
-      totalKols = distinct.size;
+      // fallback ringan (halaman 1 submissions)
+      try {
+        const firstSubs = await submissionService.getAll({ page: 1, per_page: 100 });
+        const distinct = new Set((firstSubs?.data || []).map(s => s.tiktok_user_id).filter(Boolean));
+        totalKols = distinct.size;
+      } catch {
+        totalKols = 0;
+      }
     }
 
+    // === TOTAL POST (PERBAIKAN): hitung dari link_1..link_5 di SEMUA submissions
+    // lakukan pagination; batasi maksimal 10 halaman agar aman performa
+    let totalPosts = 0;
+    let page = 1;
+    const perPage = 200;
+    let lastPage = 1;
+
+    do {
+      const res = await submissionService.getAll({ page, per_page: perPage });
+      if (target.dataset.dashInstance !== INSTANCE_KEY) return;
+
+      const subs = res?.data || [];
+      for (const s of subs) {
+        totalPosts += countSubmissionPosts(s);
+      }
+
+      lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
+      page += 1;
+    } while (page <= lastPage && page <= 10);
+
+    // set KPI
     $('#kpi-brands').textContent = fmt(totalBrands);
     $('#kpi-campaigns').textContent = fmt(totalCampaigns);
     $('#kpi-kols').textContent = fmt(totalKols);
-    $('#kpi-posts').textContent = fmt(totalSubmissions);
+    $('#kpi-posts').textContent = fmt(totalPosts);
   } catch (e) {
     console.error('Load KPIs error', e);
     showToast('Gagal memuat ringkasan KPI', 'error');
@@ -595,7 +640,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }
   }
 
-
   // initial
   await loadCampaignEngagement(currentCampaignId);
 
@@ -701,7 +745,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
   }
 
   // === helpers: hitung total konten dari link_1..link_5 ===
-  // === helpers: hitung total konten dari link_1..link_5 ===
   function isFilled(v) {
     if (v == null) return false;
     const s = String(v).trim();
@@ -719,7 +762,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }
     return count;
   }
-
 
 }
 

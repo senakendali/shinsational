@@ -63,6 +63,44 @@ export async function renderBreadcrumb(target, currentPath = window.location.pat
     crumbs.push({ href: withBase('/'), label: labelOverride || 'Dashboard', active: true });
   }
 
+  // === NEW: Inject brand name setelah label "Dashboard" jika ada ===
+  try {
+    const last = crumbs[crumbs.length - 1];
+    // deteksi apakah ini halaman dashboard
+    const isDashboardPath = /\/dashboard$/i.test(last?.href || '') || rawPath === '/' || rawPath === '/dashboard';
+
+    if (isDashboardPath && last && typeof last.label === 'string') {
+      // Ambil data me (pakai helper kalau ada, kalau tidak fallback ke fetch)
+      let me = window.__ME || null;
+      if (!me) {
+        try {
+          const auth = await import(`/js/utils/auth.js?v=${v}`);
+          if (typeof auth.getMe === 'function') {
+            me = await auth.getMe();
+          }
+        } catch {}
+      }
+      if (!me) {
+        try {
+          const res = await fetch('/api/me', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+          if (res.ok) me = await res.json();
+          window.__ME = me;
+        } catch {}
+      }
+
+      const brandName = me?.brand?.name || me?.brand_name || null;
+      if (brandName) {
+        // Hindari duplikasi kalau sudah ada
+        const alreadyHas = last.label.toLowerCase().includes(brandName.toLowerCase());
+        if (!alreadyHas) {
+          last.label = `${last.label} / ${brandName}`;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[breadcrumb] gagal inject brand name:', e);
+  }
+
   // Hapus breadcrumb lama
   const old = target.querySelector('nav[data-breadcrumb]');
   if (old) old.remove();
