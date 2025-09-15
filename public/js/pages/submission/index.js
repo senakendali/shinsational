@@ -40,9 +40,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
         </select>
         <input class="form-control" style="min-width:260px" type="search" placeholder="Cari KOL / link…" id="searchInput">
       </div>
-      <div class="d-flex align-items-center gap-2">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
         <button class="btn btn-outline-secondary btn-refresh-all" type="button">
           <i class="bi bi-arrow-clockwise"></i> Refresh visible
+        </button>
+        <button class="btn btn-success btn-export-excel" type="button">
+          <i class="bi bi-file-earmark-excel"></i> Export Excel
         </button>
       </div>
     </div>
@@ -91,6 +94,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const listWrap = $('#submission-list');
   const pager = $('#pagination');
   const refreshAllBtn = $('.btn-refresh-all');
+  const exportBtn = $('.btn-export-excel');
+
+  // ===== Export state (diisi saat loadSubmissions) =====
+  let lastFiltered = [];     // array submissions (hasil filter keyword)
+  let lastCampaignName = ''; // nama campaign untuk nama file export
 
   // ===== Helpers =====
   const toFileUrl = (input) => {
@@ -124,6 +132,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
     s.influencer_name ||
     s.user_name ||
     '—';
+
+  const kolAvatarOf = (s) =>
+    s.avatar_url ||
+    s.profile_pic_url ||
+    s.tiktok_avatar_url ||
+    s.influencer_avatar_url ||
+    s.photo_url ||
+    null;
 
   const addressOf = (s) => {
     const pick = (...keys) => keys.map(k => s?.[k]).find(v => v && String(v).trim() !== '');
@@ -164,6 +180,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
       listWrap.innerHTML = `<div class="alert alert-info">Silakan pilih <b>Campaign</b> terlebih dahulu.</div>`;
       pager.innerHTML = '';
       hideLoader();
+      lastFiltered = [];
+      lastCampaignName = '';
       return;
     }
 
@@ -194,6 +212,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
           })
         : arr;
 
+      // simpan state untuk export
+      lastFiltered = filtered.slice();
+      lastCampaignName =
+        (filtered[0]?.campaign?.name) ||
+        (campaignFilter.selectedOptions[0]?.textContent || '').trim() ||
+        '';
+
       // Group per open_id
       const groups = new Map();
       filtered.forEach((s) => {
@@ -211,7 +236,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
         const first = subs[0] || {};
         const displayName = kolNameOf(first);
         const addr = addressOf(first);
-        const avatar = first.profile_pic_url ? `<img src="${first.profile_pic_url}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : '';
+        const avatarUrl = kolAvatarOf(first);
+        const avatar = avatarUrl ? `<img src="${avatarUrl}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : '';
         const firstSubmissionId = first.id;
 
         // Kondisi tombol "Input Resi"
@@ -226,7 +252,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
           </button>
         ` : '';
 
-        // Header per KOL: nama + alamat (kecil) + tombol aksi
+        // Header per KOL: avatar + nama + alamat (kecil) + tombol aksi
         rowsHtml.push(`
           <tr>
             <td colspan="9">
@@ -234,7 +260,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
                 <div class="d-flex align-items-start gap-2">
                   ${avatar}
                   <div>
-                    <div class="fw-semibold">${displayName}</div>
+                    <div class="fw-semibold d-flex align-items-center gap-2">
+                      <span>${displayName}</span>
+                    </div>
                     ${addr ? `<div class="text-muted small">${addr}</div>` : ''}
                   </div>
                 </div>
@@ -342,6 +370,107 @@ export async function render(target, path, query = {}, labelOverride = null) {
     } finally {
       hideLoader();
     }
+  }
+
+  // ===== Export helper =====
+  function exportVisibleToCSV() {
+    if (!lastFiltered.length) {
+      showToast('Tidak ada data untuk diekspor.', 'error');
+      return;
+    }
+
+    // Build flat rows per konten yang terisi
+    const rows = [];
+    const header = [
+      'Campaign',
+      'KOL Name',
+      'Avatar URL',
+      'TikTok User ID',
+      'Address',
+      'Link',
+      'Post Date',
+      'Screenshot URL',
+      'Invoice URL',
+      'Review URL',
+      'Views',
+      'Likes',
+      'Comments',
+      'Shares',
+    ];
+    rows.push(header);
+
+    for (const s of lastFiltered) {
+      const name = kolNameOf(s);
+      const avatar = kolAvatarOf(s) || '';
+      const openId = s.tiktok_user_id || '';
+      const addr = addressOf(s);
+      const campaign = s?.campaign?.name || lastCampaignName || '';
+
+      for (let slot = 1; slot <= 5; slot++) {
+        const link   = s[`link_${slot}`] || '';
+        const pdate  = s[`post_date_${slot}`] || '';
+        const scPath = s[`screenshot_${slot}_url`] || s[`screenshot_${slot}_path`];
+        const scUrl  = toFileUrl(scPath) || '';
+
+        const invUrl = toFileUrl(s.invoice_file_url || s.invoice_file_path) || '';
+        const revUrl = toFileUrl(s.review_proof_file_url || s.review_proof_file_path) || '';
+
+        const views    = metric(s, slot, 'views')    ?? metric(s, slot, 'view');
+        const likes    = metric(s, slot, 'likes')    ?? metric(s, slot, 'like');
+        const comments = metric(s, slot, 'comments') ?? metric(s, slot, 'comment');
+        const shares   = metric(s, slot, 'shares')   ?? metric(s, slot, 'share');
+
+        // hanya masukkan baris jika ada konten (link / tanggal / screenshot)
+        if (link || pdate || scUrl) {
+          rows.push([
+            campaign,
+            name,
+            avatar,
+            openId,
+            addr,
+            link,
+            pdate ? new Date(pdate).toLocaleDateString('id-ID') : '',
+            scUrl,
+            invUrl,
+            revUrl,
+            (views ?? ''),
+            (likes ?? ''),
+            (comments ?? ''),
+            (shares ?? ''),
+          ]);
+        }
+      }
+    }
+
+    // CSV encode
+    const toCSV = (arr) =>
+      arr.map(r =>
+        r.map(c => {
+          const val = (c === null || c === undefined) ? '' : String(c);
+          if (/[",\n]/.test(val)) return `"${val.replace(/"/g, '""')}"`;
+          return val;
+        }).join(',')
+      ).join('\n');
+
+    const csv = '\uFEFF' + toCSV(rows); // BOM agar Excel nyaman
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const date = new Date();
+    const y = date.getFullYear();
+    const m = String(date.getMonth()+1).padStart(2,'0');
+    const d = String(date.getDate()).padStart(2,'0');
+    const hh = String(date.getHours()).padStart(2,'0');
+    const mm = String(date.getMinutes()).padStart(2,'0');
+    const cleanName = (lastCampaignName || 'submissions').replace(/[^\w\-]+/g,'_');
+    const fileName = `submissions_${cleanName}_${y}${m}${d}_${hh}${mm}.csv`;
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    showToast('Export selesai. File siap diunduh.');
   }
 
   // ===== Modal helpers (Input Resi)
@@ -500,6 +629,21 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
         showToast(`Refresh selesai: ${ok} sukses, ${fail} gagal.`);
       };
+    }
+
+    // export visible to CSV (Excel)
+    if (exportBtn) {
+      exportBtn.onclick = () => {
+        const campaignId = (campaignFilter.value || '').trim();
+        if (!campaignId) {
+          showToast('Pilih campaign dulu ya.', 'error');
+          return;
+        }
+        const q = (searchInput.value || '').trim();
+        const url = `/api/influencer-submissions/export?campaign_id=${encodeURIComponent(campaignId)}${q ? `&q=${encodeURIComponent(q)}` : ''}`;
+        window.open(url, '_blank');
+      };
+
     }
   }
 

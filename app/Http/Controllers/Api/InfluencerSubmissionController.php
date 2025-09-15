@@ -17,6 +17,10 @@ use Illuminate\Support\Carbon;
 
 use App\Models\InfluencerAccount; // tabel opsi B
 use App\Models\InfluencerRegistration; // fallback token kalau perlu
+use Illuminate\Routing\Attributes\Middleware;
+
+use App\Exports\InfluencerSubmissionsExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 
 class InfluencerSubmissionController extends Controller
@@ -1121,4 +1125,24 @@ protected function oembedAuthor(?string $url): ?array
 
         return response()->json(['message' => 'Submission berhasil dihapus']);
     }
+
+    public function export(Request $request)
+    {
+        $data = $request->validate([
+            'campaign_id' => ['required','integer','exists:campaigns,id'],
+            'q'           => ['nullable','string','max:200'],
+        ]);
+
+        $campaignId = (int) $data['campaign_id'];
+        $keyword    = $data['q'] ?? null;
+
+        $campaignName = \App\Models\Campaign::whereKey($campaignId)->value('name') ?? 'campaign_'.$campaignId;
+        $safeName     = Str::of($campaignName)->slug('_');
+        $filename     = 'submissions_'.$safeName.'_'.now()->format('Ymd_His').'.xlsx';
+
+        return Excel::download(new InfluencerSubmissionsExport($campaignId, $keyword), $filename);
+    }
+
+
+
 }

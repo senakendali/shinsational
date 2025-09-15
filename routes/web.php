@@ -11,6 +11,7 @@ use App\Http\Controllers\TikTokAuthController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Api\InfluencerSubmissionController;
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\MeController;
@@ -66,6 +67,10 @@ Route::prefix('api')->middleware(['web','auth'])->group(function () {
     // optional helpers
     Route::post('users/{user}/sync-roles', [UserController::class, 'syncRoles'])->name('api.users.sync-roles');
     Route::post('users/{user}/sync-permissions', [UserController::class, 'syncPermissions'])->name('api.users.sync-permissions');
+
+    // ===== Influencer Submissions export
+    Route::get('influencer-submissions/export', [InfluencerSubmissionController::class, 'export'])
+    ->name('api.influencer-submissions.export');
 });
 
 /** -----------------------------------------------------------------
