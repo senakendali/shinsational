@@ -408,14 +408,57 @@ protected function oembedAuthor(?string $url): ?array
         return $found;
     }
 
+    // Tambahkan helper ini di dalam class InfluencerSubmissionController
+    private function tiktokHttp(string $accessToken): \Illuminate\Http\Client\PendingRequest
+    {
+        $clientKey = config('services.tiktok.client_key', env('TIKTOK_CLIENT_KEY'));
+        return \Http::withHeaders([
+            'Authorization' => 'Bearer '.$accessToken,
+            'Accept'        => 'application/json',
+            // sebagian env picky soal charset
+            'Content-Type'  => 'application/json; charset=UTF-8',
+            // aman ditambahkan untuk sandbox; abaikan kalau tak dipakai
+            'X-Client-Id'   => $clientKey ?: '',
+        ])->timeout(20);
+    }
+
+    /**
+     * Kirim POST JSON ke endpoint TikTok dengan fields sebagai STRING,
+     * dan kalau dibalas error "fields ... missed", retry pakai ARRAY.
+     */
+    private function ttPostWithFieldsRetry(
+        \Illuminate\Http\Client\PendingRequest $http,
+        string $url,
+        array $payloadBase,
+        array $fieldsList
+    ): \Illuminate\Http\Client\Response {
+        // 1) try dengan string comma-separated
+        $payload1 = $payloadBase + ['fields' => implode(',', $fieldsList)];
+        $resp = $http->asJson()->post($url, $payload1);
+
+        $body = $resp->json();
+        $missingFields =
+            !$resp->ok()
+            && str_contains(strtolower(json_encode($body)), 'fields')
+            && str_contains(strtolower(json_encode($body)), 'miss');
+
+        if ($missingFields) {
+            // 2) retry sebagai array
+            $payload2 = $payloadBase + ['fields' => $fieldsList];
+            return $http->asJson()->post($url, $payload2);
+        }
+        return $resp;
+    }
+
+
 
     // === Endpoint utama: refresh metrics ===
     public function refreshMetrics(Request $request, $id)
     {
-        $submission = InfluencerSubmission::findOrFail($id);
+        $submission = \App\Models\InfluencerSubmission::findOrFail($id);
 
-        // --- Ambil token milik owner open_id ini
-        $reg = InfluencerRegistration::where('tiktok_user_id', $submission->tiktok_user_id)
+        // Ambil token milik owner open_id ini
+        $reg = \App\Models\InfluencerRegistration::where('tiktok_user_id', $submission->tiktok_user_id)
             ->whereNotNull('access_token')
             ->orderByDesc('last_refreshed_at')
             ->orderByDesc('updated_at')
@@ -431,10 +474,9 @@ protected function oembedAuthor(?string $url): ?array
         // Normalisasi scopes
         $scopes = $reg->scopes;
         if (is_string($scopes)) {
-            $scopes = array_filter(array_map('trim', preg_split('/[,\s]+/', $scopes)));
+            $scopes = array_values(array_filter(array_map('trim', preg_split('/[,\s]+/', $scopes))));
         }
         $scopes = is_array($scopes) ? $scopes : [];
-
         if (!in_array('video.list', $scopes, true)) {
             return response()->json([
                 'message'        => 'Token tidak punya scope video.list. Minta KOL re-authorize & centang izin video.',
@@ -444,18 +486,11 @@ protected function oembedAuthor(?string $url): ?array
         }
 
         $accessToken = $reg->access_token;
-        $clientKey   = config('services.tiktok.client_key', env('TIKTOK_CLIENT_KEY'));
+        $http = $this->tiktokHttp($accessToken);
 
-        // --- HTTP helper: KIRIM JSON!
-        $http = fn () => \Http::asJson()->withHeaders([
-            'Authorization' => 'Bearer '.$accessToken,
-            'Accept'        => 'application/json',
-            'X-Client-Id'   => $clientKey, // aman ditambah (beberapa env sandbox minta)
-        ])->timeout(20);
-
-        // --- Info pemilik token (debug)
-        $meResp = $http()->post('https://open.tiktokapis.com/v2/user/info/', [
-            'fields' => ['open_id','username','display_name'],
+        // --- user/info: **GET** + fields sebagai string (lebih stabil di sandbox)
+        $meResp = $http->get('https://open.tiktokapis.com/v2/user/info/', [
+            'fields' => 'open_id,username,display_name',
         ]);
         $tokenOwner = [
             'open_id'      => data_get($meResp->json(), 'data.user.open_id'),
@@ -463,24 +498,27 @@ protected function oembedAuthor(?string $url): ?array
             'display_name' => data_get($meResp->json(), 'data.user.display_name'),
         ];
 
-        // --- Ekstrak video id dari URL
+        // Ekstrak video id
         $id1 = $this->extractAwemeId($submission->link_1);
         $id2 = $this->extractAwemeId($submission->link_2);
         $openId = $submission->tiktok_user_id;
 
-        // --- Helper: query by video_ids (WAJIB JSON + fields array)
-        $queryById = function (string $videoId) use ($http) {
+        // Helper: query by video_ids (POST JSON, fields string → retry array bila perlu)
+        $fieldsCommon = ['video_id','view_count','like_count','comment_count','share_count','create_time','author_open_id'];
+
+        $queryById = function (string $videoId) use ($http, $fieldsCommon) {
             try {
-                $resp = $http()->post('https://open.tiktokapis.com/v2/video/query/', [
-                    'filters'   => ['video_ids' => [$videoId]],
-                    'fields'    => ['video_id','view_count','like_count','comment_count','share_count','create_time','author_open_id'],
-                    'max_count' => 20,
-                ]);
+                $resp = $this->ttPostWithFieldsRetry(
+                    $http,
+                    'https://open.tiktokapis.com/v2/video/query/',
+                    ['filters' => ['video_ids' => [$videoId]], 'max_count' => 20],
+                    $fieldsCommon
+                );
                 if (!$resp->ok()) return [null, $resp->json()];
                 $videos = (array) data_get($resp->json(), 'data.videos', []);
                 foreach ($videos as $v) {
-                    $vid = $v['video_id'] ?? $v['id'] ?? null;
-                    if ((string)$vid === (string)$videoId) return [$v, null];
+                    $vid = (string) ($v['video_id'] ?? $v['id'] ?? '');
+                    if ($vid === (string)$videoId) return [$v, null];
                 }
                 return [null, null];
             } catch (\Throwable $e) {
@@ -488,16 +526,20 @@ protected function oembedAuthor(?string $url): ?array
             }
         };
 
-        // --- Helper: paginate list by creator (WAJIB JSON + filters.creator_id)
-        $findInList = function (string $videoId) use ($http, $openId) {
+        // Helper: list by creator (POST JSON, pakai filters.creator_id)
+        $findInList = function (string $videoId) use ($http, $openId, $fieldsCommon) {
             $cursor = 0; $page = 0; $maxPages = 25; $lastErr = null;
             do {
-                $resp = $http()->post('https://open.tiktokapis.com/v2/video/list/', [
-                    'filters'   => ['creator_id' => $openId],
-                    'fields'    => ['video_id','view_count','like_count','comment_count','share_count','create_time'],
-                    'max_count' => 50,
-                    'cursor'    => $cursor,
-                ]);
+                $resp = $this->ttPostWithFieldsRetry(
+                    $http,
+                    'https://open.tiktokapis.com/v2/video/list/',
+                    [
+                        'filters'   => ['creator_id' => $openId],
+                        'max_count' => 50,
+                        'cursor'    => $cursor,
+                    ],
+                    $fieldsCommon
+                );
                 if (!$resp->ok()) { $lastErr = $resp->json(); break; }
 
                 $j      = $resp->json();
@@ -516,6 +558,21 @@ protected function oembedAuthor(?string $url): ?array
 
             return [null, $page, true, $lastErr];
         };
+
+        // oEmbed hint (opsional, buat debugging author)
+        $oembedHints = [];
+        foreach ([1 => $submission->link_1, 2 => $submission->link_2] as $slot => $url) {
+            if (!$url) continue;
+            try {
+                $oe = \Http::timeout(8)->get('https://www.tiktok.com/oembed', ['url' => $url]);
+                if ($oe->ok()) {
+                    $oembedHints[$slot] = [
+                        'author_unique_id' => data_get($oe->json(), 'author_unique_id'),
+                        'author_name'      => data_get($oe->json(), 'author_name'),
+                    ];
+                }
+            } catch (\Throwable $e) {}
+        }
 
         $updated  = [];
         $notFound = [];
@@ -567,7 +624,7 @@ protected function oembedAuthor(?string $url): ?array
                 'message'     => 'Metrik berhasil diperbarui.',
                 'updated'     => $updated,
                 'token_owner' => $tokenOwner,
-                'hints'       => $debug,
+                'hints'       => ['oembed' => $oembedHints] + $debug,
                 'data'        => $submission->fresh(),
             ]);
         }
@@ -579,10 +636,11 @@ protected function oembedAuthor(?string $url): ?array
             'token_owner'    => $tokenOwner,
             'current_scopes' => $scopes,
             'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
-            'hints'          => $debug,
+            'hints'          => ['oembed' => $oembedHints] + $debug,
             'data'           => $submission->fresh(),
         ]);
     }
+
 
 
 
