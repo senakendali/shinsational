@@ -412,10 +412,10 @@ protected function oembedAuthor(?string $url): ?array
     // === Endpoint utama: refresh metrics ===
     public function refreshMetrics(Request $request, $id)
     {
-        $submission = \App\Models\InfluencerSubmission::findOrFail($id);
+        $submission = InfluencerSubmission::findOrFail($id);
 
-        // --- Ambil token milik owner open_id ini (sesuaikan kalau pakai influencer_accounts)
-        $reg = \App\Models\InfluencerRegistration::where('tiktok_user_id', $submission->tiktok_user_id)
+        // --- Ambil token milik owner open_id ini
+        $reg = InfluencerRegistration::where('tiktok_user_id', $submission->tiktok_user_id)
             ->whereNotNull('access_token')
             ->orderByDesc('last_refreshed_at')
             ->orderByDesc('updated_at')
@@ -428,8 +428,12 @@ protected function oembedAuthor(?string $url): ?array
             ], 409);
         }
 
-        $accessToken = $reg->access_token;
-        $scopes      = (array) ($reg->scopes ?? []);
+        // Cek scope dasar
+        $scopes = $reg->scopes;
+        if (is_string($scopes)) {
+            $scopes = array_filter(array_map('trim', preg_split('/[,\s]+/', $scopes)));
+        }
+        $scopes = is_array($scopes) ? $scopes : [];
         if (!in_array('video.list', $scopes, true)) {
             return response()->json([
                 'message' => 'Token tidak punya scope video.list. Minta KOL re-authorize & centang izin video.',
@@ -438,49 +442,44 @@ protected function oembedAuthor(?string $url): ?array
             ], 409);
         }
 
-        // --- Identitas owner token (buat debug)
-        $meResp = \Http::withToken($accessToken)->acceptJson()
-            ->get('https://open.tiktokapis.com/v2/user/info/', ['fields' => 'open_id,username,display_name']);
+        $accessToken = $reg->access_token;
+        $clientKey   = config('services.tiktok.client_key', env('TIKTOK_CLIENT_KEY'));
+
+        // HTTP helper (pakai header yang sesuai Open API)
+        $http = fn () => \Http::withHeaders([
+            'Authorization' => 'Bearer '.$accessToken,
+            'Accept'        => 'application/json',
+            // beberapa env sandbox butuh ini (nggak apa2 ditambah)
+            'X-Client-Id'   => $clientKey,
+        ]);
+
+        // --- Info pemilik token (debug)
+        $meResp = $http()->post('https://open.tiktokapis.com/v2/user/info/', [
+            'fields' => ['open_id','username','display_name'],
+        ]);
         $tokenOwner = [
             'open_id'      => data_get($meResp->json(), 'data.user.open_id'),
             'username'     => data_get($meResp->json(), 'data.user.username'),
             'display_name' => data_get($meResp->json(), 'data.user.display_name'),
         ];
 
-        // --- Ekstrak aweme/video id dari URL
+        // --- Ekstrak video id dari URL
         $id1 = $this->extractAwemeId($submission->link_1);
         $id2 = $this->extractAwemeId($submission->link_2);
+        $openId = $submission->tiktok_user_id;
 
-        // --- Hint lewat oEmbed (sekadar info author)
-        $oembedHints = [];
-        foreach ([1 => $submission->link_1, 2 => $submission->link_2] as $slot => $url) {
-            if (!$url) continue;
+        // --- Helper: query by video_ids (WAJIB fields berupa ARRAY)
+        $queryById = function (string $videoId) use ($http) {
             try {
-                $oe = \Http::timeout(8)->get('https://www.tiktok.com/oembed', ['url' => $url]);
-                if ($oe->ok()) {
-                    $oembedHints[$slot] = [
-                        'author_unique_id' => data_get($oe->json(), 'author_unique_id'),
-                        'author_name'      => data_get($oe->json(), 'author_name'),
-                    ];
-                }
-            } catch (\Throwable $e) {}
-        }
-
-        // --- Helper: query by id (lebih akurat)
-        $queryById = function (string $videoId) use ($accessToken) {
-            try {
-                $resp = \Http::withToken($accessToken)->acceptJson()
-                    ->post('https://open.tiktokapis.com/v2/video/query/', [
-                        'filters' => ['video_ids' => [$videoId]],
-                        'fields'  => 'id,view_count,like_count,comment_count,share_count,create_time',
-                    ]);
-                if (!$resp->ok()) {
-                    return [null, $resp->json()];
-                }
-                $videos = data_get($resp->json(), 'data.videos', []);
+                $resp = $http()->post('https://open.tiktokapis.com/v2/video/query/', [
+                    'filters'   => ['video_ids' => [$videoId]],
+                    'fields'    => ['video_id','view_count','like_count','comment_count','share_count','create_time','author_open_id'],
+                    'max_count' => 20,
+                ]);
+                if (!$resp->ok()) return [null, $resp->json()];
+                $videos = (array) data_get($resp->json(), 'data.videos', []);
                 foreach ($videos as $v) {
-                    // beberapa implementasi pakai "id" atau "video_id"
-                    $vid = $v['id'] ?? $v['video_id'] ?? null;
+                    $vid = $v['video_id'] ?? $v['id'] ?? null;
                     if ((string)$vid === (string)$videoId) {
                         return [$v, null];
                     }
@@ -491,38 +490,37 @@ protected function oembedAuthor(?string $url): ?array
             }
         };
 
-        // --- Helper: paginate list (fallback)
-        $findInList = function (string $videoId) use ($accessToken) {
-            $cursor = 0; $page = 0; $maxPages = 25; // naikkan batas
-            $lastErr = null;
+        // --- Helper: paginate list by creator (WAJIB POST + filters.creator_id)
+        $findInList = function (string $videoId) use ($http, $openId) {
+            $cursor = 0; $page = 0; $maxPages = 25; $lastErr = null;
             while ($page < $maxPages) {
-                $resp = \Http::withToken($accessToken)->acceptJson()
-                    ->get('https://open.tiktokapis.com/v2/video/list/', [
-                        'fields'    => 'id,view_count,like_count,comment_count,share_count,create_time',
-                        'cursor'    => $cursor,
-                        'max_count' => 20,
-                    ]);
-                if (!$resp->ok()) {
-                    $lastErr = $resp->json();
-                    break;
-                }
-                $data   = $resp->json();
-                $videos = data_get($data, 'data.videos', []);
-                foreach ($videos as $v) {
-                    $vid = $v['id'] ?? $v['video_id'] ?? null;
-                    if ((string)$vid === (string)$videoId) {
-                        return [$v, $page + 1, true, $lastErr];
+                $resp = $http()->post('https://open.tiktokapis.com/v2/video/list/', [
+                    'filters'   => ['creator_id' => $openId],
+                    'fields'    => ['video_id','view_count','like_count','comment_count','share_count','create_time'],
+                    'max_count' => 50,
+                    'cursor'    => $cursor,
+                ]);
+                if (!$resp->ok()) { $lastErr = $resp->json(); break; }
+
+                $j      = $resp->json();
+                $items  = (array) data_get($j, 'data.videos', data_get($j, 'data.items', []));
+                $cursor = data_get($j, 'data.cursor', 0);
+                $hasMore= (bool) data_get($j, 'data.has_more', false);
+
+                foreach ($items as $it) {
+                    $vid = (string) ($it['video_id'] ?? $it['id'] ?? '');
+                    if ($vid === (string)$videoId) {
+                        return [$it, $page + 1, true, $lastErr];
                     }
                 }
-                $hasMore = (bool) data_get($data, 'data.has_more', false);
-                $cursor  = data_get($data, 'data.cursor', 0);
+
                 $page++;
                 if (!$hasMore) break;
             }
             return [null, $page, true, $lastErr];
         };
 
-        $updated = [];
+        $updated  = [];
         $notFound = [];
         $debug    = ['search' => [], 'query' => []];
 
@@ -567,12 +565,13 @@ protected function oembedAuthor(?string $url): ?array
         if ($updated) {
             $submission->last_metrics_synced_at = now();
             $submission->save();
+
             return response()->json([
-                'message'      => 'Metrik berhasil diperbarui.',
-                'updated'      => $updated,
-                'token_owner'  => $tokenOwner,
-                'hints'        => ['oembed' => $oembedHints] + $debug,
-                'data'         => $submission->fresh(),
+                'message'     => 'Metrik berhasil diperbarui.',
+                'updated'     => $updated,
+                'token_owner' => $tokenOwner,
+                'hints'       => $debug,
+                'data'        => $submission->fresh(),
             ]);
         }
 
@@ -583,10 +582,11 @@ protected function oembedAuthor(?string $url): ?array
             'token_owner'    => $tokenOwner,
             'current_scopes' => $scopes,
             'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
-            'hints'          => ['oembed' => $oembedHints] + $debug,
+            'hints'          => $debug,
             'data'           => $submission->fresh(),
         ]);
     }
+
 
     /**
      * Ekstrak aweme/video id dari berbagai format URL TikTok.
