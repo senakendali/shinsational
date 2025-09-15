@@ -423,21 +423,22 @@ protected function oembedAuthor(?string $url): ?array
 
         if (!$reg) {
             return response()->json([
-                'message' => 'Token TikTok tidak ditemukan untuk influencer ini. Minta KOL connect ulang.',
-                'reauth_url' => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
+                'message'   => 'Token TikTok tidak ditemukan untuk influencer ini. Minta KOL connect ulang.',
+                'reauth_url'=> url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
             ], 409);
         }
 
-        // Cek scope dasar
+        // Normalisasi scopes
         $scopes = $reg->scopes;
         if (is_string($scopes)) {
             $scopes = array_filter(array_map('trim', preg_split('/[,\s]+/', $scopes)));
         }
         $scopes = is_array($scopes) ? $scopes : [];
+
         if (!in_array('video.list', $scopes, true)) {
             return response()->json([
-                'message' => 'Token tidak punya scope video.list. Minta KOL re-authorize & centang izin video.',
-                'reauth_url' => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
+                'message'        => 'Token tidak punya scope video.list. Minta KOL re-authorize & centang izin video.',
+                'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
                 'current_scopes' => $scopes,
             ], 409);
         }
@@ -445,13 +446,12 @@ protected function oembedAuthor(?string $url): ?array
         $accessToken = $reg->access_token;
         $clientKey   = config('services.tiktok.client_key', env('TIKTOK_CLIENT_KEY'));
 
-        // HTTP helper (pakai header yang sesuai Open API)
-        $http = fn () => \Http::withHeaders([
+        // --- HTTP helper: KIRIM JSON!
+        $http = fn () => \Http::asJson()->withHeaders([
             'Authorization' => 'Bearer '.$accessToken,
             'Accept'        => 'application/json',
-            // beberapa env sandbox butuh ini (nggak apa2 ditambah)
-            'X-Client-Id'   => $clientKey,
-        ]);
+            'X-Client-Id'   => $clientKey, // aman ditambah (beberapa env sandbox minta)
+        ])->timeout(20);
 
         // --- Info pemilik token (debug)
         $meResp = $http()->post('https://open.tiktokapis.com/v2/user/info/', [
@@ -468,7 +468,7 @@ protected function oembedAuthor(?string $url): ?array
         $id2 = $this->extractAwemeId($submission->link_2);
         $openId = $submission->tiktok_user_id;
 
-        // --- Helper: query by video_ids (WAJIB fields berupa ARRAY)
+        // --- Helper: query by video_ids (WAJIB JSON + fields array)
         $queryById = function (string $videoId) use ($http) {
             try {
                 $resp = $http()->post('https://open.tiktokapis.com/v2/video/query/', [
@@ -480,9 +480,7 @@ protected function oembedAuthor(?string $url): ?array
                 $videos = (array) data_get($resp->json(), 'data.videos', []);
                 foreach ($videos as $v) {
                     $vid = $v['video_id'] ?? $v['id'] ?? null;
-                    if ((string)$vid === (string)$videoId) {
-                        return [$v, null];
-                    }
+                    if ((string)$vid === (string)$videoId) return [$v, null];
                 }
                 return [null, null];
             } catch (\Throwable $e) {
@@ -490,10 +488,10 @@ protected function oembedAuthor(?string $url): ?array
             }
         };
 
-        // --- Helper: paginate list by creator (WAJIB POST + filters.creator_id)
+        // --- Helper: paginate list by creator (WAJIB JSON + filters.creator_id)
         $findInList = function (string $videoId) use ($http, $openId) {
             $cursor = 0; $page = 0; $maxPages = 25; $lastErr = null;
-            while ($page < $maxPages) {
+            do {
                 $resp = $http()->post('https://open.tiktokapis.com/v2/video/list/', [
                     'filters'   => ['creator_id' => $openId],
                     'fields'    => ['video_id','view_count','like_count','comment_count','share_count','create_time'],
@@ -504,7 +502,7 @@ protected function oembedAuthor(?string $url): ?array
 
                 $j      = $resp->json();
                 $items  = (array) data_get($j, 'data.videos', data_get($j, 'data.items', []));
-                $cursor = data_get($j, 'data.cursor', 0);
+                $cursor = (int) data_get($j, 'data.cursor', 0);
                 $hasMore= (bool) data_get($j, 'data.has_more', false);
 
                 foreach ($items as $it) {
@@ -513,10 +511,9 @@ protected function oembedAuthor(?string $url): ?array
                         return [$it, $page + 1, true, $lastErr];
                     }
                 }
-
                 $page++;
-                if (!$hasMore) break;
-            }
+            } while ($page < $maxPages && $cursor);
+
             return [null, $page, true, $lastErr];
         };
 
@@ -586,6 +583,7 @@ protected function oembedAuthor(?string $url): ?array
             'data'           => $submission->fresh(),
         ]);
     }
+
 
 
     /**
