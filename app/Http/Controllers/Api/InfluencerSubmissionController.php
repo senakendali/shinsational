@@ -538,38 +538,36 @@ protected function oembedAuthor(?string $url): ?array
         return $last ?? ['ok'=>false, 'json'=>null, 'http_status'=>0, 'variant'=>'NONE', 'error'=>'no_variant_ok'];
     }
 
-    // ====== HTTP preset: selalu JSON ======
+    // Selalu JSON
     private function ttHttp(string $accessToken): \Illuminate\Http\Client\PendingRequest
     {
         return \Http::withToken($accessToken)
             ->acceptJson()
-            ->asJson() // << penting supaya body dikirim sebagai JSON
-            ->withHeaders([
-                'Content-Type' => 'application/json; charset=UTF-8',
-                'X-Client-Id'  => (string) config('services.tiktok.client_key', ''), // aman walau kosong
-            ])
+            ->asJson() // penting
+            ->withHeaders(['Content-Type' => 'application/json; charset=UTF-8'])
             ->timeout(25);
     }
 
-    // Helper kirim POST JSON yang “pasti” JSON
+    // POST JSON eksplisit
     private function ttPostJson(\Illuminate\Http\Client\PendingRequest $http, string $url, array $payload)
     {
         return $http->send('POST', $url, ['json' => $payload]);
     }
 
-    // ====== video.query: 2 varian fields (flat & statistics) ======
+    // ===== video.query: kirim fields sebagai ARRAY =====
     private function ttVideoQuery(\Illuminate\Http\Client\PendingRequest $http, array $videoIds): array
     {
         $url = 'https://open.tiktokapis.com/v2/video/query/';
-        // TikTok lebih “aman” kalau fields string comma-separated
+
+        // Varian A: flat fields; Varian B: pakai "statistics"
         $variants = [
             'A' => [
                 'filters' => ['video_ids' => array_values($videoIds)],
-                'fields'  => 'video_id,create_time,view_count,like_count,comment_count,share_count,author_open_id',
+                'fields'  => ['video_id','create_time','view_count','like_count','comment_count','share_count','author_open_id'],
             ],
             'B' => [
                 'filters' => ['video_ids' => array_values($videoIds)],
-                'fields'  => 'video_id,create_time,statistics,author_open_id',
+                'fields'  => ['video_id','create_time','statistics','author_open_id'],
             ],
         ];
 
@@ -589,36 +587,36 @@ protected function oembedAuthor(?string $url): ?array
         return $last;
     }
 
-    // ====== video.list scan: POST JSON + rate-limit backoff ======
+    // ===== video.list scan: pakai creator_id + fields ARRAY =====
     private function ttVideoListScan(
         \Illuminate\Http\Client\PendingRequest $http,
+        string $creatorOpenId,
         array $targetVids = [],
-        int $maxPages = 10,          // batasi biar gak cepat 429
-        int $max429Retries = 4       // backoff ringan
+        int $maxPages = 10,
+        int $max429Retries = 4
     ): array {
-        $url   = 'https://open.tiktokapis.com/v2/video/list/';
-        $need  = $targetVids ? array_fill_keys($targetVids, true) : null;
+        $url    = 'https://open.tiktokapis.com/v2/video/list/';
+        $need   = $targetVids ? array_fill_keys($targetVids, true) : null;
         $cursor = 0;
         $pages  = 0;
         $collected = [];
         $last = null;
 
-        // Dua gaya fields (string)
         $variants = [
-            'A' => 'video_id,create_time,view_count,like_count,comment_count,share_count',
-            'B' => 'video_id,create_time,statistics',
+            'A' => ['video_id','create_time','view_count','like_count','comment_count','share_count'],
+            'B' => ['video_id','create_time','statistics'],
         ];
 
         while ($pages < $maxPages && ($need === null || count($need) > 0)) {
             $pages++;
-            foreach ($variants as $vk => $fieldsStr) {
+            foreach ($variants as $vk => $fieldsArr) {
                 $payload = [
-                    'cursor'    => $cursor,
-                    'max_count' => 50,
-                    'fields'    => $fieldsStr,
+                    'creator_id' => $creatorOpenId,   // << penting, terutama di sandbox
+                    'cursor'     => $cursor,
+                    'max_count'  => 50,
+                    'fields'     => $fieldsArr,       // << array, bukan string
                 ];
 
-                // retry jika 429
                 $retries = 0;
                 retry_label:
                 try {
@@ -627,18 +625,16 @@ protected function oembedAuthor(?string $url): ?array
                     $last = ['http'=>$resp->status(), 'variant'=>$vk, 'err'=>$resp->ok() ? null : $json];
 
                     if ($resp->status() === 429 && $retries < $max429Retries) {
-                        // backoff 400–800ms
-                        usleep(400000 + random_int(0, 400000));
+                        usleep(400000 + random_int(0, 400000)); // backoff 400–800ms
                         $retries++;
                         goto retry_label;
                     }
 
                     if (!$resp->ok()) {
-                        // coba varian berikutnya
-                        continue;
+                        continue; // coba varian selanjutnya
                     }
 
-                    $items  = (array) (data_get($json, 'data.videos') ?? data_get($json, 'data.items', []));
+                    $items = (array) (data_get($json, 'data.videos') ?? data_get($json, 'data.items', []));
                     foreach ($items as $it) {
                         $vid = (string) ($it['video_id'] ?? $it['id'] ?? '');
                         if ($vid === '') continue;
@@ -651,14 +647,11 @@ protected function oembedAuthor(?string $url): ?array
                     $cursor  = is_numeric($next) ? (int)$next : 0;
 
                     if (($need !== null && count($need) === 0) || !$hasMore || !$cursor) {
-                        break 2; // selesai
+                        break 2;
                     }
-
-                    // halaman sukses → lanjut halaman berikutnya (tetap varian sama)
-                    break;
+                    break; // lanjut halaman berikutnya
                 } catch (\Throwable $e) {
                     $last = ['http'=>0, 'variant'=>$vk, 'err'=>$e->getMessage()];
-                    // coba varian berikutnya
                 }
             }
         }
@@ -666,14 +659,11 @@ protected function oembedAuthor(?string $url): ?array
         return ['collected'=>$collected, 'pages'=>$pages, 'last'=>$last];
     }
 
-    // ====== ambil angka view/like/dll dari objek video (flat/statistics) ======
+    // Ambil counts dari video object (flat/statistics)
     private function ttPullCounts(array $v): array
     {
         $get = function ($paths) use ($v) {
-            foreach ((array)$paths as $p) {
-                $val = data_get($v, $p);
-                if ($val !== null) return $val;
-            }
+            foreach ((array)$paths as $p) { $val = data_get($v, $p); if ($val !== null) return $val; }
             return null;
         };
         return [
@@ -684,7 +674,6 @@ protected function oembedAuthor(?string $url): ?array
         ];
     }
 
-    // ====== REPLACE method refreshMetrics sepenuhnya ======
     public function refreshMetrics(Request $request, $id)
     {
         $submission = \App\Models\InfluencerSubmission::findOrFail($id);
@@ -697,38 +686,32 @@ protected function oembedAuthor(?string $url): ?array
 
         if (!$reg) {
             return response()->json([
-                'message'    => 'Token TikTok tidak ditemukan untuk influencer ini. Minta KOL connect ulang.',
+                'message' => 'Token TikTok tidak ditemukan untuk influencer ini. Minta KOL connect ulang.',
                 'reauth_url' => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
             ], 409);
         }
 
-        // normalisasi scopes
+        // Normalisasi scopes
         $scopes = $reg->scopes;
-        if (is_string($scopes)) {
-            $scopes = array_values(array_filter(array_map('trim', preg_split('/[,\s]+/', $scopes))));
-        }
+        if (is_string($scopes)) $scopes = array_values(array_filter(array_map('trim', preg_split('/[,\s]+/', $scopes))));
         $scopes = is_array($scopes) ? $scopes : [];
         if (!in_array('video.list', $scopes, true)) {
             return response()->json([
-                'message'        => 'Token tidak punya scope video.list. Minta KOL re-authorize & centang izin video.',
-                'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
+                'message' => 'Token tidak punya scope video.list. Minta KOL re-authorize & centang izin video.',
+                'reauth_url' => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
                 'current_scopes' => $scopes,
             ], 409);
         }
 
         $http = $this->ttHttp($reg->access_token);
 
-        // identitas token owner (debug opsional)
+        // Siapa pemilik token (dipakai untuk creator_id)
         $me = $http->get('https://open.tiktokapis.com/v2/user/info/', [
             'fields' => 'open_id,username,display_name',
         ])->json();
-        $tokenOwner = [
-            'open_id'      => data_get($me, 'data.user.open_id'),
-            'username'     => data_get($me, 'data.user.username'),
-            'display_name' => data_get($me, 'data.user.display_name'),
-        ];
+        $ownerOpenId = data_get($me, 'data.user.open_id') ?: $submission->tiktok_user_id;
 
-        // ambil aweme/video id dari link 1 & 2
+        // Extract video IDs dari link
         $vids = [];
         if ($v1 = $this->extractAwemeId($submission->link_1)) $vids[1] = $v1;
         if ($v2 = $this->extractAwemeId($submission->link_2)) $vids[2] = $v2;
@@ -737,7 +720,7 @@ protected function oembedAuthor(?string $url): ?array
         $notFound = [];
         $hints    = [];
 
-        // 1) video.query
+        // 1) Coba video.query (fields = array)
         if ($vids) {
             $qry = $this->ttVideoQuery($http, array_values($vids));
             $hints['query'] = ['variant'=>$qry['variant'], 'http'=>$qry['http'], 'error'=>$qry['err']];
@@ -754,24 +737,20 @@ protected function oembedAuthor(?string $url): ?array
                 if (!isset($byId[$id])) continue;
                 $c = $this->ttPullCounts($byId[$id]);
                 if ($slot === 1) {
-                    $submission->views_1    = $c['views']    ?? $submission->views_1;
-                    $submission->likes_1    = $c['likes']    ?? $submission->likes_1;
-                    $submission->comments_1 = $c['comments'] ?? $submission->comments_1;
-                    $submission->shares_1   = $c['shares']   ?? $submission->shares_1;
+                    $submission->views_1 = $c['views'];   $submission->likes_1 = $c['likes'];
+                    $submission->comments_1 = $c['comments']; $submission->shares_1 = $c['shares'];
                 } else {
-                    $submission->views_2    = $c['views']    ?? $submission->views_2;
-                    $submission->likes_2    = $c['likes']    ?? $submission->likes_2;
-                    $submission->comments_2 = $c['comments'] ?? $submission->comments_2;
-                    $submission->shares_2   = $c['shares']   ?? $submission->shares_2;
+                    $submission->views_2 = $c['views'];   $submission->likes_2 = $c['likes'];
+                    $submission->comments_2 = $c['comments']; $submission->shares_2 = $c['shares'];
                 }
                 $updated[] = $slot;
             }
         }
 
-        // 2) Jika masih ada yang belum ketemu → scan video.list (tanpa creator_id)
-        $left = array_values(array_diff(array_values($vids), array_intersect(array_values($vids), array_map(fn($s)=>$vids[$s] ?? null, $updated))));
-        if ($left) {
-            $scan = $this->ttVideoListScan($http, $left, 10, 4); // batas default + backoff
+        // 2) Masih ada yang belum dapat → scan video.list dengan creator_id = pemilik token
+        $leftIds = array_values(array_diff(array_values($vids), array_map(fn($s)=>$vids[$s] ?? null, $updated)));
+        if ($leftIds) {
+            $scan = $this->ttVideoListScan($http, $ownerOpenId, $leftIds, 10, 4);
             $hints['search'] = [
                 'pages_scanned' => $scan['pages'],
                 'variant'       => $scan['last']['variant'] ?? '-',
@@ -779,24 +758,16 @@ protected function oembedAuthor(?string $url): ?array
                 'error'         => $scan['last']['err'] ?? null,
             ];
 
-            foreach ($left as $id) {
-                if (!isset($scan['collected'][$id])) {
-                    $slot = array_search($id, $vids, true);
-                    if ($slot !== false) $notFound[(string)$slot] = $id;
-                    continue;
-                }
+            foreach ($leftIds as $id) {
                 $slot = array_search($id, $vids, true);
+                if (!isset($scan['collected'][$id])) { $notFound[(string)$slot] = $id; continue; }
                 $c = $this->ttPullCounts($scan['collected'][$id]);
                 if ($slot === 1) {
-                    $submission->views_1    = $c['views']    ?? $submission->views_1;
-                    $submission->likes_1    = $c['likes']    ?? $submission->likes_1;
-                    $submission->comments_1 = $c['comments'] ?? $submission->comments_1;
-                    $submission->shares_1   = $c['shares']   ?? $submission->shares_1;
+                    $submission->views_1 = $c['views'];   $submission->likes_1 = $c['likes'];
+                    $submission->comments_1 = $c['comments']; $submission->shares_1 = $c['shares'];
                 } else {
-                    $submission->views_2    = $c['views']    ?? $submission->views_2;
-                    $submission->likes_2    = $c['likes']    ?? $submission->likes_2;
-                    $submission->comments_2 = $c['comments'] ?? $submission->comments_2;
-                    $submission->shares_2   = $c['shares']   ?? $submission->shares_2;
+                    $submission->views_2 = $c['views'];   $submission->likes_2 = $c['likes'];
+                    $submission->comments_2 = $c['comments']; $submission->shares_2 = $c['shares'];
                 }
                 if (!in_array($slot, $updated, true)) $updated[] = $slot;
             }
@@ -805,13 +776,16 @@ protected function oembedAuthor(?string $url): ?array
         if ($updated) {
             $submission->last_metrics_synced_at = now();
             $submission->save();
-
             return response()->json([
                 'message'     => 'Metrik berhasil diperbarui.',
                 'updated'     => $updated,
-                'token_owner' => $tokenOwner,
-                'hints'       => $hints,
-                'data'        => $submission->fresh(),
+                'token_owner' => [
+                    'open_id'      => $ownerOpenId,
+                    'username'     => data_get($me, 'data.user.username'),
+                    'display_name' => data_get($me, 'data.user.display_name'),
+                ],
+                'hints' => $hints,
+                'data'  => $submission->fresh(),
             ]);
         }
 
@@ -819,13 +793,18 @@ protected function oembedAuthor(?string $url): ?array
             'message'        => 'Tidak ada metrik yang ditemukan untuk link ini.',
             'updated'        => [],
             'not_found'      => $notFound ?: $vids,
-            'token_owner'    => $tokenOwner,
+            'token_owner'    => [
+                'open_id'      => $ownerOpenId,
+                'username'     => data_get($me, 'data.user.username'),
+                'display_name' => data_get($me, 'data.user.display_name'),
+            ],
             'current_scopes' => $scopes,
             'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
             'hints'          => $hints,
             'data'           => $submission->fresh(),
         ]);
     }
+
 
     
 
