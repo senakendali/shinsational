@@ -618,34 +618,55 @@ protected function oembedAuthor(?string $url): ?array
 
         $q = \App\Models\InfluencerSubmission::query()
             ->select([
-                'influencer_submissions.*', // semua kolom submission, termasuk acquisition/shipping
+                'influencer_submissions.*',
                 \DB::raw('influencer_submissions.created_at as submission_created_at'),
                 \DB::raw('influencer_submissions.updated_at as submission_updated_at'),
             ])
             ->addSelect([
-                // identitas dasar
+                // identitas dasar (registrations)
                 'full_name' => \App\Models\InfluencerRegistration::select('full_name')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
                     ->latest()->limit(1),
+
                 'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
                     ->latest()->limit(1),
-                'profile_pic_url' => \App\Models\InfluencerRegistration::select('profile_pic_url')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
 
-                // kontak
+                // ✅ avatar utama dari influencer_accounts
+                'avatar_url' => \App\Models\InfluencerAccount::select('avatar_url')
+                    ->whereColumn('influencer_accounts.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->orderByDesc('id')->limit(1),
+
+                // ✅ profile_pic_url = avatar dari accounts, fallback ke registrations.profile_pic_url
+                'profile_pic_url' => \DB::raw("
+                    COALESCE(
+                    (SELECT ia.avatar_url
+                        FROM influencer_accounts ia
+                        WHERE ia.tiktok_user_id = influencer_submissions.tiktok_user_id
+                    ORDER BY ia.id DESC
+                        LIMIT 1),
+                    (SELECT ir.profile_pic_url
+                        FROM influencer_registrations ir
+                        WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id
+                        AND ir.campaign_id    = influencer_submissions.campaign_id
+                    ORDER BY ir.id DESC
+                        LIMIT 1)
+                    )
+                "),
+
+                // kontak dari registrations (terbaru by id)
                 'phone' => \App\Models\InfluencerRegistration::select('phone')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
                     ->latest()->limit(1),
+
                 'email' => \App\Models\InfluencerRegistration::select('email')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
                     ->latest()->limit(1),
+
                 'address' => \App\Models\InfluencerRegistration::select('address')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
@@ -661,7 +682,7 @@ protected function oembedAuthor(?string $url): ?array
             $q->where('influencer_submissions.campaign_id', (int) $request->input('campaign_id'));
         }
 
-        // urutkan terbaru di-update
+        // terbaru di-update
         $q->latest('influencer_submissions.updated_at');
 
         if ($perPage === 0) {
@@ -669,6 +690,7 @@ protected function oembedAuthor(?string $url): ?array
         }
         return response()->json($q->paginate($perPage));
     }
+
 
 
 
@@ -681,29 +703,50 @@ protected function oembedAuthor(?string $url): ?array
         $submission = \App\Models\InfluencerSubmission::query()
             ->select('influencer_submissions.*')
             ->addSelect([
-                // identitas dasar
+                // identitas dasar (registrations)
                 'full_name' => \App\Models\InfluencerRegistration::select('full_name')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
                     ->latest()->limit(1),
+
                 'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
                     ->latest()->limit(1),
-                'profile_pic_url' => \App\Models\InfluencerRegistration::select('profile_pic_url')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
 
-                // kontak
+                // ✅ avatar utama dari influencer_accounts
+                'avatar_url' => \App\Models\InfluencerAccount::select('avatar_url')
+                    ->whereColumn('influencer_accounts.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->orderByDesc('id')->limit(1),
+
+                // ✅ profile_pic_url = avatar dari accounts, fallback ke registrations.profile_pic_url
+                'profile_pic_url' => \DB::raw("
+                    COALESCE(
+                    (SELECT ia.avatar_url
+                        FROM influencer_accounts ia
+                        WHERE ia.tiktok_user_id = influencer_submissions.tiktok_user_id
+                    ORDER BY ia.id DESC
+                        LIMIT 1),
+                    (SELECT ir.profile_pic_url
+                        FROM influencer_registrations ir
+                        WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id
+                        AND ir.campaign_id    = influencer_submissions.campaign_id
+                    ORDER BY ir.id DESC
+                        LIMIT 1)
+                    )
+                "),
+
+                // kontak (registrations)
                 'phone' => \App\Models\InfluencerRegistration::select('phone')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
                     ->latest()->limit(1),
+
                 'email' => \App\Models\InfluencerRegistration::select('email')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
                     ->latest()->limit(1),
+
                 'address' => \App\Models\InfluencerRegistration::select('address')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
                     ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
@@ -712,7 +755,7 @@ protected function oembedAuthor(?string $url): ?array
             ->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name'])
             ->findOrFail($id);
 
-        // pastikan accessor URL ikut keluar (kalau model $appends belum mencakup semuanya)
+        // pastikan accessor URL ikut keluar
         $submission->append([
             'screenshot_1_url',
             'screenshot_2_url',
@@ -725,6 +768,7 @@ protected function oembedAuthor(?string $url): ?array
 
         return response()->json($submission);
     }
+
 
 
 
