@@ -104,6 +104,12 @@ export const routes = [
     component: () => import("../pages/campaign/form.js?v=" + BUILD_ID),
   },
 
+  {
+    path: "/admin/drafts",
+    label: "Content Approval",
+    component: () => import("../pages/submission/draft.js?v=" + BUILD_ID),
+  },
+
   // ===== Submission =====
   {
     path: "/admin/submissions",

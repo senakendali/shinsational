@@ -1224,6 +1224,54 @@ protected function oembedAuthor(?string $url): ?array
         ]);
     }
 
+    public function approveDraft(Request $request, $id)
+    {
+        // (opsional) kalau pakai policy:
+        // $this->authorize('approveDraft', InfluencerSubmission::class);
+
+        $submission = InfluencerSubmission::findOrFail($id);
+
+        // Pastikan user sudah submit draft dulu
+        if (!filled($submission->draft_url)) {
+            return response()->json([
+                'message' => 'Draft belum dikirim oleh KOL.',
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'draft_status' => ['required', 'string', Rule::in(['pending','approved','rejected'])],
+            'draft_reviewer_note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $submission->draft_status = strtolower($data['draft_status']);
+
+        // Catatan reviewer opsional: jika tidak dikirim, jangan overwrite jadi null tanpa alasan
+        if ($request->has('draft_reviewer_note')) {
+            $submission->draft_reviewer_note = $data['draft_reviewer_note'];
+        }
+
+        // Kalau kamu punya kolom timestamp khusus di DB seperti draft_reviewed_at / reviewed_by,
+        // bisa set di sini. Kalau tidak ada, skip agar tidak error kolom.
+        // $submission->draft_reviewed_at = now();
+        // $submission->draft_reviewed_by = auth()->id();
+
+        $submission->save();
+
+        return response()->json([
+            'message' => 'Status draft berhasil diperbarui.',
+            'data' => [
+                'id'                   => $submission->id,
+                'campaign_id'          => $submission->campaign_id,
+                'tiktok_user_id'       => $submission->tiktok_user_id,
+                'draft_url'            => $submission->draft_url,
+                'draft_status'         => $submission->draft_status,
+                'draft_reviewer_note'  => $submission->draft_reviewer_note,
+                'draft_submitted_at'   => $submission->draft_submitted_at,
+                'updated_at'           => $submission->updated_at,
+            ],
+        ]);
+    }
+
 
 
 

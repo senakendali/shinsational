@@ -76,6 +76,9 @@ Route::prefix('api')->middleware(['web','auth'])->group(function () {
     Route::post('influencer-submissions/draft', [InfluencerSubmissionController::class, 'submitDraft'])
     ->name('api.influencer-submissions.submit-draft');
 
+    Route::post('influencer-submissions/{id}/draft-approval', [InfluencerSubmissionController::class, 'approveDraft']);
+
+
 });
 
 /** -----------------------------------------------------------------

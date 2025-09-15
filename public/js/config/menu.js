@@ -23,6 +23,7 @@ export const ownerMenu = [
     icon: "bi-file-earmark-bar-graph",
     can: ["submission.viewAny"],
     children: [
+      { label: "Content Approval", path: "/admin/drafts", icon: "bi-list-check", can: "submission.viewAny" },
       { label: "Submission", path: "/admin/submissions", icon: "bi-list-check", can: "submission.viewAny" },
     ],
   },
