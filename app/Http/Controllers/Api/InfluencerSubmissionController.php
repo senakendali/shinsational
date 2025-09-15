@@ -577,100 +577,152 @@ protected function oembedAuthor(?string $url): ?array
             ->timeout(25);
     }
 
-    /**
-     * Kirim POST dengan beberapa VARIAN agar yakin `fields` terkirim:
-     *  - V1: post() JSON langsung (asJson on)
-     *  - V2: send('POST', json=...)
-     *  - V3: raw body JSON
-     *  - V4: asForm() + fields dijadikan JSON string (workaround beberapa proxy)
-     */
+    // Helper: ubah array fields → CSV string
+    private function toCsvFields($fields): string
+    {
+        if (is_string($fields)) return $fields;
+        if (is_array($fields)) return implode(',', array_map('strval', $fields));
+        return '';
+    }
+
+    // Ganti fungsi ini di patch sebelumnya
     private function postVariants(string $accessToken, string $url, array $payload): array
     {
         $attempts = [];
+        $sleepOn429 = function($resp) {
+            $wait = (int)($resp->header('retry-after') ?? 2);
+            if ($wait < 1) $wait = 2;
+            usleep($wait * 1000000); // microseconds
+        };
 
-        // V1
+        // ------- V1: POST JSON (fields array) -------
         try {
             $http = $this->ttHttp($accessToken);
             $resp = $http->post($url, $payload);
             $attempts[] = [
-                'variant' => 'V1-post(asJson)',
-                'req' => [
-                    'content_type' => 'application/json',
-                    'payload'      => $this->previewPayload($payload),
-                ],
+                'variant' => 'V1-post(asJson,array)',
+                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($payload)],
                 'res' => $this->respDebug($resp),
                 'ok'  => $resp->ok(),
             ];
+            if ($resp->status() === 429) $sleepOn429($resp);
             if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
         } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V1-post(asJson)','exception'=>$e->getMessage(),'ok'=>false];
+            $attempts[] = ['variant'=>'V1-post(asJson,array)','exception'=>$e->getMessage(),'ok'=>false];
         }
 
-        // V2
+        // ------- V2: send(json=...) -------
         try {
             $http = $this->ttHttp($accessToken);
             $resp = $http->send('POST', $url, ['json' => $payload]);
             $attempts[] = [
-                'variant' => 'V2-send(json=payload)',
-                'req' => [
-                    'content_type' => 'application/json',
-                    'payload'      => $this->previewPayload($payload),
-                ],
+                'variant' => 'V2-send(json=array)',
+                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($payload)],
                 'res' => $this->respDebug($resp),
                 'ok'  => $resp->ok(),
             ];
+            if ($resp->status() === 429) $sleepOn429($resp);
             if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
         } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V2-send(json)','exception'=>$e->getMessage(),'ok'=>false];
+            $attempts[] = ['variant'=>'V2-send(json=array)','exception'=>$e->getMessage(),'ok'=>false];
         }
 
-        // V3
+        // ------- V3: raw JSON body -------
         try {
             $http = $this->ttHttp($accessToken);
             $raw  = json_encode($payload, JSON_UNESCAPED_SLASHES);
             $resp = $http->withBody($raw, 'application/json')->post($url);
             $attempts[] = [
-                'variant' => 'V3-rawBody(JSON)',
-                'req' => [
-                    'content_type' => 'application/json',
-                    'payload'      => $this->previewPayload($payload),
-                ],
+                'variant' => 'V3-rawBody(JSON,array)',
+                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($payload)],
                 'res' => $this->respDebug($resp),
                 'ok'  => $resp->ok(),
             ];
+            if ($resp->status() === 429) $sleepOn429($resp);
             if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
         } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V3-rawBody(JSON)','exception'=>$e->getMessage(),'ok'=>false];
+            $attempts[] = ['variant'=>'V3-rawBody(JSON,array)','exception'=>$e->getMessage(),'ok'=>false];
         }
 
-        // V4: form-encoded (fields sebagai JSON string)
+        // ------- V4: form-urlencoded (fields jadi JSON string) -------
         try {
             $form = $payload;
             if (isset($form['fields']) && is_array($form['fields'])) {
                 $form['fields'] = json_encode(array_values($form['fields']));
             }
-            $resp = \Http::withToken($accessToken)
-                ->acceptJson()
-                ->asForm()
-                ->timeout(25)
-                ->post($url, $form);
-
+            $resp = \Http::withToken($accessToken)->acceptJson()->asForm()->timeout(25)->post($url, $form);
             $attempts[] = [
                 'variant' => 'V4-asForm(fields=json_string)',
-                'req' => [
-                    'content_type' => 'application/x-www-form-urlencoded',
-                    'payload'      => $this->previewPayload($form),
-                ],
+                'req' => ['content_type'=>'application/x-www-form-urlencoded', 'payload'=>$this->previewPayload($form)],
                 'res' => $this->respDebug($resp),
                 'ok'  => $resp->ok(),
             ];
+            if ($resp->status() === 429) $sleepOn429($resp);
             if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
         } catch (\Throwable $e) {
             $attempts[] = ['variant'=>'V4-asForm','exception'=>$e->getMessage(),'ok'=>false];
         }
 
+        // ====== Tambahan penting ======
+
+        // ------- V5: POST JSON tapi fields = CSV string -------
+        try {
+            $p5 = $payload;
+            if (isset($p5['fields'])) $p5['fields'] = $this->toCsvFields($p5['fields']);
+            $resp = $this->ttHttp($accessToken)->post($url, $p5);
+            $attempts[] = [
+                'variant' => 'V5-post(asJson,fields=csv)',
+                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($p5)],
+                'res' => $this->respDebug($resp),
+                'ok'  => $resp->ok(),
+            ];
+            if ($resp->status() === 429) $sleepOn429($resp);
+            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
+        } catch (\Throwable $e) {
+            $attempts[] = ['variant'=>'V5-post(asJson,fields=csv)','exception'=>$e->getMessage(),'ok'=>false];
+        }
+
+        // ------- V6: POST + fields di querystring (?fields=...) -------
+        try {
+            $p6 = $payload;
+            $csv = isset($p6['fields']) ? $this->toCsvFields($p6['fields']) : '';
+            unset($p6['fields']);
+            $qs  = $csv !== '' ? ('?fields='.urlencode($csv)) : '';
+            $resp = $this->ttHttp($accessToken)->post($url.$qs, $p6);
+            $attempts[] = [
+                'variant' => 'V6-post(?fields=csv,body=no-fields)',
+                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($p6)],
+                'res' => $this->respDebug($resp),
+                'ok'  => $resp->ok(),
+            ];
+            if ($resp->status() === 429) $sleepOn429($resp);
+            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
+        } catch (\Throwable $e) {
+            $attempts[] = ['variant'=>'V6-post(?fields=csv)','exception'=>$e->getMessage(),'ok'=>false];
+        }
+
+        // ------- V7: GET + semua param di query (inkl. fields=csv) -------
+        try {
+            $p7 = $payload;
+            $p7['fields'] = isset($p7['fields']) ? $this->toCsvFields($p7['fields']) : null;
+            if ($p7['fields'] === null) unset($p7['fields']);
+            // NB: kalau endpoint memang strict POST, kemungkinan 404/405 — tetap kami log
+            $resp = $this->ttHttp($accessToken)->get($url, $p7);
+            $attempts[] = [
+                'variant' => 'V7-get(query=...&fields=csv)',
+                'req' => ['content_type'=>'(querystring)', 'payload'=>$this->previewPayload($p7)],
+                'res' => $this->respDebug($resp),
+                'ok'  => $resp->ok(),
+            ];
+            if ($resp->status() === 429) $sleepOn429($resp);
+            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
+        } catch (\Throwable $e) {
+            $attempts[] = ['variant'=>'V7-get(query)','exception'=>$e->getMessage(),'ok'=>false];
+        }
+
         return ['ok'=>false, 'resp'=>null, 'attempts'=>$attempts];
     }
+
 
     // ===== video.query dengan fields ARRAY (pakai postVariants) =====
     private function ttVideoQueryDebug(string $accessToken, array $videoIds): array
