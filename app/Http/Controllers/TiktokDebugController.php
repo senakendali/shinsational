@@ -22,7 +22,7 @@ class TiktokDebugController extends Controller
         // ====== default dari kamu (bisa di-override lewat request) ======
         $openIdDefault  = '-000RR69zq1jdCCtaaGwy4Nj8MUZv4oqeX7W';
         $tokenDefault   = 'eyJpdiI6InEwSFBiNHg2SnpCVFZaczBLZUkvdUE9PSIsInZhbHVlIjoiMlJiU255Q3dORmJXZ0NYZGU3Sk1odjUvNFk5MzlEcXJwMXRVWGgzeXRLTE9ET0FxSTNUUUZMVy9FZHdHdjI5U1k2cFNSd2E1Z0lGZHgwdk9KbzZhSVJNU1BXSDFVT2dBeVFDbGRuM3NOeWs9IiwibWFjIjoiY2ZhOThmNGY4MDQwYzVhOTBmZmQ4NDNjZmQ5MTU1ZmY4NjA2YTE1YzQxNWZiMDRjMjg2NGI2Y2JlYzY2ZWVhMiIsInRhZyI6IiJ9';
-        $videoUrlDefault= 'https://www.tiktok.com/@sena.kendali/video/7548710295141666055';
+        $videoUrlDefault= 'https://www.tiktok.com/@daengbantangpikki/video/7547923112726220052';
 
         $openId = (string) $request->input('open_id', $openIdDefault);
         $token  = (string) $request->input('access_token', $tokenDefault);
