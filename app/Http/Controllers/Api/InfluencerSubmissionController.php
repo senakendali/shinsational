@@ -1187,6 +1187,44 @@ protected function oembedAuthor(?string $url): ?array
         return Excel::download(new InfluencerSubmissionsExport($campaignId, $keyword), $filename);
     }
 
+    public function submitDraft(Request $request)
+    {
+        // Validasi minimal: identitas + URL draft
+        $data = $request->validate([
+            'campaign_id'    => ['required','integer','exists:campaigns,id'],
+            'tiktok_user_id' => ['required','string','max:100'],
+            'draft_url'      => ['required','url','max:2048'],
+            'draft_channel'  => ['sometimes','nullable','string','max:50'], // optional: 'tiktok', 'ig', dll
+        ]);
+
+        // Upsert berdasarkan (campaign_id, tiktok_user_id)
+        $submission = \App\Models\InfluencerSubmission::firstOrNew([
+            'campaign_id'    => (int) $data['campaign_id'],
+            'tiktok_user_id' => (string) $data['tiktok_user_id'],
+        ]);
+
+        // Isi/replace field draft — set ke pending setiap kali ada kiriman/ganti URL
+        $submission->draft_url           = $data['draft_url'];
+        $submission->draft_channel       = $data['draft_channel'] ?? $submission->draft_channel;
+        $submission->draft_status        = 'pending';
+        $submission->draft_submitted_at  = now();
+        $submission->draft_reviewed_by   = null;
+        $submission->draft_reviewed_at   = null;
+        $submission->draft_reviewer_note = null;
+
+        // Pastikan key tetap terisi kalau row baru
+        $submission->campaign_id    = (int) $data['campaign_id'];
+        $submission->tiktok_user_id = (string) $data['tiktok_user_id'];
+
+        $submission->save();
+
+        return response()->json([
+            'message' => 'Draft berhasil dikirim. Menunggu approval admin.',
+            'data'    => $submission->fresh()->loadMissing(['campaign:id,name,slug,brand_id','campaign.brand:id,name']),
+        ]);
+    }
+
+
 
 
 }

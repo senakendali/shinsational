@@ -51,7 +51,7 @@ export function render(target, params, query = {}, labelOverride = null) {
               Klik <strong>Edit</strong> untuk mengganti, atau lengkapi bagian yang belum lengkap lalu tekan <strong>Update</strong>.
             </div>
 
-            <!-- ===== Kontak KOL ===== -->
+            <!-- ===== Data Kontak ===== -->
             <div class="card mb-4">
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -74,7 +74,34 @@ export function render(target, params, query = {}, labelOverride = null) {
                     <input type="text" class="form-control" id="contact_address" placeholder="Alamat lengkap">
                   </div>
                 </div>
-                
+              </div>
+            </div>
+
+            <!-- ===== Draft Konten (Approval) ===== -->
+            <div class="card mb-4" id="draftSection">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                  <h6 class="mb-0">Draft Konten</h6>
+                  <button type="button" id="submitDraftBtn" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-send"></i> Kirim Draft
+                  </button>
+                </div>
+
+                <textarea id="draft_text" class="form-control" rows="4"
+                  placeholder="Input Google Drive link atau tempat kamu menyimpan draft konten"></textarea>
+                <div class="small text-muted mt-2">
+                  Admin akan meninjau draf ini dan memberikan approval / revisi.
+                </div>
+
+                <!-- status draft terakhir -->
+                <div id="draftStatus" class="mt-3 d-none">
+                  <div class="small">
+                    Status terakhir:
+                    <span id="draftStatusBadge" class="badge bg-secondary">-</span>
+                    <span id="draftUpdatedAt" class="text-muted ms-2">—</span>
+                  </div>
+                  <div id="draftReviewerNote" class="small text-muted mt-1 d-none"></div>
+                </div>
               </div>
             </div>
 
@@ -296,6 +323,31 @@ export function render(target, params, query = {}, labelOverride = null) {
         return k.toISOString().slice(0,10);
       };
 
+      // CSRF helpers (hindari "Page Expired")
+      let csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || window.CSRF_TOKEN || null;
+      async function ensureCsrf() {
+        if (csrfToken) return csrfToken;
+        try {
+          const r = await fetch('/api/csrf/refresh', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Accept':'application/json', 'X-Requested-With':'XMLHttpRequest' },
+          });
+          if (r.ok) {
+            const j = await r.json();
+            csrfToken = j?.token || null;
+          }
+        } catch {}
+        return csrfToken;
+      }
+      async function fetchWithCsrf(url, options = {}) {
+        const token = await ensureCsrf();
+        const headers = new Headers(options.headers || {});
+        headers.set('X-Requested-With', 'XMLHttpRequest');
+        if (token) headers.set('X-CSRF-TOKEN', token);
+        return fetch(url, { ...options, headers });
+      }
+
       const normalizeHandle = (val) => (val || '').toString().trim().replace(/^@+/, '');
       const makePseudoId = (handle) => {
         const h = normalizeHandle(handle).toLowerCase();
@@ -441,6 +493,201 @@ export function render(target, params, query = {}, labelOverride = null) {
       const contactAddressEl = $("#contact_address");
       const saveContactBtn = $("#saveContactBtn");
 
+      // ===== Draft Konten (Approval) DOM =====
+      const draftTextEl        = document.querySelector('#draft_text');
+      const submitDraftBtn     = document.querySelector('#submitDraftBtn');
+      const draftStatusWrap    = document.querySelector('#draftStatus');
+      const draftStatusBadge   = document.querySelector('#draftStatusBadge');
+      const draftUpdatedAtEl   = document.querySelector('#draftUpdatedAt');
+      const draftReviewerNote  = document.querySelector('#draftReviewerNote');
+
+      function setDraftButtonState(disabled) {
+        if (!submitDraftBtn) return;
+        submitDraftBtn.disabled = !!disabled;
+        submitDraftBtn.innerHTML = disabled
+          ? `<span class="spinner-border spinner-border-sm me-1"></span> Mengirim…`
+          : `<i class="bi bi-send"></i> Kirim Draft`;
+      }
+
+      // Set draft text ke textarea; by default tidak override user yang sedang ngetik
+      function setDraftText(val, { force = false } = {}) {
+        if (!draftTextEl) return;
+        if (!force && draftTextEl.value.trim()) return;
+        draftTextEl.value = val || '';
+      }
+
+      function showDraftStatus({ status = '-', updated_at = null, reviewer_note = '' } = {}) {
+        if (!draftStatusWrap) return;
+        draftStatusWrap.classList.remove('d-none');
+
+        const map = { pending: 'warning', approved: 'success', rejected: 'danger' };
+        const badge = map[String(status).toLowerCase()] || 'secondary';
+
+        draftStatusBadge.className = `badge bg-${badge}`;
+        draftStatusBadge.textContent = String(status).toUpperCase();
+        draftUpdatedAtEl.textContent = updated_at ? new Date(updated_at).toLocaleString('id-ID') : '';
+
+        if (reviewer_note && reviewer_note.trim()) {
+          draftReviewerNote.textContent = `Catatan reviewer: ${reviewer_note}`;
+          draftReviewerNote.classList.remove('d-none');
+        } else {
+          draftReviewerNote.classList.add('d-none');
+          draftReviewerNote.textContent = '';
+        }
+      }
+
+      // Prefill dari submission record jika ada kolom draft_* di table influencer_submissions
+      function prefillDraftFromSubmission(rec) {
+        if (!rec) {
+          if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+          return;
+        }
+        // Prioritaskan draft_url dari backend
+        const txt = rec.draft_url || rec.draft_link || rec.draft_text || rec.draft || '';
+        if (txt) setDraftText(txt, { force: true });
+
+        const status = rec.draft_status || null;
+        const note   = rec.draft_reviewer_note || '';
+        const ts     = rec.draft_submitted_at || rec.updated_at || rec.created_at || null;
+
+        if (status || note || ts) {
+          showDraftStatus({
+            status: status || 'pending',
+            updated_at: ts,
+            reviewer_note: note || '',
+          });
+        } else {
+          if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+        }
+      }
+
+
+      // Load status & (kalau ada) prefill dari endpoint /api/influencer-submissions/draft
+      async function loadDraftStatus() {
+        if (!openId || !selectedCampaignId) {
+          if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+          return;
+        }
+        try {
+          const qs = new URLSearchParams({
+            tiktok_user_id: openId,
+            campaign_id: selectedCampaignId,
+            per_page: '1',
+            _: String(Date.now()),
+          }).toString();
+
+          const r = await fetch(`/api/influencer-submissions/draft?${qs}`, {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+          });
+
+          if (!r.ok) { // endpoint belum ada → skip silently
+            if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+            return;
+          }
+
+          const j = await r.json();
+          const arr = Array.isArray(j) ? j : (j?.data || []);
+          if (!arr.length) {
+            if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+            return;
+          }
+
+          const d = arr[0];
+          // Prefill textarea dari data draft terakhir
+          const txt = d.text || d.draft_text || d.link || d.url || '';
+          if (txt) setDraftText(txt, { force: true });
+
+          showDraftStatus({
+            status: d.status || d.draft_status || 'pending',
+            updated_at: d.updated_at || d.submitted_at || d.created_at,
+            reviewer_note: d.reviewer_note || d.note || '',
+          });
+        } catch {
+          if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+        }
+      }
+
+      function refreshDraftUiAvailability() {
+        const can = !!(openId && selectedCampaignId);
+        if (submitDraftBtn) submitDraftBtn.disabled = !can;
+        if (!can && draftStatusWrap) draftStatusWrap.classList.add('d-none');
+      }
+
+      // Draft submit
+      // Submit draft → POST /api/influencer-submissions/draft
+      submitDraftBtn?.addEventListener('click', async () => {
+        const url = (draftTextEl?.value || '').trim();
+
+        if (!selectedCampaignId || !openId) {
+          showToast('Pilih campaign dulu ya.', 'error');
+          return;
+        }
+        if (!url) {
+          showToast('Link draft tidak boleh kosong.', 'error');
+          draftTextEl?.focus();
+          return;
+        }
+        // validasi URL sederhana
+        const urlOk = /^https?:\/\//i.test(url) || /^(drive|docs)\.google\.com/i.test(url);
+        if (!urlOk) {
+          showToast('Masukkan URL yang valid (http/https).', 'error');
+          draftTextEl?.focus();
+          return;
+        }
+        if (url.length > 2000) {
+          showToast('URL terlalu panjang (maks 2000 karakter).', 'error');
+          draftTextEl?.focus();
+          return;
+        }
+
+        const fd = new FormData();
+        fd.set('campaign_id', String(selectedCampaignId));
+        fd.set('tiktok_user_id', String(openId));
+        fd.set('draft_url', url); // ← CHANGED: backend expects `draft_url`
+
+        setDraftButtonState(true);
+        try {
+          const r = await fetchWithCsrf('/api/influencer-submissions/draft', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: fd,
+          });
+
+          if (!r.ok) {
+            let msg = 'Gagal mengirim draft.';
+            try {
+              const j = await r.json();
+              if (j?.errors?.draft_url?.[0]) msg = j.errors.draft_url[0];
+              else if (j?.message) msg = j.message;
+            } catch {
+              msg = await r.text();
+            }
+            throw new Error(msg || 'Gagal mengirim draft.');
+          }
+
+          const j = await r.json().catch(()=>({}));
+          showToast(j?.message || 'Draft terkirim. Menunggu approval.');
+
+          // Prefill & status lokal
+          setDraftText(url, { force: true });
+          showDraftStatus({ status: 'pending', updated_at: new Date().toISOString(), reviewer_note: '' });
+
+          // Refresh submission agar status dari DB terambil
+          const fresh = await fetchSubmissionForCampaign({ tiktok_user_id: openId, campaign_id: selectedCampaignId });
+          if (fresh) {
+            currentSubmission = fresh;
+            prefillDraftFromSubmission(currentSubmission);
+          }
+        } catch (err) {
+          showToast(err?.message || 'Gagal mengirim draft.', 'error');
+        } finally {
+          setDraftButtonState(false);
+        }
+      });
+
+
       const applyAcquisitionVisibility = () => {
         const mode = acquisitionEl.value;
         const showBuy = mode === 'buy';
@@ -522,6 +769,9 @@ export function render(target, params, query = {}, labelOverride = null) {
         updateAddMoreBtn();
 
         applyAcquisitionVisibility();
+
+        // Prefill draft dari record submission bila ada
+        prefillDraftFromSubmission(rec);
       };
 
       // Contact helpers
@@ -531,7 +781,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         return '';
       };
       const getContactFrom = (rec) => {
-        // Try typical keys
         const phone = pickFirst(rec, ['phone','phone_number','whatsapp','wa','mobile','telp','no_hp','contact_phone']);
         const email = pickFirst(rec, ['email','contact_email','kol_email']);
         const addr  = pickFirst(rec, ['address','alamat','street_address','shipping_address','domicile','address_line','full_address']);
@@ -652,6 +901,10 @@ export function render(target, params, query = {}, labelOverride = null) {
         setFileControls('invoice_file', '', { editMode: true });
         setFileControls('review_proof_file', '', { editMode: true });
 
+        // kosongkan UI draft (tetap biarkan user bisa isi)
+        if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+        if (draftTextEl) draftTextEl.value = '';
+
         applyAcquisitionVisibility();
         resetSlotVisibility();
         updateButtonsVisibility();
@@ -721,6 +974,8 @@ export function render(target, params, query = {}, labelOverride = null) {
 
       const loadSubmissionForSelected = async () => {
         isEditing = false;
+        refreshDraftUiAvailability();
+
         if (!openId || !selectedCampaignId) { clearSubmissionView(); fillContactFields(null, {}); return; }
         try {
           showLoader();
@@ -731,11 +986,19 @@ export function render(target, params, query = {}, labelOverride = null) {
 
           const rec = await fetchSubmissionForCampaign({ tiktok_user_id: openId, campaign_id: selectedCampaignId });
           currentSubmission = rec || null;
-          if (currentSubmission) { fillSubmissionValues(currentSubmission); applyViewMode(); }
-          else { clearSubmissionView(); }
+          if (currentSubmission) {
+            fillSubmissionValues(currentSubmission);
+            applyViewMode();
+          } else {
+            clearSubmissionView();
+          }
+
+          // Load status draft terakhir dari endpoint (opsional)
+          await loadDraftStatus();
         } catch (e) {
           console.warn('fetchSubmissionForCampaign error', e);
           clearSubmissionView();
+          refreshDraftUiAvailability();
         } finally {
           hideLoader();
         }
@@ -748,6 +1011,7 @@ export function render(target, params, query = {}, labelOverride = null) {
           listEl.innerHTML = `<div class="text-muted small">Belum ada campaign yang diikuti.</div>`;
           setTitle('My Campaign');
           clearSubmissionView();
+          refreshDraftUiAvailability();
           return;
         }
 
@@ -780,10 +1044,12 @@ export function render(target, params, query = {}, labelOverride = null) {
             selectedCampaignId = btn.getAttribute('data-campaign-id');
             openId = btn.getAttribute('data-open-id') || openId;
             setTitle(btn.textContent.trim());
+            refreshDraftUiAvailability();
             await loadSubmissionForSelected();
           });
         });
 
+        refreshDraftUiAvailability();
         loadSubmissionForSelected();
       }
 
@@ -804,7 +1070,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         }
 
         const fd = new FormData();
-        // terima berbagai key umum di backend (pilih yang didukung)
         fd.set('_method', 'PATCH');
         if (phone) { fd.set('phone', phone); fd.set('contact_phone', phone); }
         if (email) { fd.set('email', email); fd.set('contact_email', email); }
@@ -816,7 +1081,7 @@ export function render(target, params, query = {}, labelOverride = null) {
           if (typeof influencerService?.update === 'function') {
             resp = await influencerService.update(currentRegistration.id, fd);
           } else {
-            const r = await fetch(`/api/influencer-registrations/${currentRegistration.id}`, {
+            const r = await fetchWithCsrf(`/api/influencer-registrations/${currentRegistration.id}`, {
               method: 'POST',
               credentials: 'same-origin',
               body: fd,
@@ -891,7 +1156,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         addField('acquisition_method','acquisition_method', forceAll);
         addField('purchase_platform','purchase_platform', forceAll);
         addField('purchase_price','purchase_price', forceAll);
-        // NOTE: shipping_courier & shipping_tracking_number tidak dikirim dari KOL
 
         // Files
         const sc1 = $("#screenshot_1")?.files?.[0];
@@ -917,7 +1181,7 @@ export function render(target, params, query = {}, labelOverride = null) {
           let resp;
           if (currentSubmission?.id) {
             fd.set('_method', 'PATCH');
-            const r = await fetch(`/api/influencer-submissions/${currentSubmission.id}`, {
+            const r = await fetchWithCsrf(`/api/influencer-submissions/${currentSubmission.id}`, {
               method: 'POST',
               credentials: 'same-origin',
               body: fd,
@@ -940,7 +1204,7 @@ export function render(target, params, query = {}, labelOverride = null) {
             if (typeof submissionService?.create === 'function') {
               resp = await submissionService.create(fd);
             } else {
-              const r = await fetch('/api/influencer-submissions', {
+              const r = await fetchWithCsrf('/api/influencer-submissions', {
                 method: 'POST',
                 credentials: 'same-origin',
                 body: fd,
@@ -1012,11 +1276,12 @@ export function render(target, params, query = {}, labelOverride = null) {
       // Init visibility
       applyAcquisitionVisibility();
       resetSlotVisibility();
+      refreshDraftUiAvailability();
 
       // Logout
       $("#logoutBtn")?.addEventListener('click', async () => {
         try {
-          await fetch('/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' }});
+          await fetchWithCsrf('/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Requested-With':'XMLHttpRequest' }});
         } catch {}
         localStorage.removeItem('kol_profile');
         location.assign('/');

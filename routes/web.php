@@ -71,6 +71,11 @@ Route::prefix('api')->middleware(['web','auth'])->group(function () {
     // ===== Influencer Submissions export
     Route::get('influencer-submissions/export', [InfluencerSubmissionController::class, 'export'])
     ->name('api.influencer-submissions.export');
+
+    // ===== Influencer Submissions: submit draft (KOL)
+    Route::post('influencer-submissions/draft', [InfluencerSubmissionController::class, 'submitDraft'])
+    ->name('api.influencer-submissions.submit-draft');
+
 });
 
 /** -----------------------------------------------------------------

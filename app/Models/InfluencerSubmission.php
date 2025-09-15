@@ -53,6 +53,15 @@ class InfluencerSubmission extends Model
         'purchase_price',              // decimal(12,2)
         'shipping_courier',            // JNE/J&T/...
         'shipping_tracking_number',    // resi
+
+        // Draft
+        'draft_url',
+        'draft_channel',
+        'draft_status',
+        'draft_submitted_at',
+        'draft_reviewed_at',
+        'draft_reviewed_by',
+        'draft_reviewer_note',
     ];
 
     protected $casts = [
@@ -75,6 +84,10 @@ class InfluencerSubmission extends Model
 
         // ★ Cast baru
         'purchase_price' => 'decimal:2',
+
+        // Draft
+        'draft_submitted_at' => 'datetime',
+        'draft_reviewed_at'  => 'datetime',
     ];
 
     protected $appends = [
@@ -86,6 +99,11 @@ class InfluencerSubmission extends Model
         'invoice_file_url',
         'review_proof_file_url',
     ];
+
+    public function draftReviewer()
+    {
+        return $this->belongsTo(\App\Models\User::class, 'draft_reviewed_by');
+    }
 
     // Relations
     public function campaign()
