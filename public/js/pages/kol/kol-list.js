@@ -205,7 +205,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         <a class="btn btn-sm btn-outline-secondary app-link d-none" data-href="${toSubs}">
           <i class="bi bi-collection"></i> Submissions
         </a>
-        <button class="btn btn-sm btn-outline-primary btn-refresh-token w-100" data-id="${id}">
+        <button class="btn btn-sm btn-outline-primary btn-refresh-token" data-id="${id}">
           <i class="bi bi-arrow-clockwise"></i> Refresh token
         </button>
       </div>
