@@ -45,4 +45,31 @@ class InfluencerAccount extends Model
     {
         return $this->expires_at ? now()->addSeconds($seconds)->greaterThanOrEqualTo($this->expires_at) : false;
     }
+
+     public function getNormalizedScopesAttribute(): array
+    {
+        $raw = $this->scopes;
+        if (!$raw) return [];
+        if (is_array($raw)) return array_values(array_unique(array_map('trim', $raw)));
+
+        // coba JSON
+        $j = json_decode($raw, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($j)) {
+            return array_values(array_unique(array_map('trim', $j)));
+        }
+
+        // fallback CSV/spasi
+        return array_values(array_filter(array_map('trim', preg_split('/[,\s]+/', (string) $raw))));
+    }
+
+    public function hasScope(string $scope): bool
+    {
+        return in_array($scope, $this->normalized_scopes, true);
+    }
+
+    public function tokenExpiringIn(int $seconds): bool
+    {
+        if (!$this->expires_at) return false; // nggak tahu → jangan paksa refresh
+        return now()->addSeconds($seconds)->greaterThanOrEqualTo($this->expires_at);
+    }
 }
