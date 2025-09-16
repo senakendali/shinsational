@@ -362,261 +362,261 @@ protected function oembedAuthor(?string $url): ?array
 }
 
     public function refreshMetrics(Request $request, $id)
-    {
-        $submission = \App\Models\InfluencerSubmission::findOrFail($id);
+{
+    $submission = \App\Models\InfluencerSubmission::findOrFail($id);
 
-        $reg = \App\Models\InfluencerRegistration::where('tiktok_user_id', $submission->tiktok_user_id)
-            ->whereNotNull('access_token')
-            ->orderByDesc('last_refreshed_at')
-            ->orderByDesc('updated_at')
-            ->first();
+    $reg = \App\Models\InfluencerRegistration::where('tiktok_user_id', $submission->tiktok_user_id)
+        ->whereNotNull('access_token')
+        ->orderByDesc('last_refreshed_at')
+        ->orderByDesc('updated_at')
+        ->first();
 
-        if (!$reg) {
-            return response()->json([
-                'message'    => 'Token TikTok tidak ditemukan untuk influencer ini. Minta KOL connect ulang.',
-                'reauth_url' => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
-            ], 409);
-        }
+    if (!$reg) {
+        return response()->json([
+            'message'    => 'Token TikTok tidak ditemukan untuk influencer ini. Minta KOL connect ulang.',
+            'reauth_url' => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
+        ], 409);
+    }
 
-        // Normalisasi scopes
-        $scopes = $reg->scopes;
-        if (is_string($scopes)) $scopes = array_values(array_filter(array_map('trim', preg_split('/[,\s]+/', $scopes))));
-        $scopes = is_array($scopes) ? $scopes : [];
+    // Normalisasi scopes
+    $scopes = $reg->scopes;
+    if (is_string($scopes)) $scopes = array_values(array_filter(array_map('trim', preg_split('/[,\s]+/', $scopes))));
+    $scopes = is_array($scopes) ? $scopes : [];
 
-        if (!in_array('video.list', $scopes, true)) {
-            return response()->json([
-                'message'        => 'Token tidak punya scope video.list. Minta KOL re-authorize & centang izin video.',
-                'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
-                'current_scopes' => $scopes,
-            ], 409);
-        }
+    if (!in_array('video.list', $scopes, true)) {
+        return response()->json([
+            'message'        => 'Token tidak punya scope video.list. Minta KOL re-authorize & centang izin video.',
+            'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
+            'current_scopes' => $scopes,
+        ], 409);
+    }
 
-        $accessToken = $reg->access_token;
+    $accessToken = $reg->access_token;
 
-        // Who am I (owner info) - opsional buat debug/nunjukin siapa pemilik token
-        $meResp = Http::withToken($accessToken)
-            ->acceptJson()
-            ->timeout(15)
-            ->get('https://open.tiktokapis.com/v2/user/info/', [
-                'fields' => 'open_id,username,display_name',
-            ]);
+    // Who am I (owner info) - opsional buat debug/nunjukin siapa pemilik token
+    $meResp = Http::withToken($accessToken)
+        ->acceptJson()
+        ->timeout(15)
+        ->get('https://open.tiktokapis.com/v2/user/info/', [
+            'fields' => 'open_id,username,display_name',
+        ]);
 
-        $ownerOpenId = data_get($meResp->json(), 'data.user.open_id') ?: $submission->tiktok_user_id;
+    $ownerOpenId = data_get($meResp->json(), 'data.user.open_id') ?: $submission->tiktok_user_id;
 
-        // Extract video ids dari submission link
-        $vids = [];
-        $links = [];
-        if ($v1 = $this->extractAwemeId($submission->link_1)) { $vids[1] = $v1; $links[1] = $submission->link_1; }
-        if ($v2 = $this->extractAwemeId($submission->link_2)) { $vids[2] = $v2; $links[2] = $submission->link_2; }
+    // Extract video ids dari submission link
+    $vids = [];
+    $links = [];
+    if ($v1 = $this->extractAwemeId($submission->link_1)) { $vids[1] = $v1; $links[1] = $submission->link_1; }
+    if ($v2 = $this->extractAwemeId($submission->link_2)) { $vids[2] = $v2; $links[2] = $submission->link_2; }
 
-        if (!$vids) {
-            return response()->json([
-                'message' => 'Tidak ada video id yang valid pada submission ini.',
-                'data'    => $submission,
-            ], 422);
-        }
+    if (!$vids) {
+        return response()->json([
+            'message' => 'Tidak ada video id yang valid pada submission ini.',
+            'data'    => $submission,
+        ], 422);
+    }
 
-        $api = app(TikTokDisplayApi::class);
+    $api = app(TikTokDisplayApi::class);
 
-        $updated   = [];
-        $notFound  = [];
-        $byId      = [];
-        $leftIds   = array_values($vids);
-        $debug     = [
-            'owner_info' => [
-                'status'  => $meResp->status(),
-                'json'    => $meResp->json(),
-                'headers' => [
-                    'content-type' => $meResp->header('content-type'),
-                    'x-tt-logid'   => $meResp->header('x-tt-logid'),
-                ],
+    $updated   = [];
+    $notFound  = [];
+    $byId      = [];
+    $leftIds   = array_values($vids);
+    $debug     = [
+        'owner_info' => [
+            'status'  => $meResp->status(),
+            'json'    => $meResp->json(),
+            'headers' => [
+                'content-type' => $meResp->header('content-type'),
+                'x-tt-logid'   => $meResp->header('x-tt-logid'),
             ],
-            'query'         => null,
-            'list'          => null,
-            'html_fallback' => [],
-            'inputs'        => [
-                'video_ids'  => array_values($vids),
-                'creator_id' => $ownerOpenId,
-            ],
+        ],
+        'query'         => null,
+        'list'          => null,
+        'html_fallback' => [],
+        'inputs'        => [
+            'video_ids'  => array_values($vids),
+            'creator_id' => $ownerOpenId,
+        ],
+    ];
+
+    // Helper konversi struktur API -> counts
+    $pullCounts = function (array $video): array {
+        return [
+            'views'    => (int)($video['view_count'] ?? 0),
+            'likes'    => (int)($video['like_count'] ?? 0),
+            'comments' => (int)($video['comment_count'] ?? 0),
+            'shares'   => (int)($video['share_count'] ?? 0),
+        ];
+    };
+
+    // 1) Coba /video/query (fields ada di query string, sesuai API v2)
+    try {
+        $qData = $api->queryVideos($accessToken, $leftIds); // fields default dari config
+        foreach ((array) data_get($qData, 'videos', []) as $it) {
+            $id = (string)($it['id'] ?? $it['video_id'] ?? '');
+            if ($id !== '') $byId[$id] = $it;
+        }
+        $debug['query'] = [
+            'ok'   => true,
+            'size' => count($byId),
+            'raw'  => $qData,
+        ];
+    } catch (\Throwable $e) {
+        $debug['query'] = [
+            'ok'     => false,
+            'error'  => $e->getMessage(),
+        ];
+    }
+
+    // Apply hasil query ke submission
+    if (!empty($byId)) {
+        foreach ($vids as $slot => $vid) {
+            if (!isset($byId[$vid])) continue;
+            $c = $pullCounts($byId[$vid]);
+            if ($slot === 1) {
+                $submission->views_1 = $c['views']; $submission->likes_1 = $c['likes'];
+                $submission->comments_1 = $c['comments']; $submission->shares_1 = $c['shares'];
+            } else {
+                $submission->views_2 = $c['views']; $submission->likes_2 = $c['likes'];
+                $submission->comments_2 = $c['comments']; $submission->shares_2 = $c['shares'];
+            }
+            $updated[] = $slot;
+        }
+    }
+
+    // 2) Masih ada yang belum dapat ⇒ scan /video/list (pagination) sampai ketemu atau max 8 halaman
+    $leftIds = array_values(array_diff(array_values($vids), array_map(fn($slot) => $vids[$slot] ?? null, $updated)));
+    if ($leftIds) {
+        $pagesScanned = 0;
+        $cursor = 0;
+        $hits = [];
+        $trace = [];
+
+        while ($pagesScanned < 8) {
+            try {
+                $list = $api->listVideos($accessToken, $cursor, 20); // max=20 (wajib 1..20)
+                $trace[] = [
+                    'page'   => $pagesScanned + 1,
+                    'cursor' => $cursor,
+                    'count'  => count((array)($list['videos'] ?? [])),
+                    'has_more' => (bool)($list['has_more'] ?? false),
+                ];
+
+                foreach ((array) data_get($list, 'videos', []) as $it) {
+                    $id = (string)($it['id'] ?? '');
+                    if ($id !== '' && in_array($id, $leftIds, true)) {
+                        $hits[$id] = $it;
+                    }
+                }
+
+                $pagesScanned++;
+                if (!($list['has_more'] ?? false)) break;
+                $cursor = (int)($list['cursor'] ?? 0);
+                if ($cursor <= 0) break;
+
+                // selesai lebih awal jika semua leftIds sudah ketemu
+                if (count($hits) >= count($leftIds)) break;
+            } catch (\Throwable $e) {
+                $trace[] = [
+                    'page'  => $pagesScanned + 1,
+                    'error' => $e->getMessage(),
+                ];
+                break;
+            }
+        }
+
+        $debug['list'] = [
+            'pages_scanned' => $pagesScanned,
+            'trace'         => $trace,
         ];
 
-        // Helper konversi struktur API -> counts
-        $pullCounts = function (array $video): array {
-            return [
-                'views'    => (int)($video['view_count'] ?? 0),
-                'likes'    => (int)($video['like_count'] ?? 0),
-                'comments' => (int)($video['comment_count'] ?? 0),
-                'shares'   => (int)($video['share_count'] ?? 0),
-            ];
-        };
-
-        // 1) Coba /video/query (fields ada di query string, sesuai API v2)
-        try {
-            $qData = $api->queryVideos($accessToken, $leftIds); // fields default dari config
-            foreach ((array) data_get($qData, 'videos', []) as $it) {
-                $id = (string)($it['id'] ?? $it['video_id'] ?? '');
-                if ($id !== '') $byId[$id] = $it;
+        foreach ($leftIds as $idLeft) {
+            $slot = array_search($idLeft, $vids, true);
+            if (!isset($hits[$idLeft])) continue;
+            $c = $pullCounts($hits[$idLeft]);
+            if ($slot === 1) {
+                $submission->views_1 = $c['views']; $submission->likes_1 = $c['likes'];
+                $submission->comments_1 = $c['comments']; $submission->shares_1 = $c['shares'];
+            } else {
+                $submission->views_2 = $c['views']; $submission->likes_2 = $c['likes'];
+                $submission->comments_2 = $c['comments']; $submission->shares_2 = $c['shares'];
             }
-            $debug['query'] = [
-                'ok'   => true,
-                'size' => count($byId),
-                'raw'  => $qData,
-            ];
-        } catch (\Throwable $e) {
-            $debug['query'] = [
-                'ok'     => false,
-                'error'  => $e->getMessage(),
-            ];
+            if (!in_array($slot, $updated, true)) $updated[] = $slot;
         }
+    }
 
-        // Apply hasil query ke submission
-        if (!empty($byId)) {
-            foreach ($vids as $slot => $vid) {
-                if (!isset($byId[$vid])) continue;
-                $c = $pullCounts($byId[$vid]);
-                if ($slot === 1) {
-                    $submission->views_1 = $c['views']; $submission->likes_1 = $c['likes'];
-                    $submission->comments_1 = $c['comments']; $submission->shares_1 = $c['shares'];
-                } else {
-                    $submission->views_2 = $c['views']; $submission->likes_2 = $c['likes'];
-                    $submission->comments_2 = $c['comments']; $submission->shares_2 = $c['shares'];
-                }
-                $updated[] = $slot;
-            }
-        }
+    // 3) Masih ada yang belum dapat ⇒ FALLBACK ke HTML scraping (method lama kamu)
+    $leftIds = array_values(array_diff(array_values($vids), array_map(fn($slot) => $vids[$slot] ?? null, $updated)));
+    if ($leftIds && method_exists($this, 'probeFromHtml')) {
+        foreach ($leftIds as $idLeft) {
+            $slot = array_search($idLeft, $vids, true);
+            $link = $links[$slot] ?? null;
+            if (!$link) continue;
 
-        // 2) Masih ada yang belum dapat ⇒ scan /video/list (pagination) sampai ketemu atau max 8 halaman
-        $leftIds = array_values(array_diff(array_values($vids), array_map(fn($slot) => $vids[$slot] ?? null, $updated)));
-        if ($leftIds) {
-            $pagesScanned = 0;
-            $cursor = 0;
-            $hits = [];
-            $trace = [];
+            try {
+                $res = $this->probeFromHtml($link);
+                $debug['html_fallback'][(string)$slot] = $res;
 
-            while ($pagesScanned < 8) {
-                try {
-                    $list = $api->listVideos($accessToken, $cursor, 20); // max=20 (wajib 1..20)
-                    $trace[] = [
-                        'page'   => $pagesScanned + 1,
-                        'cursor' => $cursor,
-                        'count'  => count((array)($list['videos'] ?? [])),
-                        'has_more' => (bool)($list['has_more'] ?? false),
-                    ];
-
-                    foreach ((array) data_get($list, 'videos', []) as $it) {
-                        $id = (string)($it['id'] ?? '');
-                        if ($id !== '' && in_array($id, $leftIds, true)) {
-                            $hits[$id] = $it;
-                        }
+                if (is_array($res)) {
+                    if ($slot === 1) {
+                        $submission->views_1 = (int)($res['views'] ?? 0);
+                        $submission->likes_1 = (int)($res['likes'] ?? 0);
+                        $submission->comments_1 = (int)($res['comments'] ?? 0);
+                        $submission->shares_1 = (int)($res['shares'] ?? 0);
+                    } else {
+                        $submission->views_2 = (int)($res['views'] ?? 0);
+                        $submission->likes_2 = (int)($res['likes'] ?? 0);
+                        $submission->comments_2 = (int)($res['comments'] ?? 0);
+                        $submission->shares_2 = (int)($res['shares'] ?? 0);
                     }
-
-                    $pagesScanned++;
-                    if (!($list['has_more'] ?? false)) break;
-                    $cursor = (int)($list['cursor'] ?? 0);
-                    if ($cursor <= 0) break;
-
-                    // selesai lebih awal jika semua leftIds sudah ketemu
-                    if (count($hits) >= count($leftIds)) break;
-                } catch (\Throwable $e) {
-                    $trace[] = [
-                        'page'  => $pagesScanned + 1,
-                        'error' => $e->getMessage(),
-                    ];
-                    break;
+                    if (!in_array($slot, $updated, true)) $updated[] = $slot;
                 }
-            }
-
-            $debug['list'] = [
-                'pages_scanned' => $pagesScanned,
-                'trace'         => $trace,
-            ];
-
-            foreach ($leftIds as $idLeft) {
-                $slot = array_search($idLeft, $vids, true);
-                if (!isset($hits[$idLeft])) continue;
-                $c = $pullCounts($hits[$idLeft]);
-                if ($slot === 1) {
-                    $submission->views_1 = $c['views']; $submission->likes_1 = $c['likes'];
-                    $submission->comments_1 = $c['comments']; $submission->shares_1 = $c['shares'];
-                } else {
-                    $submission->views_2 = $c['views']; $submission->likes_2 = $c['likes'];
-                    $submission->comments_2 = $c['comments']; $submission->shares_2 = $c['shares'];
-                }
-                if (!in_array($slot, $updated, true)) $updated[] = $slot;
+            } catch (\Throwable $e) {
+                $debug['html_fallback'][(string)$slot] = ['error' => $e->getMessage()];
             }
         }
+    }
 
-        // 3) Masih ada yang belum dapat ⇒ FALLBACK ke HTML scraping (method lama kamu)
-        $leftIds = array_values(array_diff(array_values($vids), array_map(fn($slot) => $vids[$slot] ?? null, $updated)));
-        if ($leftIds && method_exists($this, 'probeFromHtml')) {
-            foreach ($leftIds as $idLeft) {
-                $slot = array_search($idLeft, $vids, true);
-                $link = $links[$slot] ?? null;
-                if (!$link) continue;
-
-                try {
-                    $res = $this->probeFromHtml($link);
-                    $debug['html_fallback'][(string)$slot] = $res;
-
-                    if (is_array($res)) {
-                        if ($slot === 1) {
-                            $submission->views_1 = (int)($res['views'] ?? 0);
-                            $submission->likes_1 = (int)($res['likes'] ?? 0);
-                            $submission->comments_1 = (int)($res['comments'] ?? 0);
-                            $submission->shares_1 = (int)($res['shares'] ?? 0);
-                        } else {
-                            $submission->views_2 = (int)($res['views'] ?? 0);
-                            $submission->likes_2 = (int)($res['likes'] ?? 0);
-                            $submission->comments_2 = (int)($res['comments'] ?? 0);
-                            $submission->shares_2 = (int)($res['shares'] ?? 0);
-                        }
-                        if (!in_array($slot, $updated, true)) $updated[] = $slot;
-                    }
-                } catch (\Throwable $e) {
-                    $debug['html_fallback'][(string)$slot] = ['error' => $e->getMessage()];
-                }
-            }
+    // Kumpulkan yang masih tidak ketemu
+    foreach ($vids as $slot => $vid) {
+        if (!in_array($slot, $updated, true)) {
+            $notFound[(string)$slot] = $vid;
         }
+    }
 
-        // Kumpulkan yang masih tidak ketemu
-        foreach ($vids as $slot => $vid) {
-            if (!in_array($slot, $updated, true)) {
-                $notFound[(string)$slot] = $vid;
-            }
-        }
-
-        if ($updated) {
-            $submission->last_metrics_synced_at = now();
-            $submission->save();
-
-            return response()->json([
-                'message'     => 'Metrik berhasil diperbarui.',
-                'updated'     => $updated,
-                'token_owner' => [
-                    'open_id'      => $ownerOpenId,
-                    'username'     => data_get($debug, 'owner_info.json.data.user.username'),
-                    'display_name' => data_get($debug, 'owner_info.json.data.user.display_name'),
-                ],
-                'hints' => ['debug' => $debug],
-                'data'  => $submission->fresh(),
-            ]);
-        }
+    if ($updated) {
+        $submission->last_metrics_synced_at = now();
+        $submission->save();
 
         return response()->json([
-            'message'        => 'Tidak ada metrik yang ditemukan untuk link ini.',
-            'updated'        => [],
-            'not_found'      => $notFound ?: $vids,
-            'token_owner'    => [
+            'message'     => 'Metrik berhasil diperbarui.',
+            'updated'     => $updated,
+            'token_owner' => [
                 'open_id'      => $ownerOpenId,
                 'username'     => data_get($debug, 'owner_info.json.data.user.username'),
                 'display_name' => data_get($debug, 'owner_info.json.data.user.display_name'),
             ],
-            'current_scopes' => $scopes,
-            'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
-            'hints'          => ['debug' => $debug],
-            'data'           => $submission->fresh(),
+            'hints' => ['debug' => $debug],
+            'data'  => $submission->fresh(),
         ]);
     }
+
+    return response()->json([
+        'message'        => 'Tidak ada metrik yang ditemukan untuk link ini.',
+        'updated'        => [],
+        'not_found'      => $notFound ?: $vids,
+        'token_owner'    => [
+            'open_id'      => $ownerOpenId,
+            'username'     => data_get($debug, 'owner_info.json.data.user.username'),
+            'display_name' => data_get($debug, 'owner_info.json.data.user.display_name'),
+        ],
+        'current_scopes' => $scopes,
+        'reauth_url'     => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
+        'hints'          => ['debug' => $debug],
+        'data'           => $submission->fresh(),
+    ]);
+}
 
     
 
