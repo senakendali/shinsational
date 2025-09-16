@@ -36,7 +36,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
       <div class="d-flex flex-wrap gap-2 align-items-center">
         <select id="campaignFilter" class="form-select" style="min-width:260px">
-          <option value="">— Pilih Campaign —</option>
+          <option value="">- Pilih Campaign -</option>
         </select>
         <input class="form-control" style="min-width:260px" type="search" placeholder="Cari KOL / link…" id="searchInput">
       </div>
@@ -122,8 +122,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return `${origin}/files?p=${encodeURIComponent(normalized)}`;
   };
 
-  const fmtDate = (s) => (s ? new Date(s).toLocaleDateString("id-ID") : "—");
-  const fmtNum = (n) => (n === 0 || n ? Number(n).toLocaleString("id-ID") : "—");
+  const fmtDate = (s) => (s ? new Date(s).toLocaleDateString("id-ID") : "-");
+  const fmtNum = (n) => (n === 0 || n ? Number(n).toLocaleString("id-ID") : "-");
 
   const kolNameOf = (s) =>
     s.full_name ||
@@ -134,7 +134,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     s.creator_name ||
     s.influencer_name ||
     s.user_name ||
-    "—";
+    "-";
 
   const kolAvatarOf = (s) =>
     s.avatar_url ||
@@ -173,7 +173,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const data = await campaignService.getAll({ page: 1, per_page: 100, status: "" });
     const items = data?.data || [];
     campaignFilter.innerHTML =
-      `<option value="">— Pilih Campaign —</option>` +
+      `<option value="">- Pilih Campaign -</option>` +
       items.map((c) => `<option value="${c.id}">${c.name}</option>`).join("");
     const qId = query?.campaign_id || new URL(location.href).searchParams.get("campaign_id");
     if (qId && campaignFilter.querySelector(`option[value="${qId}"]`)) {
@@ -273,12 +273,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       const btn = (u, label = "View") =>
         u ? `<a class="btn btn-sm btn-outline-secondary" href="${u}" target="_blank" rel="noopener">${label}</a>`
-          : '<span class="text-muted">—</span>';
+          : '<span class="text-muted">-</span>';
 
       const theadTopGroups = [];
       for (let i = 1; i <= maxSlots; i++) {
         theadTopGroups.push(
-          `<th colspan="${SLOT_COLS}" class="text-center ${i % 2 === 0 ? "bg-light" : ""}">KOL Video ${i}</th>`
+          `<th colspan="${SLOT_COLS}" class="text-center ${i % 2 === 0 ? "bg-light" : ""}">Content ${i}</th>`
         );
       }
       const subMetrics = ["Content URL","Date","Screenshot","Invoice","Review","Views","Likes","Comments","Shares"];
@@ -330,15 +330,15 @@ export async function render(target, path, query = {}, labelOverride = null) {
           const evenBg = slot % 2 === 0 ? "bg-light" : "";
 
           slotCells.push(
-            `<td class="text-center ${evenBg}">${link ? `<a href="${link}" target="_blank" rel="noopener">Link</a>` : '<span class="text-muted">—</span>'}</td>`,
-            `<td class="text-center ${evenBg}">${pdate ? fmtDate(pdate) : '<span class="text-muted">—</span>'}</td>`,
-            `<td class="text-center ${evenBg}">${scUrl ? btn(scUrl, "View") : '<span class="text-muted">—</span>'}</td>`,
-            `<td class="text-center ${evenBg}">${invUrl ? btn(invUrl, "Invoice") : '<span class="text-muted">—</span>'}</td>`,
-            `<td class="text-center ${evenBg}">${revUrl ? btn(revUrl, "Review") : '<span class="text-muted">—</span>'}</td>`,
-            `<td class="text-center ${evenBg}">${views != null ? fmtNum(views) : "—"}</td>`,
-            `<td class="text-center ${evenBg}">${likes != null ? fmtNum(likes) : "—"}</td>`,
-            `<td class="text-center ${evenBg}">${comments != null ? fmtNum(comments) : "—"}</td>`,
-            `<td class="text-center ${evenBg}">${shares != null ? fmtNum(shares) : "—"}</td>`,
+            `<td class="text-center ${evenBg}">${link ? `<a href="${link}" target="_blank" rel="noopener">Link</a>` : '<span class="text-muted">-</span>'}</td>`,
+            `<td class="text-center ${evenBg}">${pdate ? fmtDate(pdate) : '<span class="text-muted">-</span>'}</td>`,
+            `<td class="text-center ${evenBg}">${scUrl ? btn(scUrl, "View") : '<span class="text-muted">-</span>'}</td>`,
+            `<td class="text-center ${evenBg}">${invUrl ? btn(invUrl, "Invoice") : '<span class="text-muted">-</span>'}</td>`,
+            `<td class="text-center ${evenBg}">${revUrl ? btn(revUrl, "Review") : '<span class="text-muted">-</span>'}</td>`,
+            `<td class="text-center ${evenBg}">${views != null ? fmtNum(views) : "-"}</td>`,
+            `<td class="text-center ${evenBg}">${likes != null ? fmtNum(likes) : "-"}</td>`,
+            `<td class="text-center ${evenBg}">${comments != null ? fmtNum(comments) : "-"}</td>`,
+            `<td class="text-center ${evenBg}">${shares != null ? fmtNum(shares) : "-"}</td>`,
           );
         }
 
@@ -403,6 +403,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
             white-space: nowrap;
             background: #fff;
           }
+            /* Hilangkan border-bottom utk kolom KOL Name & Actions di baris thead pertama */
+          .submissions-table thead tr:first-child th.fixed-first,
+          .submissions-table thead tr:first-child th.fixed-last {
+            border-bottom: 0 !important;
+            box-shadow: none !important; /* kalau sebelumnya pakai shadow variant */
+          }
+
           .submissions-table thead tr:nth-child(-n+2) th {
             border-bottom: 2px solid #dee2e6 !important;
           }
