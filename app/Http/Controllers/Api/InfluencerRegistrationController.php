@@ -141,6 +141,9 @@ class InfluencerRegistrationController extends Controller
             }
         }
 
+        // Ambil setting usia dari campaign (kalau ada)
+        $campaign = $campaignId ? Campaign::select('id', 'name', 'slug', 'min_age', 'max_age')->find($campaignId) : null;
+
         // Bersihkan username dari awalan '@'
         $username = ltrim((string) $request->input('tiktok_username', ''), '@');
 
@@ -149,7 +152,7 @@ class InfluencerRegistrationController extends Controller
         $payload['tiktok_username'] = $username;
         $payload['campaign_id']     = $campaignId; // bisa null → validasi akan fail kalau kosong
 
-        // ===== Idempotent: kalau SUDAH terdaftar di campaign yang sama, balikan data lama =====
+        // ===== Idempotent check (tetap sama) =====
         if ($campaignId && ($request->filled('tiktok_user_id') || $username !== '')) {
             $existing = InfluencerRegistration::where('campaign_id', $campaignId)
                 ->where(function ($q) use ($request, $username) {
@@ -161,7 +164,6 @@ class InfluencerRegistrationController extends Controller
                 ->first();
 
             if ($existing) {
-                // lengkapi field KOSONG dari input terbaru (tanpa override yg sudah ada)
                 $fillable = ['full_name','phone','address','birth_date','profile_pic_url','gender'];
                 $update = [];
                 foreach ($fillable as $f) {
@@ -179,9 +181,40 @@ class InfluencerRegistrationController extends Controller
             }
         }
 
-        // ===== Validasi (BARU) =====
-        $maxAgeBirth = Carbon::now()->subYears(45)->format('Y-m-d'); // lahir >= ini  ⇒ umur ≤ 45
-        $minAgeBirth = Carbon::now()->subYears(18)->format('Y-m-d'); // lahir ≤ ini  ⇒ umur ≥ 18
+        // ===== Validasi (PAKAI USIA DARI CAMPAIGN) =====
+        // Build aturan usia dinamis dari campaign
+        $birthDateRules = ['required','date'];
+        $messages = [
+            'tiktok_user_id.required'   => 'ID TikTok wajib diisi.',
+            'full_name.required'        => 'Nama lengkap wajib diisi.',
+            'tiktok_username.required'  => 'Username TikTok wajib diisi.',
+            'tiktok_username.regex'     => 'Username hanya boleh huruf, angka, underscore, dan titik.',
+            'phone.required'            => 'Nomor telepon wajib diisi.',
+            'email.required'            => 'Email wajib diisi.',
+            'address.required'          => 'Alamat wajib diisi.',
+            'birth_date.required'       => 'Tanggal lahir wajib diisi.',
+            'birth_date.date'           => 'Tanggal lahir tidak valid.',
+            'gender.required'           => 'Gender wajib diisi.',
+            'gender.in'                 => 'Gender tidak valid.',
+            'profile_pic_url.url'       => 'URL foto profil tidak valid.',
+            'campaign_id.required'      => 'Campaign tidak ditemukan.',
+            'campaign_id.exists'        => 'Campaign tidak valid.',
+        ];
+
+        if ($campaign) {
+            // umur ≥ min_age  → lahir <= today - min_age tahun
+            if ($campaign->min_age !== null) {
+                $minAgeCutoff = \Carbon\Carbon::today()->subYears((int)$campaign->min_age)->format('Y-m-d');
+                $birthDateRules[] = 'before_or_equal:'.$minAgeCutoff;
+                $messages['birth_date.before_or_equal'] = 'Umur minimal '.$campaign->min_age.' tahun.';
+            }
+            // umur ≤ max_age  → lahir >= today - max_age tahun
+            if ($campaign->max_age !== null) {
+                $maxAgeCutoff = \Carbon\Carbon::today()->subYears((int)$campaign->max_age)->format('Y-m-d');
+                $birthDateRules[] = 'after_or_equal:'.$maxAgeCutoff;
+                $messages['birth_date.after_or_equal'] = 'Umur maksimal '.$campaign->max_age.' tahun.';
+            }
+        }
 
         $rules = [
             'tiktok_user_id'   => ['required','string','max:100'],
@@ -190,40 +223,21 @@ class InfluencerRegistrationController extends Controller
             'phone'            => ['required','string','max:30'],
             'email'            => ['required','email','max:255'],
             'address'          => ['required','string','max:255'],
-            'birth_date'       => ['required','date','after_or_equal:'.$maxAgeBirth,'before_or_equal:'.$minAgeBirth],
-            'gender'           => ['required', Rule::in(['male','female','other'])],
+            'birth_date'       => $birthDateRules,
+            'gender'           => ['required', \Illuminate\Validation\Rule::in(['male','female','other'])],
             'profile_pic_url'  => ['nullable','url','max:2048'],
             'campaign_id'      => ['required','exists:campaigns,id'],
         ];
 
         // Unik PER CAMPAIGN
         if ($campaignId) {
-            $rules['tiktok_user_id'][] = Rule::unique('influencer_registrations', 'tiktok_user_id')
+            $rules['tiktok_user_id'][] = \Illuminate\Validation\Rule::unique('influencer_registrations', 'tiktok_user_id')
                 ->where(fn($q) => $q->where('campaign_id', $campaignId));
-            $rules['tiktok_username'][] = Rule::unique('influencer_registrations', 'tiktok_username')
+            $rules['tiktok_username'][] = \Illuminate\Validation\Rule::unique('influencer_registrations', 'tiktok_username')
                 ->where(fn($q) => $q->where('campaign_id', $campaignId));
+            $messages['tiktok_user_id.unique']  = 'Akun TikTok ini sudah terdaftar untuk campaign ini.';
+            $messages['tiktok_username.unique'] = 'Username TikTok ini sudah terdaftar untuk campaign ini.';
         }
-
-        $messages = [
-            'tiktok_user_id.required'     => 'ID TikTok wajib diisi.',
-            'full_name.required'          => 'Nama lengkap wajib diisi.',
-            'tiktok_username.required'    => 'Username TikTok wajib diisi.',
-            'tiktok_username.regex'       => 'Username hanya boleh huruf, angka, underscore, dan titik.',
-            'phone.required'              => 'Nomor telepon wajib diisi.',
-            'email.required'              => 'Email wajib diisi.',
-            'address.required'            => 'Alamat wajib diisi.',
-            'birth_date.required'         => 'Tanggal lahir wajib diisi.',
-            'birth_date.date'             => 'Tanggal lahir tidak valid.',
-            'birth_date.after_or_equal'   => 'Umur maksimal 45 tahun.',
-            'birth_date.before_or_equal'  => 'Umur minimal 18 tahun.',
-            'gender.required'             => 'Gender wajib diisi.',
-            'gender.in'                   => 'Gender tidak valid.',
-            'profile_pic_url.url'         => 'URL foto profil tidak valid.',
-            'campaign_id.required'        => 'Campaign tidak ditemukan.',
-            'campaign_id.exists'          => 'Campaign tidak valid.',
-            'tiktok_user_id.unique'       => 'Akun TikTok ini sudah terdaftar untuk campaign ini.',
-            'tiktok_username.unique'      => 'Username TikTok ini sudah terdaftar untuk campaign ini.',
-        ];
 
         $validated = validator($payload, $rules, $messages)->validate();
 
@@ -237,7 +251,7 @@ class InfluencerRegistrationController extends Controller
                 $reg->token_type        = $acc->token_type ?: ($reg->token_type ?: 'Bearer');
                 $reg->access_token      = $acc->access_token;
                 $reg->refresh_token     = $acc->refresh_token;
-                $reg->expires_at        = $acc->expires_at ? Carbon::parse($acc->expires_at) : null;
+                $reg->expires_at        = $acc->expires_at ? \Carbon\Carbon::parse($acc->expires_at) : null;
                 $reg->last_refreshed_at = $acc->last_refreshed_at ?: now();
                 $reg->revoked_at        = null;
                 $reg->scopes            = $acc->scopes ?? [];
@@ -251,6 +265,7 @@ class InfluencerRegistrationController extends Controller
             'data'    => $reg->load('campaign:id,name,slug'),
         ], 201);
     }
+
 
     public function update(Request $request, $id)
     {

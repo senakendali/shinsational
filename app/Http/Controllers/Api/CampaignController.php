@@ -49,9 +49,11 @@ class CampaignController extends Controller
         // slug otomatis unik per brand kalau kosong
         $payload['slug'] = $payload['slug'] ?? $this->makeUniqueSlug($payload['name'], $payload['brand_id']);
 
+        // ⬇️ tambahkan min_age, max_age, content_quota
         $payload = Arr::only($payload, [
             'brand_id','name','slug','code','objective','start_date','end_date',
-            'status','is_active','budget','currency','kpi_targets','hashtags','notes'
+            'status','is_active','budget','currency','kpi_targets','hashtags','notes',
+            'min_age','max_age','content_quota',
         ]);
 
         $campaign = Campaign::create($payload)->load('brand');
@@ -73,12 +75,18 @@ class CampaignController extends Controller
 
         // slug otomatis jika tidak dikirim
         if (!isset($payload['slug']) && isset($payload['name'])) {
-            $payload['slug'] = $this->makeUniqueSlug($payload['name'], $payload['brand_id'] ?? $campaign->brand_id, $campaign->id);
+            $payload['slug'] = $this->makeUniqueSlug(
+                $payload['name'],
+                $payload['brand_id'] ?? $campaign->brand_id,
+                $campaign->id
+            );
         }
 
+        // ⬇️ tambahkan min_age, max_age, content_quota
         $payload = Arr::only($payload, [
             'brand_id','name','slug','code','objective','start_date','end_date',
-            'status','is_active','budget','currency','kpi_targets','hashtags','notes'
+            'status','is_active','budget','currency','kpi_targets','hashtags','notes',
+            'min_age','max_age','content_quota',
         ]);
 
         $campaign->update($payload);
@@ -89,6 +97,7 @@ class CampaignController extends Controller
             'data'    => $campaign,
         ]);
     }
+
 
     public function destroy(Campaign $campaign)
     {

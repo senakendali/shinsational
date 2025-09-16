@@ -115,8 +115,40 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
           </select>
         </div>
 
-        <div class="col-md-9">
-          <small class="text-muted">Kosongkan budget bila tidak relevan. (Saat ini format ribuan tanpa desimal)</small>
+       
+
+        <!-- NEW: Persyaratan KOL (usia) -->
+        <div class="col-12">
+          <div class="border rounded p-3">
+            <div class="mb-2 fw-semibold">Persyaratan KOL</div>
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label" for="min_age">Usia Minimal</label>
+                <input id="min_age" name="min_age" type="number" min="0" class="form-control" placeholder="cth. 18">
+                <div class="invalid-feedback d-block" id="error-min_age"></div>
+              </div>
+              <div class="col-md-3">
+                <label class="form-label" for="max_age">Usia Maksimal</label>
+                <input id="max_age" name="max_age" type="number" min="0" class="form-control" placeholder="cth. 35">
+                <div class="invalid-feedback d-block" id="error-max_age"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NEW: Kuota konten wajib (per campaign) -->
+        <div class="col-12">
+          <div class="border rounded p-3">
+            <div class="mb-2 fw-semibold">Konten Wajib</div>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label" for="content_quota">Jumlah Konten Wajib Dibuat</label>
+                <input id="content_quota" name="content_quota" type="text" class="form-control" placeholder="cth. 10">
+                <small class="text-muted">Total minimal konten yang harus diproduksi dalam campaign ini.</small>
+                <div class="invalid-feedback d-block" id="error-content_quota"></div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="col-12">
@@ -139,6 +171,13 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
               <div class="col-md-3">
                 <label class="form-label">Shares</label>
                 <input id="kpi_shares" type="text" class="form-control" placeholder="cth. 500">
+              </div>
+
+              <!-- NEW: KPI Jumlah Konten Upload -->
+              <div class="col-md-3 d-none">
+                <label class="form-label">Konten Upload (KPI)</label>
+                <input id="kpi_contents" type="text" class="form-control" placeholder="cth. 20">
+                <small class="text-muted">Target jumlah postingan yang berhasil diunggah.</small>
               </div>
             </div>
             <div class="invalid-feedback d-block" id="error-kpi_targets"></div>
@@ -210,6 +249,9 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
   attachThousandFormatter(document.getElementById('kpi_likes'));
   attachThousandFormatter(document.getElementById('kpi_comments'));
   attachThousandFormatter(document.getElementById('kpi_shares'));
+  // NEW: formatter untuk KPI Konten & Kuota Konten
+  attachThousandFormatter(document.getElementById('kpi_contents'));
+  attachThousandFormatter(document.getElementById('content_quota'));
 
   // Load brands ke dropdown
   async function populateBrands(selectedId = null) {
@@ -217,13 +259,27 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       const res = await brandService.getAll({ page: 1, per_page: 1000 });
       const brands = res.data || [];
       const sel = document.getElementById('brand_id');
-      sel.innerHTML = `<option value="">-- Pilih Brand --</option>` +
-        brands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+
+      // Bangun option via DOM (lebih aman)
+      sel.innerHTML = '';
+      const ph = document.createElement('option');
+      ph.value = '';
+      ph.textContent = '-- Pilih Brand --';
+      sel.appendChild(ph);
+
+      brands.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = String(b.id);
+        opt.textContent = b.name ?? `Brand #${b.id}`;
+        sel.appendChild(opt);
+      });
+
       if (selectedId) sel.value = String(selectedId);
     } catch (e) {
       showToast('Gagal memuat daftar brand', 'error');
     }
   }
+
 
   // Submit
   document.getElementById('campaign-form').addEventListener('submit', async (e) => {
@@ -249,6 +305,11 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     const hashtagsRaw = (document.getElementById('hashtags')?.value || '').trim();
     const notes = (document.getElementById('notes')?.value || '').trim();
 
+    // NEW: usia & kuota konten
+    const min_age = (document.getElementById('min_age')?.value || '').trim();
+    const max_age = (document.getElementById('max_age')?.value || '').trim();
+    const content_quota_formatted = (document.getElementById('content_quota')?.value || '').trim();
+
     // KPI (ambil angka polos)
     const numFromField = (id) => {
       const f = (document.getElementById(id)?.value || '').trim();
@@ -259,7 +320,9 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       views: numFromField('kpi_views'),
       likes: numFromField('kpi_likes'),
       comments: numFromField('kpi_comments'),
-      shares: numFromField('kpi_shares')
+      shares: numFromField('kpi_shares'),
+      // NEW: KPI jumlah konten upload
+      contents: numFromField('kpi_contents')
     };
     const kpi = {};
     Object.entries(kv).forEach(([k, val]) => { if (val != null && !Number.isNaN(val)) kpi[k] = val; });
@@ -288,6 +351,15 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     }
 
     if (currency) fd.set('currency', currency);
+
+    // NEW: usia & kuota konten (angka polos)
+    if (min_age) fd.set('min_age', String(Math.max(0, Number(min_age))));
+    if (max_age) fd.set('max_age', String(Math.max(0, Number(max_age))));
+    if (content_quota_formatted) {
+      const cqDigits = unformatNumber(content_quota_formatted);
+      if (cqDigits) fd.set('content_quota', cqDigits);
+    }
+
     if (Object.keys(kpi).length) fd.set('kpi_targets', JSON.stringify(kpi));
     if (tags.length) fd.set('hashtags', JSON.stringify(tags));
     if (notes) fd.set('notes', notes);
@@ -309,6 +381,10 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         if (err.errors.brand_id) document.getElementById('error-brand_id').textContent = Array.isArray(err.errors.brand_id) ? err.errors.brand_id.join(', ') : String(err.errors.brand_id);
         if (err.errors.kpi_targets) document.getElementById('error-kpi_targets').textContent = Array.isArray(err.errors.kpi_targets) ? err.errors.kpi_targets.join(', ') : String(err.errors.kpi_targets);
         if (err.errors.hashtags) document.getElementById('error-hashtags').textContent = Array.isArray(err.errors.hashtags) ? err.errors.hashtags.join(', ') : String(err.errors.hashtags);
+        // NEW: tampilkan error usia & quota
+        if (err.errors.min_age) document.getElementById('error-min_age').textContent = Array.isArray(err.errors.min_age) ? err.errors.min_age.join(', ') : String(err.errors.min_age);
+        if (err.errors.max_age) document.getElementById('error-max_age').textContent = Array.isArray(err.errors.max_age) ? err.errors.max_age.join(', ') : String(err.errors.max_age);
+        if (err.errors.content_quota) document.getElementById('error-content_quota').textContent = Array.isArray(err.errors.content_quota) ? err.errors.content_quota.join(', ') : String(err.errors.content_quota);
       }
     } finally {
       hideLoader();
@@ -326,11 +402,25 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       ]);
 
       // brands
-      const sel = document.getElementById('brand_id');
+      
       const brands = brandsRes?.data || [];
-      sel.innerHTML = `<option value="">-- Pilih Brand --</option>` +
-        brands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+      
+      const sel = document.getElementById('brand_id');
+      sel.innerHTML = '';
+      const ph = document.createElement('option');
+      ph.value = '';
+      ph.textContent = '-- Pilih Brand --';
+      sel.appendChild(ph);
+
+      (brandsRes?.data || []).forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = String(b.id);
+        opt.textContent = b.name ?? `Brand #${b.id}`;
+        sel.appendChild(opt);
+      });
+
       sel.value = String(data.brand_id);
+
 
       // fields
       const set = (id, v) => { const el = document.getElementById(id); if (el && el.type !== 'file') el.value = v ?? ''; };
@@ -345,6 +435,12 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       set('currency', data.currency || 'IDR');
       set('notes', data.notes);
 
+      // NEW: usia + kuota konten
+      set('min_age', data.min_age);
+      set('max_age', data.max_age);
+      const cqEl = document.getElementById('content_quota');
+      if (cqEl) cqEl.value = (data.content_quota == null || data.content_quota === '') ? '' : formatNumber(String(Math.trunc(Number(data.content_quota))));
+
       // budget → format ribuan (integer)
       const budgetVal = (data.budget != null && data.budget !== '') ? Math.trunc(Number(data.budget)) : '';
       const budgetEl = document.getElementById('budget');
@@ -357,6 +453,9 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       document.getElementById('kpi_likes').value = fmt(kt.likes);
       document.getElementById('kpi_comments').value = fmt(kt.comments);
       document.getElementById('kpi_shares').value = fmt(kt.shares);
+      // NEW: KPI contents
+      const kpiContentsEl = document.getElementById('kpi_contents');
+      if (kpiContentsEl) kpiContentsEl.value = fmt(kt.contents);
 
       // hashtags
       const tags = Array.isArray(data.hashtags) ? data.hashtags.join(', ') : '';
@@ -371,6 +470,9 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       attachThousandFormatter(document.getElementById('kpi_likes'));
       attachThousandFormatter(document.getElementById('kpi_comments'));
       attachThousandFormatter(document.getElementById('kpi_shares'));
+      // NEW:
+      attachThousandFormatter(kpiContentsEl);
+      attachThousandFormatter(cqEl);
     } catch (e) {
       await populateBrands();
       showToast('Gagal memuat data campaign/brand', 'error');
