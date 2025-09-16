@@ -403,6 +403,15 @@ export async function render(target, path, query = {}, labelOverride = null) {
             white-space: nowrap;
             background: #fff;
           }
+          .submissions-table thead tr:first-child th {
+            border-bottom: 2px solid #dee2e6 !important; /* pakai warna border Bootstrap */
+          }
+          .submissions-table thead tr:first-child th {
+            border-bottom: 0 !important;
+            box-shadow: inset 0 -2px 0 #dee2e6; /* terlihat konsisten saat di-scroll */
+          }
+
+
           .sticky-col {
             position: sticky;
             background: #fff;
