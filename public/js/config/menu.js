@@ -23,7 +23,6 @@ export const ownerMenu = [
     icon: "bi-file-earmark-bar-graph",
     can: ["submission.viewAny"],
     children: [
-      { label: "KOL", path: "/admin/kol", icon: "bi-list-check", can: "submission.viewAny" },
       { label: "Content Approval", path: "/admin/drafts", icon: "bi-list-check", can: "submission.viewAny" },
       { label: "Submission", path: "/admin/submissions", icon: "bi-list-check", can: "submission.viewAny" },
     ],
@@ -37,6 +36,7 @@ export const ownerMenu = [
       { label: "Roles",        path: "/admin/roles",        icon: "bi-list-check",   can: "role.viewAny" },
       { label: "Users",        path: "/admin/users",        icon: "bi-people",       can: "user.viewAny" },
       { label: "Permissions",  path: "/admin/permissions",  icon: "bi-shield-lock",  can: "permission.viewAny" },
+      { label: "Refresh KOL Token", path: "/admin/kol", icon: "bi-arrow-clockwise", can: "submission.viewAny" },
     ],
   },
 ];

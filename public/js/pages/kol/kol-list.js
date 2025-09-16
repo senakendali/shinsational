@@ -45,7 +45,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       return r.json();
     },
     async refreshToken(id) {
-      const r = await fetch(`/api/admin/influencer-accounts/${id}/tiktok/refresh-token`, {
+      const r = await fetch(`/api/influencer-accounts/${id}/refresh-token`, {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Accept': 'application/json' },
@@ -154,6 +154,21 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return txt.length > 60 ? txt.slice(0, 57) + '…' : txt;
   }
 
+  // NEW: row class highlighting per token state
+  function rowClassOf(acc) {
+    const now = Date.now();
+    const revoked = acc?.revoked_at ? new Date(acc.revoked_at).getTime() : null;
+    const exp = acc?.expires_at ? new Date(acc.expires_at).getTime() : null;
+
+    if (revoked) return 'table-danger';
+    if (!exp) return '';
+
+    const delta = exp - now;
+    if (delta <= 0) return 'table-danger';
+    if (delta <= 60 * 60 * 1000) return 'table-warning';
+    return '';
+  }
+
   function rowActions(acc) {
     const id = acc.id;
     const nm = encodeURIComponent(nameOf(acc));
@@ -209,16 +224,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
       let arr = res?.data || res?.items || res || [];
 
       // Jika server belum filter by campaign: lakukan fallback client-side
-      // Deteksi sederhana: kalau campaign_id tidak memengaruhi jumlah data (atau objek tidak punya campaign info)
-      if (currentCampaignId) {
-        const seemsUnfiltered = !('campaign_id' in (arr[0] || {})) && !('campaigns' in (arr[0] || {}));
-        if (seemsUnfiltered) {
-          const openIds = await getAllowedOpenIdsByCampaign(currentCampaignId);
-          arr = arr.filter(a => openIds.has(a?.tiktok_user_id));
-        }
+      const seemsUnfiltered = !('campaign_id' in (arr[0] || {})) && !('campaigns' in (arr[0] || {}));
+      if (currentCampaignId && seemsUnfiltered) {
+        const openIds = await getAllowedOpenIdsByCampaign(currentCampaignId);
+        arr = arr.filter(a => openIds.has(a?.tiktok_user_id));
       }
 
-      // Client-side keyword filter (kalau API sudah filter pakai q, ini hanya penguat)
+      // Client-side keyword filter
       const kw = (currentKeyword || '').toLowerCase().trim();
       if (kw) {
         arr = arr.filter(a => {
@@ -241,9 +253,10 @@ export async function render(target, path, query = {}, labelOverride = null) {
         const st = statusOf(a);
         const expires = fmtDateTime(a.expires_at);
         const lastRef = fmtDateTime(a.last_refreshed_at);
+        const trClass = rowClassOf(a);
 
         return `
-          <tr data-id="${a.id}">
+          <tr data-id="${a.id}" class="${trClass}">
             <td>
               <div class="d-flex align-items-center gap-2">
                 ${av ? `<img src="${av}" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover">` : ''}

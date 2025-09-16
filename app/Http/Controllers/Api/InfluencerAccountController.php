@@ -112,140 +112,162 @@ class InfluencerAccountController extends Controller
      * POST /api/influencer-accounts/{id}/refresh-token
      * Admin-triggered refresh menggunakan refresh_token yang tersimpan.
      */
-    public function refreshToken(Request $request, $id)
+    public function refreshToken(Request $request)
     {
-        // (opsional) permission
-        if (Gate::has('submission.update')) {
-            Gate::authorize('submission.update');
-        }
+        $clientKey    = TikTokAuthController::CLIENT_KEY;
+        $clientSecret = TikTokAuthController::CLIENT_SECRET;
 
-        $acc = InfluencerAccount::findOrFail($id);
-
-        // Cek prerequisite
-        if ($acc->revoked_at) {
-            return response()->json([
-                'message' => 'Token sudah dicabut (revoked). Mohon re-authorize.',
-                'reauth_url' => url('/auth/tiktok/reset?force=1'),
-            ], 409);
-        }
-
-        if (!$acc->refresh_token) {
-            return response()->json([
-                'message' => 'Refresh token tidak tersedia. Minta KOL connect ulang.',
-                'reauth_url' => url('/auth/tiktok/reset?force=1'),
-            ], 409);
-        }
-
-        $clientKey    = config('tiktok.client_key') ?? config('services.tiktok.client_key') ?? env('TIKTOK_CLIENT_KEY');
-        $clientSecret = config('tiktok.client_secret') ?? config('services.tiktok.client_secret') ?? env('TIKTOK_CLIENT_SECRET');
+        
 
         if (!$clientKey || !$clientSecret) {
             return response()->json([
-                'message' => 'Konfigurasi TikTok client_key/client_secret belum di-set.',
+                'message' => 'Konfigurasi TikTok belum lengkap (client_key / client_secret).',
             ], 500);
         }
 
-        // 1) Refresh token
-        $tokenUrl = rtrim(config('tiktok.oauth_base', 'https://open.tiktokapis.com'), '/') . '/v2/oauth/token/';
-        $tokenDebug = [];
+        // Optional filter dari query:
+        // - ?campaign_id=123  -> hanya akun yang pernah registrasi ke campaign tsb
+        // - ?only_expired=1   -> hanya yang expired (expires_at <= now)
+        $campaignId  = $request->query('campaign_id');
+        $onlyExpired = (bool) $request->boolean('only_expired', false);
 
-        try {
-            $res = Http::asForm()
-                ->timeout(20)
-                ->retry(2, 500)
-                ->post($tokenUrl, [
-                    'client_key'    => $clientKey,
-                    'client_secret' => $clientSecret,
-                    'grant_type'    => 'refresh_token',
-                    'refresh_token' => $acc->refresh_token,
-                ]);
+        $q = InfluencerAccount::query()
+            ->whereNull('revoked_at')
+            ->whereNotNull('refresh_token');
 
-            $tokenDebug = [
-                'status' => $res->status(),
-                'json'   => $res->json(),
-                'headers'=> [
-                    'content-type' => $res->header('content-type'),
-                    'x-tt-logid'   => $res->header('x-tt-logid'),
-                ],
-            ];
-
-            if ($res->failed()) {
-                // 409 agar UI bisa munculin tombol reauth
-                return response()->json([
-                    'message'    => data_get($res->json(), 'error.message') ?: 'Gagal refresh token TikTok.',
-                    'error_code' => data_get($res->json(), 'error.code'),
-                    'reauth_url' => url('/auth/tiktok/reset?force=1'),
-                    'hints'      => ['debug' => ['token' => $tokenDebug]],
-                ], in_array($res->status(), [400,401,403], true) ? 409 : 502);
-            }
-
-            $body = $res->json() ?: [];
-
-            $newAccess  = (string) data_get($body, 'access_token');
-            $newRefresh = (string) (data_get($body, 'refresh_token') ?: $acc->refresh_token);
-            $tokenType  = (string) (data_get($body, 'token_type') ?: 'Bearer');
-            $expiresIn  = (int)    (data_get($body, 'expires_in') ?: data_get($body, 'access_token_expires_in') ?: 0);
-
-            if (!$newAccess) {
-                return response()->json([
-                    'message' => 'Response refresh tidak mengandung access_token.',
-                    'hints'   => ['debug' => ['token' => $tokenDebug]],
-                ], 502);
-            }
-
-            $acc->token_type        = $tokenType ?: 'Bearer';
-            $acc->access_token      = $newAccess;
-            $acc->refresh_token     = $newRefresh ?: $acc->refresh_token;
-            $acc->expires_at        = $expiresIn > 0 ? Carbon::now()->addSeconds($expiresIn) : null;
-            $acc->last_refreshed_at = Carbon::now();
-            // scope biasanya tidak dikembalikan saat refresh; biarkan apa adanya
-            $acc->save();
-        } catch (\Throwable $e) {
-            return response()->json([
-                'message' => 'Exception saat refresh token: '.$e->getMessage(),
-            ], 502);
+        if ($onlyExpired) {
+            $q->whereNotNull('expires_at')->where('expires_at', '<=', now());
         }
 
-        // 2) (Opsional) Verify & update profile (username, display_name, avatar)
-        $meDebug = [];
-        try {
-            $meRes = Http::withToken($acc->access_token)
-                ->acceptJson()
-                ->timeout(15)
-                ->get('https://open.tiktokapis.com/v2/user/info/', [
-                    'fields' => 'open_id,username,display_name,avatar_url',
-                ]);
-
-            $meDebug = [
-                'status' => $meRes->status(),
-                'json'   => $meRes->json(),
-                'headers'=> [
-                    'content-type' => $meRes->header('content-type'),
-                    'x-tt-logid'   => $meRes->header('x-tt-logid'),
-                ],
-            ];
-
-            if ($meRes->ok()) {
-                $acc->tiktok_user_id  = data_get($meRes->json(), 'data.user.open_id') ?: $acc->tiktok_user_id;
-                $acc->tiktok_username = data_get($meRes->json(), 'data.user.username') ?: $acc->tiktok_username;
-                $acc->full_name       = data_get($meRes->json(), 'data.user.display_name') ?: $acc->full_name;
-                $acc->avatar_url      = data_get($meRes->json(), 'data.user.avatar_url') ?: $acc->avatar_url;
-                $acc->save();
-            }
-        } catch (\Throwable $e) {
-            // diamkan; ini hanya enrichment
-            $meDebug['exception'] = $e->getMessage();
+        if ($campaignId) {
+            // batasi hanya akun yang pernah daftar di campaign tsb
+            $q->whereExists(function ($sub) use ($campaignId) {
+                $sub->select(DB::raw(1))
+                    ->from('influencer_registrations as ir')
+                    ->whereColumn('ir.tiktok_user_id', 'influencer_accounts.tiktok_user_id')
+                    ->where('ir.campaign_id', $campaignId);
+            });
         }
+
+        $totalCandidates = (clone $q)->count();
+
+        $summary = [
+            'total'          => InfluencerAccount::count(),
+            'candidates'     => $totalCandidates,
+            'refreshed'      => 0,
+            'skipped'        => 0,
+            'failed'         => 0,
+            'revoked_marked' => 0,
+        ];
+
+        $errors   = [];
+        $start    = microtime(true);
+
+        // HTTP client reusable
+        $http = Http::asForm()
+            ->timeout(20)
+            ->retry(3, 500, function ($exception, $request) {
+                // retry untuk 429/5xx/network error
+                $resp   = method_exists($exception, 'response') ? $exception->response : null;
+                $status = $resp ? $resp->status() : null;
+                if ($status === 429) {
+                    $ra = (int) ($resp->header('Retry-After') ?? 0);
+                    if ($ra > 0) usleep($ra * 1_000_000);
+                    return true;
+                }
+                return $status && $status >= 500;
+            });
+
+        // Proses bertahap untuk hemat memori & hindari timeout
+        $q->orderBy('id')->chunkById(100, function ($rows) use ($http, $clientKey, $clientSecret, &$summary, &$errors) {
+            foreach ($rows as $acc) {
+                // Safety skip kalau tidak ada refresh_token (harusnya sudah difilter)
+                if (!$acc->refresh_token) { $summary['skipped']++; continue; }
+
+                try {
+                    $resp = $http->post('https://open.tiktokapis.com/v2/oauth/token/', [
+                        'client_key'    => $clientKey,
+                        'client_secret' => $clientSecret,
+                        'grant_type'    => 'refresh_token',
+                        'refresh_token' => $acc->refresh_token,
+                    ]);
+
+                    $json = $resp->json() ?? [];
+
+                    // Extract generic fields (beberapa SDK taruh di root, ada yg di data.*)
+                    $access  = data_get($json, 'data.access_token')  ?? data_get($json, 'access_token');
+                    $refresh = data_get($json, 'data.refresh_token') ?? data_get($json, 'refresh_token');
+                    $type    = data_get($json, 'data.token_type')     ?? data_get($json, 'token_type') ?? 'Bearer';
+                    $expIn   = (int) (data_get($json, 'data.expires_in') ?? data_get($json, 'expires_in') ?? 0);
+
+                    if ($resp->failed() || !$access) {
+                        // Tangkap error code/message dari TikTok
+                        $code   = data_get($json, 'error.code') ?? data_get($json, 'code') ?? 'unknown_error';
+                        $msg    = data_get($json, 'error.message') ?? data_get($json, 'message') ?? 'Refresh token gagal';
+                        $logId  = $resp->header('x-tt-logid');
+
+                        // Kalau refresh token invalid/expired ⇒ mark revoked
+                        $fatalCodes = ['invalid_grant','refresh_token_invalid','refresh_token_expired','access_token_invalid'];
+                        if (in_array($code, $fatalCodes, true)) {
+                            // jangan overwrite kalau sudah ada
+                            if (!$acc->revoked_at) {
+                                $acc->revoked_at = now();
+                                $acc->save();
+                                $summary['revoked_marked']++;
+                            }
+                        }
+
+                        $summary['failed']++;
+                        if (count($errors) < 25) {
+                            $errors[] = [
+                                'id'              => $acc->id,
+                                'tiktok_user_id'  => $acc->tiktok_user_id,
+                                'code'            => $code,
+                                'message'         => $msg,
+                                'log_id'          => $logId,
+                                'http_status'     => $resp->status(),
+                            ];
+                        }
+                        continue;
+                    }
+
+                    // Sukses → update kolom
+                    $acc->access_token       = $access;
+                    if ($refresh) {
+                        $acc->refresh_token  = $refresh;
+                    }
+                    $acc->token_type         = $type ?: ($acc->token_type ?: 'Bearer');
+                    $acc->expires_at         = $expIn > 0 ? now()->addSeconds($expIn) : now()->addHours(1);
+                    $acc->last_refreshed_at  = now();
+                    // Kalau sebelumnya sempat ditandai revoked tapi sekarang berhasil, anggap pulih
+                    if ($acc->revoked_at) {
+                        $acc->revoked_at = null;
+                    }
+                    $acc->save();
+
+                    $summary['refreshed']++;
+
+                } catch (\Throwable $e) {
+                    $summary['failed']++;
+                    if (count($errors) < 25) {
+                        $errors[] = [
+                            'id'             => $acc->id,
+                            'tiktok_user_id' => $acc->tiktok_user_id,
+                            'message'        => $e->getMessage(),
+                        ];
+                    }
+                }
+            }
+        });
+
+        $tookMs = (int) ((microtime(true) - $start) * 1000);
 
         return response()->json([
-            'message' => 'Token berhasil di-refresh.',
-            'data'    => $acc->fresh(),
-            'hints'   => [
-                'debug' => [
-                    'token' => $tokenDebug,
-                    'me'    => $meDebug,
-                ],
-            ],
+            'message' => 'Bulk refresh token selesai.',
+            'summary' => $summary,
+            'took_ms' => $tookMs,
+            // Ditrim biar response gak kebanyakan. Ambil maksimal 25 error.
+            'errors'  => $errors,
         ]);
     }
 }
