@@ -281,7 +281,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
           `<th colspan="${SLOT_COLS}" class="text-center ${i % 2 === 0 ? "bg-light" : ""}">KOL Video ${i}</th>`
         );
       }
-      const subMetrics = ["Video URL","Date","Screenshot","Invoice","Review","Views","Likes","Comments","Shares"];
+      const subMetrics = ["Content URL","Date","Screenshot","Invoice","Review","Views","Likes","Comments","Shares"];
       const theadSub = [];
       for (let i = 1; i <= maxSlots; i++) {
         theadSub.push(...subMetrics.map((m) =>
@@ -300,7 +300,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         const isSentByBrand = s.acquisition_method === "sent_by_brand";
         const hasResi = !!(s.shipping_tracking_number || s.shipping_courier);
         const resiBtnHtml = isSentByBrand
-          ? `<button class="btn btn-sm btn-outline-success btn-input-resi"
+          ? `<button class="btn btn-sm btn-outline-success btn-input-resi d-none"
                 data-id="${s.id}"
                 data-courier="${s.shipping_courier ? String(s.shipping_courier).replace(/"/g, "&quot;") : ""}"
                 data-resi="${s.shipping_tracking_number ? String(s.shipping_tracking_number).replace(/"/g, "&quot;") : ""}">
@@ -403,8 +403,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
             white-space: nowrap;
             background: #fff;
           }
-          .submissions-table thead tr:first-child th {
-            border-bottom: 2px solid #dee2e6 !important; /* pakai warna border Bootstrap */
+          .submissions-table thead tr:nth-child(-n+2) th {
+            border-bottom: 2px solid #dee2e6 !important;
           }
           .submissions-table thead tr:second-child th {
             border-bottom: 2px solid #dee2e6 !important; /* pakai warna border Bootstrap */
