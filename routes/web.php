@@ -12,6 +12,8 @@ use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\PermissionController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Api\InfluencerSubmissionController;
+use App\Http\Controllers\Api\InfluencerAccountController;
+
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\MeController;
@@ -77,6 +79,15 @@ Route::prefix('api')->middleware(['web','auth'])->group(function () {
     ->name('api.influencer-submissions.submit-draft');
 
     Route::post('influencer-submissions/{id}/draft-approval', [InfluencerSubmissionController::class, 'approveDraft']);
+
+    // List + filter (campaign_id, q) + pagination
+    Route::get('influencer-accounts', [InfluencerAccountController::class, 'index'])
+        ->name('api.influencer-accounts.index');
+
+    // Refresh token KOL by admin action (button di KOL list)
+    Route::post('influencer-accounts/{id}/refresh-token', [InfluencerAccountController::class, 'refreshToken'])
+        ->whereNumber('id')
+        ->name('api.influencer-accounts.refresh-token');
 
 
 });

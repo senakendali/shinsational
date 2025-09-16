@@ -110,6 +110,12 @@ export const routes = [
     component: () => import("../pages/submission/draft.js?v=" + BUILD_ID),
   },
 
+  {
+    path: "/admin/kol",
+    label: "KOL",
+    component: () => import("../pages/kol/kol-list.js?v=" + BUILD_ID),
+  },
+
   // ===== Submission =====
   {
     path: "/admin/submissions",
