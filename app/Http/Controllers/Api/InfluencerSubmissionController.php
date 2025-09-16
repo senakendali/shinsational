@@ -21,6 +21,7 @@ use Illuminate\Routing\Attributes\Middleware;
 
 use App\Exports\InfluencerSubmissionsExport;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Services\TikTokDisplayApi;
 
 
 class InfluencerSubmissionController extends Controller
@@ -360,466 +361,6 @@ protected function oembedAuthor(?string $url): ?array
     }
 }
 
-    /** Ambil metrik video untuk open_id (creator) & daftar video_id; return map video_id => stats */
-    protected function fetchVideoStats(string $openId, array $videoIds, string $accessToken): array
-    {
-        $found = [];
-        $want  = array_fill_keys($videoIds, true);
-        $cursor = 0;
-
-        // ambil per halaman max 50 sampai ketemu semua / 3 page
-        for ($page = 0; $page < 3 && count($want) > 0; $page++) {
-            $resp = Http::withToken($accessToken)
-                ->acceptJson()
-                ->post('https://open.tiktokapis.com/v2/video/list/', [
-                    // per dokumentasi: creator_id + fields
-                    'creator_id' => $openId,
-                    'max_count'  => 50,
-                    'cursor'     => $cursor,
-                    'fields'     => 'video_id,view_count,like_count,comment_count,share_count',
-                ]);
-
-            if (!$resp->ok()) {
-                Log::warning('tiktok_video_list_failed', ['status' => $resp->status(), 'body' => $resp->json()]);
-                break;
-            }
-
-            $j = $resp->json();
-            $items  = data_get($j, 'data.videos', data_get($j, 'data.items', []));
-            $cursor = data_get($j, 'data.cursor', null);
-            $hasMore= data_get($j, 'data.has_more', false);
-
-            foreach ($items as $it) {
-                $vid = (string) data_get($it, 'video_id');
-                if (!isset($want[$vid])) continue;
-
-                $found[$vid] = [
-                    'view'    => data_get($it, 'view_count'),
-                    'like'    => data_get($it, 'like_count'),
-                    'comment' => data_get($it, 'comment_count'),
-                    'share'   => data_get($it, 'share_count'),
-                ];
-                unset($want[$vid]);
-            }
-
-            if (!$hasMore || !$cursor) break;
-        }
-
-        return $found;
-    }
-
-    // Tambahkan helper ini di dalam class InfluencerSubmissionController
-    private function tiktokHttp(string $accessToken): \Illuminate\Http\Client\PendingRequest
-    {
-        $clientKey = config('services.tiktok.client_key', env('TIKTOK_CLIENT_KEY'));
-        return \Http::withHeaders([
-            'Authorization' => 'Bearer '.$accessToken,
-            'Accept'        => 'application/json',
-            // sebagian env picky soal charset
-            'Content-Type'  => 'application/json; charset=UTF-8',
-            // aman ditambahkan untuk sandbox; abaikan kalau tak dipakai
-            'X-Client-Id'   => $clientKey ?: '',
-        ])->timeout(20);
-    }
-
-    /**
-     * Kirim POST JSON ke endpoint TikTok dengan fields sebagai STRING,
-     * dan kalau dibalas error "fields ... missed", retry pakai ARRAY.
-     */
-    private function ttPostWithFieldsRetry(
-        \Illuminate\Http\Client\PendingRequest $http,
-        string $url,
-        array $payloadBase,
-        array $fieldsList
-    ): \Illuminate\Http\Client\Response {
-        // 1) try dengan string comma-separated
-        $payload1 = $payloadBase + ['fields' => implode(',', $fieldsList)];
-        $resp = $http->asJson()->post($url, $payload1);
-
-        $body = $resp->json();
-        $missingFields =
-            !$resp->ok()
-            && str_contains(strtolower(json_encode($body)), 'fields')
-            && str_contains(strtolower(json_encode($body)), 'miss');
-
-        if ($missingFields) {
-            // 2) retry sebagai array
-            $payload2 = $payloadBase + ['fields' => $fieldsList];
-            return $http->asJson()->post($url, $payload2);
-        }
-        return $resp;
-    }
-
-   
-
-    /**
-     * Coba panggil endpoint TikTok pakai beberapa "bentuk" payload.
-     * Return: ['ok'=>bool, 'json'=>array|null, 'http_status'=>int, 'variant'=>string, 'error'=>mixed]
-     */
-    private function ttTryVariants(\Illuminate\Http\Client\PendingRequest $http, string $url, array $base, array $fields): array
-    {
-        $variants = [];
-
-        // ——— Bentuk "fields" ———
-        $F_STR = implode(',', $fields);
-        $F_ARR = $fields;
-
-        // ——— Untuk /video/query/ ——— (by video_ids)
-        if (str_contains($url, '/video/query/')) {
-            $vids = $base['video_ids'] ?? [];
-            $variants = [
-                // 1) POST + filters + fields (string)
-                ['method'=>'POST','payload'=>['filters'=>['video_ids'=>$vids], 'fields'=>$F_STR]],
-                // 2) POST + filters + fields (array)
-                ['method'=>'POST','payload'=>['filters'=>['video_ids'=>$vids], 'fields'=>$F_ARR]],
-                // 3) POST + top-level video_ids + fields (string)
-                ['method'=>'POST','payload'=>['video_ids'=>$vids, 'fields'=>$F_STR]],
-                // 4) POST + top-level video_ids + fields (array)
-                ['method'=>'POST','payload'=>['video_ids'=>$vids, 'fields'=>$F_ARR]],
-                // 5) GET + querystring
-                ['method'=>'GET','query'=>['video_ids'=>implode(',', $vids), 'fields'=>$F_STR]],
-            ];
-        }
-
-        // ——— Untuk /video/list/ ——— (by creator/open_id)
-        if (str_contains($url, '/video/list/')) {
-            $creator = $base['creator_id'] ?? ($base['filters']['creator_id'] ?? null);
-            $cursor  = $base['cursor'] ?? 0;
-            $max     = $base['max_count'] ?? 50;
-
-            $variants = [
-                // 1) POST + filters.creator_id + fields (string)
-                ['method'=>'POST','payload'=>['filters'=>['creator_id'=>$creator], 'cursor'=>$cursor, 'max_count'=>$max, 'fields'=>$F_STR]],
-                // 2) POST + filters.creator_id + fields (array)
-                ['method'=>'POST','payload'=>['filters'=>['creator_id'=>$creator], 'cursor'=>$cursor, 'max_count'=>$max, 'fields'=>$F_ARR]],
-                // 3) POST + creator_id top-level + fields (string)
-                ['method'=>'POST','payload'=>['creator_id'=>$creator, 'cursor'=>$cursor, 'max_count'=>$max, 'fields'=>$F_STR]],
-                // 4) POST + creator_id top-level + fields (array)
-                ['method'=>'POST','payload'=>['creator_id'=>$creator, 'cursor'=>$cursor, 'max_count'=>$max, 'fields'=>$F_ARR]],
-                // 5) GET + querystring
-                ['method'=>'GET','query'=>['creator_id'=>$creator, 'cursor'=>$cursor, 'max_count'=>$max, 'fields'=>$F_STR]],
-            ];
-        }
-
-        // Eksekusi berurutan sampai ada yang OK
-        foreach ($variants as $i => $v) {
-            try {
-                $variantName = ($v['method'] ?? 'POST') . '::' . ($v['payload']['fields'] ?? $v['query']['fields'] ?? '—');
-                if (($v['method'] ?? 'POST') === 'GET') {
-                    $resp = $http->get($url, $v['query'] ?? []);
-                } else {
-                    $resp = $http->asJson()->post($url, $v['payload'] ?? []);
-                }
-
-                $ok   = $resp->ok();
-                $json = $resp->json();
-                // Kalau server jawab error invalid_params fields missed, lanjut ke varian berikutnya
-                $msg  = strtolower(json_encode($json));
-                $fieldsMissed = str_contains($msg, 'invalid_params') && str_contains($msg, 'fields') && str_contains($msg, 'miss');
-
-                if ($ok && !empty(data_get($json, 'data.videos'))) {
-                    return ['ok'=>true, 'json'=>$json, 'http_status'=>$resp->status(), 'variant'=>$variantName, 'error'=>null];
-                }
-                if ($ok && data_get($json, 'data.has_more', false) !== null) {
-                    // Even kalau belum ada videos, bisa aja page kosong—tetap return biar caller decide
-                    return ['ok'=>true, 'json'=>$json, 'http_status'=>$resp->status(), 'variant'=>$variantName, 'error'=>null];
-                }
-                if (!$fieldsMissed) {
-                    // Bukan kasus "fields missed" → return apa adanya (kasus scope/perm dsb)
-                    return ['ok'=>$ok, 'json'=>$json, 'http_status'=>$resp->status(), 'variant'=>$variantName, 'error'=>$json];
-                }
-                // else: coba varian berikutnya
-                $last = ['ok'=>false, 'json'=>$json, 'http_status'=>$resp->status(), 'variant'=>$variantName, 'error'=>$json];
-            } catch (\Throwable $e) {
-                $last = ['ok'=>false, 'json'=>null, 'http_status'=>0, 'variant'=>'EXC', 'error'=>$e->getMessage()];
-            }
-        }
-
-        return $last ?? ['ok'=>false, 'json'=>null, 'http_status'=>0, 'variant'=>'NONE', 'error'=>'no_variant_ok'];
-    }
-
-    // ====== Helpers: preview & response debug ======
-    private function previewPayload(array $p, int $max = 600): string
-    {
-        $json = json_encode($p, JSON_UNESCAPED_SLASHES);
-        if (strlen($json) > $max) $json = substr($json, 0, $max) . '…';
-        return $json;
-    }
-
-    private function respDebug(\Illuminate\Http\Client\Response $r): array
-    {
-        $body = $r->body();
-        $isJson = str_starts_with(trim($body), '{') || str_starts_with(trim($body), '[');
-        $json = null;
-        if ($isJson) {
-            try { $json = $r->json(); } catch (\Throwable $e) {}
-        }
-        // ambil beberapa header penting saja
-        $hdr = [
-            'content-type' => $r->header('content-type'),
-            'x-tt-logid'   => $r->header('x-tt-logid') ?? $r->header('log_id'),
-        ];
-        return [
-            'http'   => $r->status(),
-            'json'   => $json,
-            'text'   => $json ? null : (strlen($body) > 800 ? substr($body,0,800).'…' : $body),
-            'header' => array_filter($hdr),
-        ];
-    }
-
-    // PendingRequest dasar (JSON)
-    private function ttHttp(string $accessToken): \Illuminate\Http\Client\PendingRequest
-    {
-        return \Http::withToken($accessToken)
-            ->acceptJson()
-            ->asJson()
-            ->withHeaders(['Content-Type' => 'application/json; charset=UTF-8'])
-            ->timeout(25);
-    }
-
-    // Helper: ubah array fields → CSV string
-    private function toCsvFields($fields): string
-    {
-        if (is_string($fields)) return $fields;
-        if (is_array($fields)) return implode(',', array_map('strval', $fields));
-        return '';
-    }
-
-    // Ganti fungsi ini di patch sebelumnya
-    private function postVariants(string $accessToken, string $url, array $payload): array
-    {
-        $attempts = [];
-        $sleepOn429 = function($resp) {
-            $wait = (int)($resp->header('retry-after') ?? 2);
-            if ($wait < 1) $wait = 2;
-            usleep($wait * 1000000); // microseconds
-        };
-
-        // ------- V1: POST JSON (fields array) -------
-        try {
-            $http = $this->ttHttp($accessToken);
-            $resp = $http->post($url, $payload);
-            $attempts[] = [
-                'variant' => 'V1-post(asJson,array)',
-                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($payload)],
-                'res' => $this->respDebug($resp),
-                'ok'  => $resp->ok(),
-            ];
-            if ($resp->status() === 429) $sleepOn429($resp);
-            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
-        } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V1-post(asJson,array)','exception'=>$e->getMessage(),'ok'=>false];
-        }
-
-        // ------- V2: send(json=...) -------
-        try {
-            $http = $this->ttHttp($accessToken);
-            $resp = $http->send('POST', $url, ['json' => $payload]);
-            $attempts[] = [
-                'variant' => 'V2-send(json=array)',
-                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($payload)],
-                'res' => $this->respDebug($resp),
-                'ok'  => $resp->ok(),
-            ];
-            if ($resp->status() === 429) $sleepOn429($resp);
-            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
-        } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V2-send(json=array)','exception'=>$e->getMessage(),'ok'=>false];
-        }
-
-        // ------- V3: raw JSON body -------
-        try {
-            $http = $this->ttHttp($accessToken);
-            $raw  = json_encode($payload, JSON_UNESCAPED_SLASHES);
-            $resp = $http->withBody($raw, 'application/json')->post($url);
-            $attempts[] = [
-                'variant' => 'V3-rawBody(JSON,array)',
-                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($payload)],
-                'res' => $this->respDebug($resp),
-                'ok'  => $resp->ok(),
-            ];
-            if ($resp->status() === 429) $sleepOn429($resp);
-            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
-        } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V3-rawBody(JSON,array)','exception'=>$e->getMessage(),'ok'=>false];
-        }
-
-        // ------- V4: form-urlencoded (fields jadi JSON string) -------
-        try {
-            $form = $payload;
-            if (isset($form['fields']) && is_array($form['fields'])) {
-                $form['fields'] = json_encode(array_values($form['fields']));
-            }
-            $resp = \Http::withToken($accessToken)->acceptJson()->asForm()->timeout(25)->post($url, $form);
-            $attempts[] = [
-                'variant' => 'V4-asForm(fields=json_string)',
-                'req' => ['content_type'=>'application/x-www-form-urlencoded', 'payload'=>$this->previewPayload($form)],
-                'res' => $this->respDebug($resp),
-                'ok'  => $resp->ok(),
-            ];
-            if ($resp->status() === 429) $sleepOn429($resp);
-            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
-        } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V4-asForm','exception'=>$e->getMessage(),'ok'=>false];
-        }
-
-        // ====== Tambahan penting ======
-
-        // ------- V5: POST JSON tapi fields = CSV string -------
-        try {
-            $p5 = $payload;
-            if (isset($p5['fields'])) $p5['fields'] = $this->toCsvFields($p5['fields']);
-            $resp = $this->ttHttp($accessToken)->post($url, $p5);
-            $attempts[] = [
-                'variant' => 'V5-post(asJson,fields=csv)',
-                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($p5)],
-                'res' => $this->respDebug($resp),
-                'ok'  => $resp->ok(),
-            ];
-            if ($resp->status() === 429) $sleepOn429($resp);
-            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
-        } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V5-post(asJson,fields=csv)','exception'=>$e->getMessage(),'ok'=>false];
-        }
-
-        // ------- V6: POST + fields di querystring (?fields=...) -------
-        try {
-            $p6 = $payload;
-            $csv = isset($p6['fields']) ? $this->toCsvFields($p6['fields']) : '';
-            unset($p6['fields']);
-            $qs  = $csv !== '' ? ('?fields='.urlencode($csv)) : '';
-            $resp = $this->ttHttp($accessToken)->post($url.$qs, $p6);
-            $attempts[] = [
-                'variant' => 'V6-post(?fields=csv,body=no-fields)',
-                'req' => ['content_type'=>'application/json', 'payload'=>$this->previewPayload($p6)],
-                'res' => $this->respDebug($resp),
-                'ok'  => $resp->ok(),
-            ];
-            if ($resp->status() === 429) $sleepOn429($resp);
-            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
-        } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V6-post(?fields=csv)','exception'=>$e->getMessage(),'ok'=>false];
-        }
-
-        // ------- V7: GET + semua param di query (inkl. fields=csv) -------
-        try {
-            $p7 = $payload;
-            $p7['fields'] = isset($p7['fields']) ? $this->toCsvFields($p7['fields']) : null;
-            if ($p7['fields'] === null) unset($p7['fields']);
-            // NB: kalau endpoint memang strict POST, kemungkinan 404/405 — tetap kami log
-            $resp = $this->ttHttp($accessToken)->get($url, $p7);
-            $attempts[] = [
-                'variant' => 'V7-get(query=...&fields=csv)',
-                'req' => ['content_type'=>'(querystring)', 'payload'=>$this->previewPayload($p7)],
-                'res' => $this->respDebug($resp),
-                'ok'  => $resp->ok(),
-            ];
-            if ($resp->status() === 429) $sleepOn429($resp);
-            if ($resp->ok()) return ['ok'=>true, 'resp'=>$resp, 'attempts'=>$attempts];
-        } catch (\Throwable $e) {
-            $attempts[] = ['variant'=>'V7-get(query)','exception'=>$e->getMessage(),'ok'=>false];
-        }
-
-        return ['ok'=>false, 'resp'=>null, 'attempts'=>$attempts];
-    }
-
-
-    // ===== video.query dengan fields ARRAY (pakai postVariants) =====
-    private function ttVideoQueryDebug(string $accessToken, array $videoIds): array
-    {
-        $url = 'https://open.tiktokapis.com/v2/video/query/';
-        $variantsPayload = [
-            'A' => [
-                'filters' => ['video_ids' => array_values($videoIds)],
-                'fields'  => ['video_id','create_time','view_count','like_count','comment_count','share_count','author_open_id'],
-            ],
-            'B' => [
-                'filters' => ['video_ids' => array_values($videoIds)],
-                'fields'  => ['video_id','create_time','statistics','author_open_id'],
-            ],
-        ];
-
-        $attempts = [];
-        foreach ($variantsPayload as $key => $payload) {
-            $r = $this->postVariants($accessToken, $url, $payload);
-            $attempts[] = ['payload_variant'=>$key, 'attempts'=>$r['attempts']];
-            if ($r['ok']) {
-                return [
-                    'ok'      => true,
-                    'json'    => $r['resp']->json(),
-                    'variant' => $key,
-                    'trace'   => $attempts,
-                ];
-            }
-        }
-        return ['ok'=>false, 'json'=>null, 'variant'=>null, 'trace'=>$attempts];
-    }
-
-    // ===== video.list scan dengan creator_id + fields ARRAY (pakai postVariants) =====
-    private function ttVideoListScanDebug(string $accessToken, string $creatorOpenId, array $targetVids = [], int $maxPages = 8): array
-    {
-        $url   = 'https://open.tiktokapis.com/v2/video/list/';
-        $need  = $targetVids ? array_fill_keys($targetVids, true) : null;
-        $cursor= 0;
-        $pages = 0;
-        $collected = [];
-        $trace = [];
-
-        $fieldsVariants = [
-            'A' => ['video_id','create_time','view_count','like_count','comment_count','share_count'],
-            'B' => ['video_id','create_time','statistics'],
-        ];
-
-        while ($pages < $maxPages && ($need === null || count($need) > 0)) {
-            $pages++;
-            foreach ($fieldsVariants as $fk => $fieldsArr) {
-                $payload = [
-                    'creator_id' => $creatorOpenId,
-                    'cursor'     => $cursor,
-                    'max_count'  => 50,
-                    'fields'     => $fieldsArr,
-                ];
-
-                $r = $this->postVariants($accessToken, $url, $payload);
-                $trace[] = ['page'=>$pages, 'payload_variant'=>$fk, 'attempts'=>$r['attempts']];
-
-                if (!$r['ok']) continue;
-
-                $json  = $r['resp']->json();
-                $items = (array) (data_get($json, 'data.videos') ?? data_get($json, 'data.items', []));
-                foreach ($items as $it) {
-                    $vid = (string) ($it['video_id'] ?? $it['id'] ?? '');
-                    if ($vid === '') continue;
-                    $collected[$vid] = $it;
-                    if ($need !== null && isset($need[$vid])) unset($need[$vid]);
-                }
-
-                $hasMore = (bool) data_get($json, 'data.has_more', false);
-                $cursor  = (int) (data_get($json, 'data.cursor', 0) ?? 0);
-                if (($need !== null && !count($need)) || !$hasMore || !$cursor) {
-                    break 2;
-                }
-
-                // break varian fields, lanjut halaman berikutnya dengan cursor baru
-                break;
-            }
-        }
-
-        return ['collected'=>$collected, 'pages'=>$pages, 'trace'=>$trace];
-    }
-
-    // ====== Ambil count dari object video (flat/statistics) ======
-    private function pullCounts(array $v): array
-    {
-        $get = function ($paths) use ($v) { foreach ($paths as $p){ $val=data_get($v,$p); if ($val!==null) return $val; } return null; };
-        return [
-            'views'    => $get(['view_count','statistics.play_count']),
-            'likes'    => $get(['like_count','statistics.digg_count']),
-            'comments' => $get(['comment_count','statistics.comment_count']),
-            'shares'   => $get(['share_count','statistics.share_count']),
-        ];
-    }
-
     public function refreshMetrics(Request $request, $id)
     {
         $submission = \App\Models\InfluencerSubmission::findOrFail($id);
@@ -832,8 +373,8 @@ protected function oembedAuthor(?string $url): ?array
 
         if (!$reg) {
             return response()->json([
-                'message'   => 'Token TikTok tidak ditemukan untuk influencer ini. Minta KOL connect ulang.',
-                'reauth_url'=> url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
+                'message'    => 'Token TikTok tidak ditemukan untuk influencer ini. Minta KOL connect ulang.',
+                'reauth_url' => url('/auth/tiktok/reset?campaign_id='.$submission->campaign_id.'&force=1'),
             ], 409);
         }
 
@@ -852,16 +393,22 @@ protected function oembedAuthor(?string $url): ?array
 
         $accessToken = $reg->access_token;
 
-        // Who am I (creator_id)
-        $meResp = $this->ttHttp($accessToken)->get('https://open.tiktokapis.com/v2/user/info/', [
-            'fields' => 'open_id,username,display_name',
-        ]);
+        // Who am I (owner info) - opsional buat debug/nunjukin siapa pemilik token
+        $meResp = Http::withToken($accessToken)
+            ->acceptJson()
+            ->timeout(15)
+            ->get('https://open.tiktokapis.com/v2/user/info/', [
+                'fields' => 'open_id,username,display_name',
+            ]);
+
         $ownerOpenId = data_get($meResp->json(), 'data.user.open_id') ?: $submission->tiktok_user_id;
 
-        // Extract video ids
+        // Extract video ids dari submission link
         $vids = [];
-        if ($v1 = $this->extractAwemeId($submission->link_1)) $vids[1] = $v1;
-        if ($v2 = $this->extractAwemeId($submission->link_2)) $vids[2] = $v2;
+        $links = [];
+        if ($v1 = $this->extractAwemeId($submission->link_1)) { $vids[1] = $v1; $links[1] = $submission->link_1; }
+        if ($v2 = $this->extractAwemeId($submission->link_2)) { $vids[2] = $v2; $links[2] = $submission->link_2; }
+
         if (!$vids) {
             return response()->json([
                 'message' => 'Tidak ada video id yang valid pada submission ini.',
@@ -869,71 +416,172 @@ protected function oembedAuthor(?string $url): ?array
             ], 422);
         }
 
-        $updated  = [];
-        $notFound = [];
-        $debug    = [
+        $api = app(TikTokDisplayApi::class);
+
+        $updated   = [];
+        $notFound  = [];
+        $byId      = [];
+        $leftIds   = array_values($vids);
+        $debug     = [
             'owner_info' => [
-                'status'   => $meResp->status(),
-                'json'     => $meResp->json(),
-                'headers'  => ['content-type'=>$meResp->header('content-type'),'x-tt-logid'=>$meResp->header('x-tt-logid')],
+                'status'  => $meResp->status(),
+                'json'    => $meResp->json(),
+                'headers' => [
+                    'content-type' => $meResp->header('content-type'),
+                    'x-tt-logid'   => $meResp->header('x-tt-logid'),
+                ],
             ],
-            'query'  => null,
-            'list'   => null,
-            'inputs' => [
-                'video_ids' => array_values($vids),
-                'creator_id'=> $ownerOpenId,
+            'query'         => null,
+            'list'          => null,
+            'html_fallback' => [],
+            'inputs'        => [
+                'video_ids'  => array_values($vids),
+                'creator_id' => $ownerOpenId,
             ],
         ];
 
-        // 1) video.query
-        $qry = $this->ttVideoQueryDebug($accessToken, array_values($vids));
-        $debug['query'] = [
-            'ok'      => $qry['ok'],
-            'variant' => $qry['variant'],
-            'trace'   => $qry['trace'], // <-- semua attempt (lengkap: method, payload, status, body, headers)
-        ];
+        // Helper konversi struktur API -> counts
+        $pullCounts = function (array $video): array {
+            return [
+                'views'    => (int)($video['view_count'] ?? 0),
+                'likes'    => (int)($video['like_count'] ?? 0),
+                'comments' => (int)($video['comment_count'] ?? 0),
+                'shares'   => (int)($video['share_count'] ?? 0),
+            ];
+        };
 
-        $byId = [];
-        if ($qry['ok']) {
-            foreach ((array) data_get($qry['json'], 'data.videos', []) as $it) {
-                $id = (string) ($it['video_id'] ?? $it['id'] ?? '');
+        // 1) Coba /video/query (fields ada di query string, sesuai API v2)
+        try {
+            $qData = $api->queryVideos($accessToken, $leftIds); // fields default dari config
+            foreach ((array) data_get($qData, 'videos', []) as $it) {
+                $id = (string)($it['id'] ?? $it['video_id'] ?? '');
                 if ($id !== '') $byId[$id] = $it;
             }
-            foreach ($vids as $slot => $id) {
-                if (!isset($byId[$id])) continue;
-                $c = $this->pullCounts($byId[$id]);
+            $debug['query'] = [
+                'ok'   => true,
+                'size' => count($byId),
+                'raw'  => $qData,
+            ];
+        } catch (\Throwable $e) {
+            $debug['query'] = [
+                'ok'     => false,
+                'error'  => $e->getMessage(),
+            ];
+        }
+
+        // Apply hasil query ke submission
+        if (!empty($byId)) {
+            foreach ($vids as $slot => $vid) {
+                if (!isset($byId[$vid])) continue;
+                $c = $pullCounts($byId[$vid]);
                 if ($slot === 1) {
-                    $submission->views_1 = $c['views'];   $submission->likes_1 = $c['likes'];
+                    $submission->views_1 = $c['views']; $submission->likes_1 = $c['likes'];
                     $submission->comments_1 = $c['comments']; $submission->shares_1 = $c['shares'];
                 } else {
-                    $submission->views_2 = $c['views'];   $submission->likes_2 = $c['likes'];
+                    $submission->views_2 = $c['views']; $submission->likes_2 = $c['likes'];
                     $submission->comments_2 = $c['comments']; $submission->shares_2 = $c['shares'];
                 }
                 $updated[] = $slot;
             }
         }
 
-        // 2) Masih ada yang belum dapat ⇒ video.list scan (creator_id = owner token)
-        $leftIds = array_values(array_diff(array_values($vids), array_map(fn($s)=>$vids[$s]??null, $updated)));
+        // 2) Masih ada yang belum dapat ⇒ scan /video/list (pagination) sampai ketemu atau max 8 halaman
+        $leftIds = array_values(array_diff(array_values($vids), array_map(fn($slot) => $vids[$slot] ?? null, $updated)));
         if ($leftIds) {
-            $scan = $this->ttVideoListScanDebug($accessToken, $ownerOpenId, $leftIds, 8);
+            $pagesScanned = 0;
+            $cursor = 0;
+            $hits = [];
+            $trace = [];
+
+            while ($pagesScanned < 8) {
+                try {
+                    $list = $api->listVideos($accessToken, $cursor, 20); // max=20 (wajib 1..20)
+                    $trace[] = [
+                        'page'   => $pagesScanned + 1,
+                        'cursor' => $cursor,
+                        'count'  => count((array)($list['videos'] ?? [])),
+                        'has_more' => (bool)($list['has_more'] ?? false),
+                    ];
+
+                    foreach ((array) data_get($list, 'videos', []) as $it) {
+                        $id = (string)($it['id'] ?? '');
+                        if ($id !== '' && in_array($id, $leftIds, true)) {
+                            $hits[$id] = $it;
+                        }
+                    }
+
+                    $pagesScanned++;
+                    if (!($list['has_more'] ?? false)) break;
+                    $cursor = (int)($list['cursor'] ?? 0);
+                    if ($cursor <= 0) break;
+
+                    // selesai lebih awal jika semua leftIds sudah ketemu
+                    if (count($hits) >= count($leftIds)) break;
+                } catch (\Throwable $e) {
+                    $trace[] = [
+                        'page'  => $pagesScanned + 1,
+                        'error' => $e->getMessage(),
+                    ];
+                    break;
+                }
+            }
+
             $debug['list'] = [
-                'pages_scanned' => $scan['pages'],
-                'trace'         => $scan['trace'], // <-- detail attempts per halaman
+                'pages_scanned' => $pagesScanned,
+                'trace'         => $trace,
             ];
 
-            foreach ($leftIds as $id) {
-                $slot = array_search($id, $vids, true);
-                if (!isset($scan['collected'][$id])) { $notFound[(string)$slot] = $id; continue; }
-                $c = $this->pullCounts($scan['collected'][$id]);
+            foreach ($leftIds as $idLeft) {
+                $slot = array_search($idLeft, $vids, true);
+                if (!isset($hits[$idLeft])) continue;
+                $c = $pullCounts($hits[$idLeft]);
                 if ($slot === 1) {
-                    $submission->views_1 = $c['views'];   $submission->likes_1 = $c['likes'];
+                    $submission->views_1 = $c['views']; $submission->likes_1 = $c['likes'];
                     $submission->comments_1 = $c['comments']; $submission->shares_1 = $c['shares'];
                 } else {
-                    $submission->views_2 = $c['views'];   $submission->likes_2 = $c['likes'];
+                    $submission->views_2 = $c['views']; $submission->likes_2 = $c['likes'];
                     $submission->comments_2 = $c['comments']; $submission->shares_2 = $c['shares'];
                 }
                 if (!in_array($slot, $updated, true)) $updated[] = $slot;
+            }
+        }
+
+        // 3) Masih ada yang belum dapat ⇒ FALLBACK ke HTML scraping (method lama kamu)
+        $leftIds = array_values(array_diff(array_values($vids), array_map(fn($slot) => $vids[$slot] ?? null, $updated)));
+        if ($leftIds && method_exists($this, 'probeFromHtml')) {
+            foreach ($leftIds as $idLeft) {
+                $slot = array_search($idLeft, $vids, true);
+                $link = $links[$slot] ?? null;
+                if (!$link) continue;
+
+                try {
+                    $res = $this->probeFromHtml($link);
+                    $debug['html_fallback'][(string)$slot] = $res;
+
+                    if (is_array($res)) {
+                        if ($slot === 1) {
+                            $submission->views_1 = (int)($res['views'] ?? 0);
+                            $submission->likes_1 = (int)($res['likes'] ?? 0);
+                            $submission->comments_1 = (int)($res['comments'] ?? 0);
+                            $submission->shares_1 = (int)($res['shares'] ?? 0);
+                        } else {
+                            $submission->views_2 = (int)($res['views'] ?? 0);
+                            $submission->likes_2 = (int)($res['likes'] ?? 0);
+                            $submission->comments_2 = (int)($res['comments'] ?? 0);
+                            $submission->shares_2 = (int)($res['shares'] ?? 0);
+                        }
+                        if (!in_array($slot, $updated, true)) $updated[] = $slot;
+                    }
+                } catch (\Throwable $e) {
+                    $debug['html_fallback'][(string)$slot] = ['error' => $e->getMessage()];
+                }
+            }
+        }
+
+        // Kumpulkan yang masih tidak ketemu
+        foreach ($vids as $slot => $vid) {
+            if (!in_array($slot, $updated, true)) {
+                $notFound[(string)$slot] = $vid;
             }
         }
 
