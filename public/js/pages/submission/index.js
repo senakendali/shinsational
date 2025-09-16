@@ -256,23 +256,66 @@ export async function render(target, path, query = {}, labelOverride = null) {
                     ? `<a class="btn btn-sm btn-outline-secondary" href="${u}" target="_blank" rel="noopener">${label}</a>`
                     : '<span class="text-muted">—</span>';
 
-            const rowsHtml = [];
+            // Function to generate column headers for each link group
+            const generateLinkGroupHeaders = (submission) => {
+                let maxSlots = 0;
+                // Find the maximum slot number that has data
+                for (let i = 1; i <= 5; i++) {
+                    if (
+                        submission[`link_${i}`] ||
+                        submission[`post_date_${i}`] ||
+                        submission[`screenshot_${i}_url`] ||
+                        submission[`screenshot_${i}_path`]
+                    ) {
+                        maxSlots = i;
+                    }
+                }
 
-            // Generate a row for each submission
+                let headers = [];
+                for (let i = 1; i <= maxSlots; i++) {
+                    headers.push(`
+                        <th colspan="8" class="text-center ${
+                            i % 2 === 0 ? "bg-light" : ""
+                        }">KOL Video ${i}</th>
+                    `);
+                }
+                return { headers: headers.join(""), maxSlots };
+            };
+
+            // Function to generate metric headers for each link group
+            const generateMetricHeaders = (maxSlots) => {
+                const metrics = [
+                    "Video URL",
+                    "Date",
+                    "Screenshot",
+                    "Invoice",
+                    "Review",
+                    "Views",
+                    "Likes",
+                    "Comments",
+                ];
+                let headers = [];
+                for (let i = 0; i < maxSlots; i++) {
+                    headers = headers.concat(
+                        metrics.map(
+                            (metric) =>
+                                `<th style="width:120px" class="text-center ${
+                                    (i + 1) % 2 === 0 ? "bg-light" : ""
+                                }">${metric}</th>`
+                        )
+                    );
+                }
+                return headers.join("");
+            };
+
+            // Generate rows for each submission
+            const rowsHtml = [];
             filtered.forEach((s) => {
                 const displayName = kolNameOf(s);
                 const addr = addressOf(s);
-                const avatarUrl = kolAvatarOf(s);
 
-                // Collect all non-empty links
-                const links = [];
-                const screenshots = [];
-                const invoices = [];
-                const reviews = [];
-                const postDates = [];
-                const metrics = [];
-
-                // Check each slot (1-5)
+                // Collect data for each slot (1-5)
+                const slots = [];
                 for (let slot = 1; slot <= 5; slot++) {
                     const link = s[`link_${slot}`] || "";
                     const pdate = s[`post_date_${slot}`];
@@ -280,22 +323,24 @@ export async function render(target, path, query = {}, labelOverride = null) {
                         s[`screenshot_${slot}_url`] ||
                         s[`screenshot_${slot}_path`];
                     const scUrl = toFileUrl(scPath);
-                    const invUrl = toFileUrl(
-                        s.invoice_file_url || s.invoice_file_path
-                    );
-                    const revUrl = toFileUrl(
-                        s.review_proof_file_url || s.review_proof_file_path
-                    );
+                    const invPath =
+                        s[`invoice_${slot}_url`] || s[`invoice_${slot}_path`];
+                    const invUrl = toFileUrl(invPath);
+                    const revPath =
+                        s[`review_proof_${slot}_url`] ||
+                        s[`review_proof_${slot}_path`] ||
+                        s[`review_${slot}_url`] ||
+                        s[`review_${slot}_path`];
+                    const revUrl = toFileUrl(revPath);
 
                     // Only include non-empty slots
-                    if (link || pdate || scUrl) {
-                        links.push(link);
-                        postDates.push(pdate);
-                        screenshots.push(scUrl);
-                        invoices.push(invUrl);
-                        reviews.push(revUrl);
-
-                        metrics.push({
+                    if (link || pdate || scUrl || invUrl || revUrl) {
+                        slots[slot - 1] = {
+                            link,
+                            pdate,
+                            scUrl,
+                            invUrl,
+                            revUrl,
                             views:
                                 metric(s, slot, "views") ??
                                 metric(s, slot, "view"),
@@ -308,12 +353,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
                             shares:
                                 metric(s, slot, "shares") ??
                                 metric(s, slot, "share"),
-                        });
+                        };
                     }
                 }
 
-                // Skip if no content
-                if (links.length === 0) return;
+                // Skip if no content in any slot
+                if (slots.every((slot) => !slot)) return;
 
                 // Determine if this submission is sent by brand for resi button
                 const isSentByBrand = s.acquisition_method === "sent_by_brand";
@@ -322,183 +367,208 @@ export async function render(target, path, query = {}, labelOverride = null) {
                 );
 
                 const resiBtnHtml = isSentByBrand
-                    ? `
-                        <button class="btn btn-sm btn-outline-success btn-input-resi"
-                                data-id="${s.id}"
-                                data-courier="${
-                                    s.shipping_courier
-                                        ? String(s.shipping_courier).replace(
-                                              /"/g,
-                                              "&quot;"
-                                          )
-                                        : ""
-                                }"
-                                data-resi="${
-                                    s.shipping_tracking_number
-                                        ? String(
-                                              s.shipping_tracking_number
-                                          ).replace(/"/g, "&quot;")
-                                        : ""
-                                }">
-                            <i class="bi bi-truck"></i> ${
-                                hasResi ? "Ubah Resi" : "Isi Resi"
-                            }
-                        </button>
-                      `
+                    ? `<button class="btn btn-sm btn-outline-success btn-input-resi"
+                            data-id="${s.id}"
+                            data-courier="${
+                                s.shipping_courier
+                                    ? String(s.shipping_courier).replace(
+                                          /"/g,
+                                          "&quot;"
+                                      )
+                                    : ""
+                            }"
+                            data-resi="${
+                                s.shipping_tracking_number
+                                    ? String(
+                                          s.shipping_tracking_number
+                                      ).replace(/"/g, "&quot;")
+                                    : ""
+                            }">
+                        <i class="bi bi-truck"></i> ${
+                            hasResi ? "Ubah Resi" : "Isi Resi"
+                        }
+                    </button>`
                     : "";
 
-                // Create a single row for the submission
+                // Generate cells for each slot
+                let slotCells = [];
+                // Only process slots that have data
+                slots.forEach((slot, slotIndex) => {
+                    if (!slot) return; // Skip empty slots
+                    const isEvenGroup = (slotIndex + 1) % 2 === 0;
+                    const bgClass = isEvenGroup ? "bg-light" : "";
+
+                    // Add cells for this slot's data
+                    slotCells.push(
+                        `<td class="text-center ${bgClass}">${
+                            slot.link
+                                ? `<a href="${slot.link}" target="_blank" rel="noopener">Link</a>`
+                                : '<span class="text-muted">—</span>'
+                        }</td>`,
+                        `<td class="text-center ${bgClass}">${
+                            slot.pdate
+                                ? fmtDate(slot.pdate)
+                                : '<span class="text-muted">—</span>'
+                        }</td>`,
+                        `<td class="text-center ${bgClass}">${
+                            slot.scUrlslotIndex
+                                ? btn(slot.scUrl, "View")
+                                : '<span class="text-muted">—</span>'
+                        }</td>`,
+                        `<td class="text-center ${bgClass}">${
+                            slot.invUrl
+                                ? btn(slot.invUrl, "Invoice")
+                                : '<span class="text-muted">—</span>'
+                        }</td>`,
+                        `<td class="text-center ${bgClass}">${
+                            slot.revUrl
+                                ? btn(slot.revUrl, "Review")
+                                : '<span class="text-muted">—</span>'
+                        }</td>`,
+                        `<td class="text-center ${bgClass}">${fmtNum(
+                            slot.views
+                        )}</td>`,
+                        `<td class="text-center ${bgClass}">${fmtNum(
+                            slot.likes
+                        )}</td>`,
+                        `<td class="text-center ${bgClass}">${fmtNum(
+                            slot.comments
+                        )}</td>`
+                    );
+                });
+
+                const avatarUrl = kolAvatarOf(s);
                 rowsHtml.push(`
-                    <tr data-submission-id="${s.id}">
-                        <td>
-                            <div class="d-flex align-items-center gap-2">
-                                <div>
-                                    <div class="fw-semibold">${displayName}</div>
-                                    ${
-                                        addr
-                                            ? `<div class="text-muted small">${addr}</div>`
-                                            : ""
-                                    }
-                                </div>
-                            </div>
-                        </td>
-                        <td>
-                            <div class="d-flex flex-column gap-1">
-                                ${links
-                                    .map(
-                                        (link, idx) =>
-                                            `<div>${
-                                                link
-                                                    ? `<a href="${link}" target="_blank" rel="noopener">Link ${
-                                                          idx + 1
-                                                      }</a>`
-                                                    : '<span class="text-muted">—</span>'
-                                            }</div>`
-                                    )
-                                    .join("")}
-                            </div>
-                        </td>
-                        <td>
-                            <div class="d-flex flex-column gap-1">
-                                ${postDates
-                                    .map(
-                                        (date) => `<div>${fmtDate(date)}</div>`
-                                    )
-                                    .join("")}
-                            </div>
-                        </td>
-                        <td>
-                            <div class="d-flex flex-column gap-1">
-                                ${screenshots
-                                    .map(
-                                        (url, idx) =>
-                                            `<div>${btn(
-                                                url,
-                                                `Screenshot ${idx + 1}`
-                                            )}</div>`
-                                    )
-                                    .join("")}
-                            </div>
-                        </td>
-                        <td class="text-center">
-                            <div class="d-flex flex-column gap-1">
-                                ${invoices
-                                    .map(
-                                        (url, idx) =>
-                                            `<div>${btn(
-                                                url,
-                                                `Invoice ${idx + 1}`
-                                            )}</div>`
-                                    )
-                                    .join("")}
-                            </div>
-                        </td>
-                        <td class="text-center">
-                            <div class="d-flex flex-column gap-1">
-                                ${reviews
-                                    .map(
-                                        (url, idx) =>
-                                            `<div>${btn(
-                                                url,
-                                                `Review ${idx + 1}`
-                                            )}</div>`
-                                    )
-                                    .join("")}
-                            </div>
-                        </td>
-                        <td class="text-center">
-                            <div class="d-flex flex-column gap-1">
-                                ${metrics
-                                    .map((m) => `<div>${fmtNum(m.views)}</div>`)
-                                    .join("")}
-                            </div>
-                        </td>
-                        <td class="text-center">
-                            <div class="d-flex flex-column gap-1">
-                                ${metrics
-                                    .map((m) => `<div>${fmtNum(m.likes)}</div>`)
-                                    .join("")}
-                            </div>
-                        </td>
-                        <td class="text-center">
-                            <div class="d-flex flex-column gap-1">
-                                ${metrics
-                                    .map(
-                                        (m) =>
-                                            `<div>${fmtNum(m.comments)}</div>`
-                                    )
-                                    .join("")}
-                            </div>
-                        </td>
-                        <td>
-                            <div class="d-flex flex-column justify-content-center align-items-center gap-1">
-                                <div>${resiBtnHtml}</div>
-                                <div>
-                                    <button class="btn btn-sm " onclick="window.location.href='/admin/submissions/${
-                                        s.id
-                                    }/edit'">
-                                        <i class="bi bi-pencil"></i> 
-                                    </button>
-                                    <button class="btn btn-sm btn-refresh-metrics" data-id="${
-                                        s.id
-                                    }">
-                                        <i class="bi bi-arrow-clockwise"></i> 
-                                    </button>
-                                </div>
-                            </div>
-                        </td>
-                    </tr>
-                `);
+                  <tr>
+                    <td class="fixed-column fixed-first" style="bottom: 0;">
+                      <div class="d-flex align-items-center gap-2 p-2" style="height: 100%;">
+                        
+                        <div>
+                          <div class="fw-semibold text-truncate" style="max-width: 130px;" title="${displayName}">${displayName}</div>
+                          ${
+                              addr
+                                  ? `<div class="text-muted small text-truncate" style="max-width: 130px;" title="${addr}">${addr}</div>`
+                                  : ""
+                          }
+                        </div>
+                      </div>
+                    </td>
+                    ${slotCells.join("")}
+                    <td class="fixed-column fixed-last" style="bottom: 0;">
+                      <div class="d-flex flex-column justify-content-center gap-2 p-2" style="height: 100%;">
+                        ${resiBtnHtml}
+                        <div class="d-flex justify-content-center gap-2">
+                          <button class="btn btn-sm btn-outline-primary" onclick="window.location.href='/admin/submissions/${
+                              s.id
+                          }/edit'" title="Edit">
+                            <i class="bi bi-pencil"></i>
+                          </button>
+                          <button class="btn btn-sm btn-outline-secondary btn-refresh-metrics" data-id="${
+                              s.id
+                          }" title="Refresh Metrics">
+                            <i class="bi bi-arrow-clockwise"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>`);
             });
 
+            const firstSubmission = filtered[0] || {};
+            const { headers: linkHeaders, maxSlots } =
+                generateLinkGroupHeaders(firstSubmission);
+
             const tableHtml = `
-        <table class="table table-bordered bg-white">
-          <thead>
-            <tr><th colspan="10" class="text-uppercase">Submissions</th></tr>
-            <tr>
-              <th style="min-width:180px">Influencer</th>
-              <th style="min-width:120px">URL Video</th>
-              <th style="width:100px">Dates</th>
-              <th style="width:120px">Screenshots</th>
-              <th style="width:120px" class="text-center">Invoices</th>
-              <th style="width:120px" class="text-center">Reviews</th>
-              <th style="width:80px" class="text-center">Views</th>
-              <th style="width:80px" class="text-center">Likes</th>
-              <th style="width:90px" class="text-center">Comments</th>
-              <th style="width:150px" class="text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${
-                rowsHtml.length
-                    ? rowsHtml.join("")
-                    : `
-              <tr><td colspan="10" class="text-center text-muted">No data available.</td></tr>
-            `
-            }
-          </tbody>
-        </table>
-      `;
+        <style>
+          .table-wrapper {
+            position: relative;
+            overflow: hidden;
+            width: 100%;
+            border: 1px solid #dee2e6;
+            border-radius: 0.25rem;
+            
+          }
+          .table-scroll {
+            margin-left: 200px; /* Width of fixed first column */
+            margin-right: 170px; /* Width of fixed last column */
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+          }
+          .table {
+            margin-bottom: 0;
+            min-width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+          }
+          .fixed-column {
+            position: absolute;
+            z-index: 10;
+
+          }
+          .fixed-first {
+            top: auto;
+            left: 0;
+            width: 200px;
+          }
+          .fixed-last {
+            top: auto;
+            right: 0;
+            width: 170px;
+            text-align: center;
+
+          }
+          thead th {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            white-space: nowrap;
+            border-bottom: 1px solid rgb(72, 77, 83);
+
+          }
+          tbody td {
+            vertical-align: middle;
+          }
+          .no-data {
+            padding: 1rem;
+            text-align: center;
+          }
+          .bg-light {
+            background-color: #F2F2F2 !important;
+          }
+        </style>
+
+        <div class="table-wrapper">
+          <div class="table-scroll">
+            <table class="table table-bordered">
+              <thead>
+                <tr>
+                  <th class="fixed-column fixed-first text-center">KOL Name</th>
+                  ${linkHeaders}
+                  <th class="fixed-column fixed-last">Actions</th>
+                </tr>
+                <tr>
+                  <th class="fixed-column fixed-first"></th>
+                  ${generateMetricHeaders(maxSlots)}
+                  <th class="fixed-column fixed-last"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${
+                    rowsHtml.length
+                        ? rowsHtml.join("")
+                        : `
+                  <tr>
+                    <td class="fixed-column fixed-first"></td>
+                    <td colspan="${
+                        5 * 8
+                    }" class="no-data">No data available</td>
+                    <td class="fixed-column fixed-last"></td>
+                  </tr>`
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>`;
             listWrap.innerHTML = tableHtml;
 
             // Pagination
