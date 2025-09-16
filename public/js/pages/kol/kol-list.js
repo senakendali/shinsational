@@ -170,20 +170,35 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const avatarOf = (a) =>
     a.avatar_url || a.tiktok_avatar_url || a.profile_pic_url || null;
 
-  function statusOf(acc) {
-    const now = Date.now();
-    const revoked = acc?.revoked_at ? new Date(acc.revoked_at).getTime() : null;
-    const exp = acc?.expires_at ? new Date(acc.expires_at).getTime() : null;
+    function statusOf(acc) {
+        const now = Date.now();
+        const expMs   = acc?.expires_at ? new Date(acc.expires_at).getTime() : null;
+        const revoked = acc?.revoked_at ? new Date(acc.revoked_at).getTime() : null;
+        const ts = (acc?.token_status || '').toLowerCase();
 
-    if (revoked) return { label: 'Revoked', cls: 'badge bg-danger' };
-    if (!acc?.access_token || !acc?.refresh_token) return { label: 'Not connected', cls: 'badge bg-secondary' };
-    if (!exp) return { label: 'Unknown', cls: 'badge bg-secondary' };
+        // 1) Pakai status dari server kalau ada
+        if (ts) {
+        if (ts === 'revoked') return { label: 'Revoked', cls: 'badge bg-danger' };
+        if (ts === 'expired') return { label: 'Expired', cls: 'badge bg-danger' };
+        if (ts === 'active') {
+            if (expMs && expMs - now <= 60 * 60 * 1000) { // <= 1 jam
+            return { label: 'Expiring soon', cls: 'badge bg-warning text-dark' };
+            }
+            return { label: 'Valid', cls: 'badge bg-success' };
+        }
+        if (ts === 'missing') return { label: 'Not connected', cls: 'badge bg-secondary' };
+        if (ts === 'unknown') return { label: 'Unknown', cls: 'badge bg-secondary' };
+        }
 
-    const delta = exp - now;
-    if (delta <= 0) return { label: 'Expired', cls: 'badge bg-danger' };
-    if (delta <= 60 * 60 * 1000) return { label: 'Expiring soon', cls: 'badge bg-warning text-dark' };
-    return { label: 'Valid', cls: 'badge bg-success' };
-  }
+        // 2) Fallback (kalau payload lama / tanpa token_status)
+        if (revoked) return { label: 'Revoked', cls: 'badge bg-danger' };
+        if (!expMs) return { label: 'Unknown', cls: 'badge bg-secondary' };
+        const delta = expMs - now;
+        if (delta <= 0) return { label: 'Expired', cls: 'badge bg-danger' };
+        if (delta <= 60 * 60 * 1000) return { label: 'Expiring soon', cls: 'badge bg-warning text-dark' };
+        return { label: 'Valid', cls: 'badge bg-success' };
+    }
+
 
   function scopesShort(acc) {
     let scopes = acc?.scopes;
