@@ -15,7 +15,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     import(`../../components/loader.js?v=${v}`),
     import(`../../utils/toast.js?v=${v}`),
     import(`../../services/campaignService.js?v=${v}`),
-    import(`../../services/influencerSubmissionService.js?v=${v}`), // for fallback filter by campaign via submissions
+    import(`../../services/influencerSubmissionService.js?v=${v}`), // fallback filter by campaign via submissions
   ]);
 
   // influencerAccountService is optional; try import, else fallback
@@ -32,6 +32,49 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const { showToast } = toastMod;
   const { campaignService } = campaignMod;
   const { submissionService } = submissionMod;
+
+  // === CSRF helpers (for SPA using web/session guard) ===
+  function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.content || window.CSRF_TOKEN || '';
+  }
+  function setCsrfToken(t) {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    if (m) m.setAttribute('content', t);
+    window.CSRF_TOKEN = t;
+  }
+  async function refreshCsrf() {
+    const r = await fetch('/api/csrf/refresh', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-TOKEN': getCsrfToken()
+      },
+    });
+    if (r.ok) {
+      const j = await r.json().catch(() => null);
+      if (j?.token) setCsrfToken(j.token);
+    }
+  }
+  async function csrfFetch(input, init = {}) {
+    const headers = Object.assign({
+      'Accept': 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+      'X-CSRF-TOKEN': getCsrfToken(),
+    }, init.headers || {});
+    const opts = Object.assign({ credentials: 'same-origin' }, init, { headers });
+
+    let res = await fetch(input, opts);
+    if (res.status === 419) {
+      // refresh CSRF then retry once
+      await refreshCsrf();
+      opts.headers['X-CSRF-TOKEN'] = getCsrfToken();
+      res = await fetch(input, opts);
+    }
+    return res;
+  }
+
   const influencerAccountService = accountServiceMod?.influencerAccountService || {
     async getAll(params = {}) {
       const qs = new URLSearchParams();
@@ -45,10 +88,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
       return r.json();
     },
     async refreshToken(id) {
-      const r = await fetch(`/api/influencer-accounts/${id}/refresh-token`, {
+      const r = await csrfFetch(`/api/influencer-accounts/${id}/refresh-token`, {
         method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Accept': 'application/json' },
       });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
@@ -154,21 +195,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return txt.length > 60 ? txt.slice(0, 57) + '…' : txt;
   }
 
-  // NEW: row class highlighting per token state
-  function rowClassOf(acc) {
-    const now = Date.now();
-    const revoked = acc?.revoked_at ? new Date(acc.revoked_at).getTime() : null;
-    const exp = acc?.expires_at ? new Date(acc.expires_at).getTime() : null;
-
-    if (revoked) return 'table-danger';
-    if (!exp) return '';
-
-    const delta = exp - now;
-    if (delta <= 0) return 'table-danger';
-    if (delta <= 60 * 60 * 1000) return 'table-warning';
-    return '';
-  }
-
   function rowActions(acc) {
     const id = acc.id;
     const nm = encodeURIComponent(nameOf(acc));
@@ -176,10 +202,10 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const toSubs = `/admin/submissions${camp}`;
     return `
       <div class="d-flex gap-2 justify-content-end">
-        <a class="btn btn-sm btn-outline-secondary app-link" data-href="${toSubs}">
+        <a class="btn btn-sm btn-outline-secondary app-link d-none" data-href="${toSubs}">
           <i class="bi bi-collection"></i> Submissions
         </a>
-        <button class="btn btn-sm btn-outline-primary btn-refresh-token" data-id="${id}">
+        <button class="btn btn-sm btn-outline-primary btn-refresh-token w-100" data-id="${id}">
           <i class="bi bi-arrow-clockwise"></i> Refresh token
         </button>
       </div>
@@ -188,7 +214,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
   async function getAllowedOpenIdsByCampaign(campaignId) {
     // fallback: tarik submissions utk campaign -> ambil set open_id
-    // (ambil sampai 200 item supaya ringan; adjust jika perlu)
     let page = 1, perPage = 100;
     const set = new Set();
     for (let i = 0; i < 2; i++) {
@@ -253,10 +278,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
         const st = statusOf(a);
         const expires = fmtDateTime(a.expires_at);
         const lastRef = fmtDateTime(a.last_refreshed_at);
-        const trClass = rowClassOf(a);
 
         return `
-          <tr data-id="${a.id}" class="${trClass}">
+          <tr data-id="${a.id}">
             <td>
               <div class="d-flex align-items-center gap-2">
                 ${av ? `<img src="${av}" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover">` : ''}
@@ -297,7 +321,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       `;
       listWrap.innerHTML = tableHtml;
 
-      // Pagination (kalau server kasih pagination meta)
+      // Pagination
       pager.innerHTML = '';
       const lastPage = res?.last_page || 1;
       const currPage = res?.current_page || page;
