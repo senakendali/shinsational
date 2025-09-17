@@ -1,11 +1,11 @@
 // /js/components/header.js
 export async function renderHeader(targetId = "header") {
-  const v = window.BUILD_VERSION || Date.now();
-  const container = document.getElementById(targetId);
-  if (!container) return;
+    const v = window.BUILD_VERSION || Date.now();
+    const container = document.getElementById(targetId);
+    if (!container) return;
 
-  container.innerHTML = `
-    <div class="shrinkable-navbar app-header">
+    container.innerHTML = `
+    <div class="shrinkable-navbar app-header fixed-top">
       <!-- Bar Atas -->
       <div class="border-bottom py-2 px-3">
         <div class="container-fluid d-flex justify-content-between align-items-center">
@@ -37,53 +37,53 @@ export async function renderHeader(targetId = "header") {
     </div>
   `;
 
-  // SPA link handler (opsional, kalau kamu pakai app-link di project)
-  container.querySelectorAll('.app-link').forEach(a => {
-    a.addEventListener('click', (e) => {
-      const href = a.getAttribute('data-href');
-      if (href) {
-        e.preventDefault();
-        history.pushState(null, '', href);
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }
+    // SPA link handler (opsional, kalau kamu pakai app-link di project)
+    container.querySelectorAll(".app-link").forEach((a) => {
+        a.addEventListener("click", (e) => {
+            const href = a.getAttribute("data-href");
+            if (href) {
+                e.preventDefault();
+                history.pushState(null, "", href);
+                window.dispatchEvent(new PopStateEvent("popstate"));
+            }
+        });
     });
-  });
 
-  // Dynamic import navbar realtime (dengan cache-buster ?v=)
-  try {
-    const mod = await import(`/js/components/navbar.js?v=${v}`);
-    const renderNavbar = mod.renderNavbar || mod.default;
-    const navEl = container.querySelector('#navbar-menu');
+    // Dynamic import navbar realtime (dengan cache-buster ?v=)
+    try {
+        const mod = await import(`/js/components/navbar.js?v=${v}`);
+        const renderNavbar = mod.renderNavbar || mod.default;
+        const navEl = container.querySelector("#navbar-menu");
 
-    // Support 2 gaya signature:
-    // - renderNavbar(element)
-    // - renderNavbar(selectorString)
-    if (renderNavbar.length >= 1) {
-      await renderNavbar(navEl ?? '#navbar-menu');
-    } else {
-      await renderNavbar(); // kalau modul lama tidak butuh argumen
-    }
-  } catch (err) {
-    console.error('[header] Failed to import navbar.js', err);
-    // Fallback minimal supaya UI tetap usable
-    const navEl = container.querySelector('#navbar-menu');
-    if (navEl) {
-      navEl.innerHTML = `
+        // Support 2 gaya signature:
+        // - renderNavbar(element)
+        // - renderNavbar(selectorString)
+        if (renderNavbar.length >= 1) {
+            await renderNavbar(navEl ?? "#navbar-menu");
+        } else {
+            await renderNavbar(); // kalau modul lama tidak butuh argumen
+        }
+    } catch (err) {
+        console.error("[header] Failed to import navbar.js", err);
+        // Fallback minimal supaya UI tetap usable
+        const navEl = container.querySelector("#navbar-menu");
+        if (navEl) {
+            navEl.innerHTML = `
         <li class="nav-item"><a class="nav-link app-link" data-href="/admin" href="/admin">Dashboard</a></li>
         <li class="nav-item"><a class="nav-link app-link" data-href="/admin/campaigns" href="/admin/campaigns">Campaigns</a></li>
         <li class="nav-item"><a class="nav-link app-link" data-href="/admin/submissions" href="/admin/submissions">Submissions</a></li>
       `;
-      // re-bind SPA nav pada fallback
-      navEl.querySelectorAll('.app-link').forEach(a => {
-        a.addEventListener('click', (e) => {
-          const href = a.getAttribute('data-href');
-          if (href) {
-            e.preventDefault();
-            history.pushState(null, '', href);
-            window.dispatchEvent(new PopStateEvent('popstate'));
-          }
-        });
-      });
+            // re-bind SPA nav pada fallback
+            navEl.querySelectorAll(".app-link").forEach((a) => {
+                a.addEventListener("click", (e) => {
+                    const href = a.getAttribute("data-href");
+                    if (href) {
+                        e.preventDefault();
+                        history.pushState(null, "", href);
+                        window.dispatchEvent(new PopStateEvent("popstate"));
+                    }
+                });
+            });
+        }
     }
-  }
 }
