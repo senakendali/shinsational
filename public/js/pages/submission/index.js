@@ -37,7 +37,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
     // ---- main skeleton
     target.innerHTML += `
-    <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3" style="margin-top: 100px">
+    <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
       <div class="d-flex flex-wrap gap-2 align-items-center">
         <select id="campaignFilter" class="form-select" style="min-width:260px">
           <option value="">- Pilih Campaign -</option>
