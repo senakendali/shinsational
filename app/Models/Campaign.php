@@ -24,7 +24,7 @@ class Campaign extends Model
         'kpi_targets',
         'hashtags',
         'notes',
-        'min_age', 'max_age', 'content_quota', 'kpi_targets',
+        'min_age', 'max_age', 'gender', 'content_quota', 'kpi_targets',
     ];
 
     protected $casts = [

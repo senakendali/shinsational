@@ -53,7 +53,7 @@ class CampaignController extends Controller
         $payload = Arr::only($payload, [
             'brand_id','name','slug','code','objective','start_date','end_date',
             'status','is_active','budget','currency','kpi_targets','hashtags','notes',
-            'min_age','max_age','content_quota',
+            'min_age','max_age', 'gender', 'content_quota',
         ]);
 
         $campaign = Campaign::create($payload)->load('brand');
@@ -86,7 +86,7 @@ class CampaignController extends Controller
         $payload = Arr::only($payload, [
             'brand_id','name','slug','code','objective','start_date','end_date',
             'status','is_active','budget','currency','kpi_targets','hashtags','notes',
-            'min_age','max_age','content_quota',
+            'min_age','max_age','gender','content_quota',
         ]);
 
         $campaign->update($payload);
