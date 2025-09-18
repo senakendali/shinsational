@@ -123,8 +123,8 @@ export const routes = [
   },
 
   {
-    path: "/admin/kol",
-    label: "KOL",
+    path: "/admin/kol-token",
+    label: "KOL Token",
     component: () => import("../pages/kol/kol-list.js?v=" + BUILD_ID),
   },
 
