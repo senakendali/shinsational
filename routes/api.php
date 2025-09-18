@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\BrandController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\InfluencerSubmissionController;
 use App\Http\Controllers\TiktokDebugController;
+use App\Http\Controllers\InfluencerSubmissionDraftController;
 
 
 // Brand
@@ -99,6 +100,21 @@ Route::post('/_ping-refresh/{id}', function ($id) {
 Route::match(['GET','POST'], 'debug/tiktok/video-stats', [TiktokDebugController::class, 'videoStats'])
     ->name('api.debug.tiktok.video-stats');
 
+// Influencer Submission Draft
+
+Route::get('/influencer-submissions/draft',  [InfluencerSubmissionDraftController::class, 'index'])->name('isd.index');
+Route::get('/influencer-submissions/draft/with-influencer',  [InfluencerSubmissionDraftController::class, 'indexWithInfluencer'])
+    ->name('isd.indexWithInfluencer'); // NEW
+Route::post('/influencer-submissions/draft', [InfluencerSubmissionDraftController::class, 'store'])->name('isd.store');
+Route::patch('/influencer-submissions/draft/{id}', [InfluencerSubmissionDraftController::class, 'update'])
+    ->name('isd.update')->whereNumber('id');
+
+// Contoh lain yang generic harus pakai whereNumber('id') biar gak nabrak:
+Route::get('/influencer-submissions/{id}', [InfluencerSubmissionController::class, 'show'])->whereNumber('id');
+
+// Manage Shipments (list + update khusus)
+Route::get('/influencer-submissions/shipments', [InfluencerSubmissionController::class, 'shipmentsIndex']);
+Route::patch('/influencer-submissions/{id}/shipment', [InfluencerSubmissionController::class, 'shipmentsUpdate'])->whereNumber('id');
 
 
 

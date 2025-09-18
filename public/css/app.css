@@ -256,3 +256,13 @@ body {
 h6{
     color:#444444;
 }
+
+.fs-12{
+    font-size: 12px;
+    color:#444444;
+}
+
+.is-draft-locked {
+  background-color: #f8f9fa;
+  cursor: not-allowed;
+}

@@ -8,14 +8,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
     loaderMod,
     toastMod,
     campaignMod,
-    submissionMod,
   ] = await Promise.all([
     import(`../../components/header.js?v=${v}`),
     import(`../../components/breadcrumb.js?v=${v}`),
     import(`../../components/loader.js?v=${v}`),
     import(`../../utils/toast.js?v=${v}`),
     import(`../../services/campaignService.js?v=${v}`),
-    import(`../../services/influencerSubmissionService.js?v=${v}`),
   ]);
 
   const { renderHeader } = headerMod;
@@ -23,35 +21,50 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const { showLoader, hideLoader } = loaderMod;
   const { showToast } = toastMod;
   const { campaignService } = campaignMod;
-  const { submissionService } = submissionMod;
 
   // ---------- helpers ----------
   const $ = (sel) => document.querySelector(sel);
 
-  const kolNameOf = (s) =>
-    s.full_name ||
-    (s.tiktok_username ? `@${s.tiktok_username}` : null) ||
-    s.display_name ||
-    s.tiktok_display_name ||
-    s.name ||
-    s.creator_name ||
-    s.influencer_name ||
-    s.user_name ||
+  // Inline SVG placeholder (no network fetch)
+  const DUMMY_AVATAR_DATA_URI = 'data:image/svg+xml;utf8,' + encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 72 72">
+      <rect width="100%" height="100%" fill="#f1f3f5"/>
+      <circle cx="36" cy="28" r="14" fill="#dee2e6"/>
+      <rect x="12" y="46" width="48" height="18" rx="9" fill="#dee2e6"/>
+    </svg>
+  `);
+
+  function avatarTag(url) {
+    if (!url || !String(url).trim()) {
+      return `<img src="${DUMMY_AVATAR_DATA_URI}" alt=""
+                loading="lazy" decoding="async" fetchpriority="low" referrerpolicy="no-referrer"
+                style="width:36px;height:36px;border-radius:50%;object-fit:cover">`;
+    }
+    const safe = String(url).replace(/"/g, '&quot;');
+    const dummy = DUMMY_AVATAR_DATA_URI.replace(/"/g, '&quot;');
+    return `<img src="${safe}" alt=""
+              onerror="this.onerror=null;this.src='${dummy}'"
+              loading="lazy" decoding="async" fetchpriority="low" referrerpolicy="no-referrer"
+              style="width:36px;height:36px;border-radius:50%;object-fit:cover">`;
+  }
+
+  const kolNameOf = (inf = {}) =>
+    inf.tiktok_full_name ||
+    (inf.tiktok_username ? `@${inf.tiktok_username}` : null) ||
+    inf.name ||
     '—';
 
-  const kolAvatarOf = (s) =>
-    s.avatar_url ||
-    s.profile_pic_url ||
-    s.tiktok_avatar_url ||
-    s.influencer_avatar_url ||
-    s.photo_url ||
+  const kolAvatarOf = (inf = {}) =>
+    inf.tiktok_avatar_url ||
+    inf.avatar_url ||
+    inf.profile_pic_url ||
     null;
 
-  const addressOf = (s) => {
-    const pick = (...keys) => keys.map(k => s?.[k]).find(v => v && String(v).trim() !== '');
+  const addressOf = (inf = {}) => {
+    const pick = (...keys) => keys.map(k => inf?.[k]).find(v => v && String(v).trim() !== '');
     const full =
-      pick('full_address','address','alamat','shipping_address') ||
-      [pick('address_line_1','alamat_1'), pick('address_line_2','alamat_2'), pick('city','kota'), pick('state','province','provinsi'), pick('postal_code','zip')]
+      pick('address','full_address','shipping_address') ||
+      [pick('address_line_1'), pick('address_line_2'), pick('city'), pick('state','province'), pick('postal_code','zip')]
         .filter(Boolean)
         .join(', ');
     return (full && String(full).trim()) || '';
@@ -59,10 +72,23 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
   const fmtDateTime = (s) => (s ? new Date(s).toLocaleString('id-ID') : '—');
 
+  const statusToUi = (raw) => {
+    const s = String(raw || '').toLowerCase();
+    if (s === 'pending')  return { text: 'Waiting for Approval', badge: 'warning' };
+    if (s === 'approved') return { text: 'Approve',             badge: 'success' };
+    if (s === 'rejected') return { text: 'Need to Revise',       badge: 'danger'  };
+    return { text: '-', badge: 'secondary' };
+  };
+
+  // fixed width badge (rapih untuk semua status)
+  const BADGE_WIDTH = 140; // px
   function badgeForStatus(status) {
-    const map = { pending: 'warning', approved: 'success', rejected: 'danger' };
-    const b = map[(status || '').toLowerCase()] || 'secondary';
-    return `<span class="badge bg-${b}">${(status || '-').toUpperCase()}</span>`;
+    const { text, badge } = statusToUi(status);
+    return `
+      <span class="badge bg-${badge} d-inline-block text-center"
+            style="width:${BADGE_WIDTH}px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+        ${text}
+      </span>`;
   }
 
   function getCsrfToken() {
@@ -110,69 +136,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
     </nav>
   `;
 
-  // ---------- inject Approval Modal ----------
-  if (!document.getElementById('draftApprovalModal')) {
-    document.body.insertAdjacentHTML('beforeend', `
-      <div id="draftApprovalModal" class="position-fixed top-0 start-0 w-100 h-100 d-none"
-           style="background:rgba(0,0,0,.35); z-index:2000;">
-        <div class="bg-white rounded shadow p-3" style="max-width:560px; width:92%; margin:8vh auto;">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="mb-0">Approval Draft</h6>
-            <button type="button" class="btn-close btn-close-approval" aria-label="Close"></button>
-          </div>
-
-          <div class="mb-2 small text-muted" id="draftKolInfo">—</div>
-          <div class="mb-3">
-            <label class="form-label text-muted">Link Draft</label>
-            <div>
-              <a href="#" id="draftApprovalLink" target="_blank" rel="noopener">—</a>
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label text-muted">Status</label>
-            <select id="draftApprovalStatus" class="form-select">
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="rejected">Rejected</option>
-            </select>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label text-muted">Catatan Reviewer (opsional)</label>
-            <textarea id="draftApprovalNote" class="form-control" rows="3" placeholder="Tuliskan catatan untuk KOL…"></textarea>
-          </div>
-
-          <div class="d-flex justify-content-end gap-2">
-            <button type="button" class="btn btn-outline-secondary btn-cancel-approval">Batal</button>
-            <button type="button" class="btn btn-primary btn-save-approval">
-              <i class="bi bi-check2-circle"></i> Simpan Approval
-            </button>
-          </div>
-
-          <input type="hidden" id="draftApprovalSubmissionId">
-        </div>
-      </div>
-    `);
-  }
-
   // ---------- DOM refs ----------
   const campaignFilter = $('#campaignFilter');
   const searchInput = $('#searchInput');
   const listWrap = $('#draft-list');
   const pager = $('#pagination');
   const refreshAllBtn = $('.btn-refresh-all');
-
-  // approval modal refs
-  const approvalModal = $('#draftApprovalModal');
-  const approvalClose = approvalModal?.querySelector('.btn-close-approval');
-  const approvalCancel = approvalModal?.querySelector('.btn-cancel-approval');
-  const approvalSave = approvalModal?.querySelector('.btn-save-approval');
-  const approvalIdEl = $('#draftApprovalSubmissionId');
-  const approvalStatusEl = $('#draftApprovalStatus');
-  const approvalNoteEl = $('#draftApprovalNote');
-  const approvalLinkEl = $('#draftApprovalLink');
-  const approvalKolInfoEl = $('#draftKolInfo');
 
   // ---------- state ----------
   let currentPage = 1;
@@ -193,73 +162,36 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }
   } catch {}
 
-  // ---------- modal helpers ----------
-  function openApprovalModal({ id, kolName = '—', draftUrl = '#', status = 'pending', note = '' } = {}) {
-    if (!approvalModal) return;
-    approvalIdEl.value = id || '';
-    approvalStatusEl.value = (status || 'pending').toLowerCase();
-    approvalNoteEl.value = note || '';
-    approvalLinkEl.href = draftUrl || '#';
-    approvalLinkEl.textContent = draftUrl || '—';
-    approvalKolInfoEl.textContent = kolName || '—';
-
-    approvalModal.classList.remove('d-none');
-  }
-  function closeApprovalModal() {
-    if (!approvalModal) return;
-    approvalModal.classList.add('d-none');
-    approvalIdEl.value = '';
-    approvalNoteEl.value = '';
-    approvalLinkEl.href = '#';
-    approvalLinkEl.textContent = '—';
-    approvalKolInfoEl.textContent = '—';
-    approvalStatusEl.value = 'pending';
+  // ---------- API ----------
+  async function fetchDraftsWithInfluencer({ page = 1, per_page = 20, campaign_id, q = '' }) {
+    const qs = new URLSearchParams({
+      page: String(page),
+      per_page: String(per_page),
+      campaign_id: String(campaign_id || ''),
+    });
+    if (q) qs.set('q', q);
+    const url = `/api/influencer-submissions/draft/with-influencer?${qs.toString()}`;
+    const r = await fetchWithCsrf(url, { method: 'GET' });
+    if (!r.ok) throw new Error('Gagal memuat data draft');
+    return r.json();
   }
 
-  approvalClose?.addEventListener('click', closeApprovalModal);
-  approvalCancel?.addEventListener('click', closeApprovalModal);
-  approvalModal?.addEventListener('click', (e) => {
-    if (e.target === approvalModal) closeApprovalModal();
-  });
-
-  // SAVE approval -> endpoint khusus
-  approvalSave?.addEventListener('click', async () => {
-    const id = approvalIdEl.value;
-    if (!id) { showToast('ID submission tidak valid.', 'error'); return; }
-
-    const status = (approvalStatusEl.value || 'pending').toLowerCase();
-    const note = (approvalNoteEl.value || '').trim();
-
-    const old = approvalSave.innerHTML;
-    approvalSave.disabled = true;
-    approvalSave.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan…`;
-
-    try {
-      const fd = new FormData();
-      fd.set('draft_status', status);
-      if (note) fd.set('draft_reviewer_note', note);
-
-      const r = await fetchWithCsrf(`/api/influencer-submissions/${encodeURIComponent(id)}/draft-approval`, {
-        method: 'POST',
-        body: fd,
-      });
-      if (!r.ok) {
-        let msg = 'Gagal menyimpan approval.';
-        try { const j = await r.json(); msg = j?.message || msg; } catch {}
-        throw new Error(msg);
-      }
-      await r.json().catch(()=>{});
-
-      showToast('Approval tersimpan.');
-      closeApprovalModal();
-      await loadDrafts(currentPage);
-    } catch (err) {
-      showToast(err?.message || 'Gagal menyimpan approval', 'error');
-    } finally {
-      approvalSave.disabled = false;
-      approvalSave.innerHTML = old;
+  async function updateDraftApprovalInline(draftId, { status, note }) {
+    const r = await fetchWithCsrf(`/api/influencer-submissions/draft/${encodeURIComponent(draftId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: String(status || 'pending').toLowerCase(),
+        reviewer_note: note || null,
+      })
+    });
+    if (!r.ok) {
+      let msg = 'Gagal menyimpan approval.';
+      try { const j = await r.json(); msg = j?.message || msg; } catch {}
+      throw new Error(msg);
     }
-  });
+    return r.json();
+  }
 
   // ---------- list loader ----------
   async function loadDrafts(page = 1) {
@@ -273,127 +205,132 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
     showLoader();
     try {
-      const res = await submissionService.getAll({
+      const res = await fetchDraftsWithInfluencer({
         page,
         per_page: 20,
-        include: 'campaign',
         campaign_id: currentCampaignId,
+        q: currentKeyword.trim(),
       });
 
-      const arrRaw = res?.data || [];
-
-      // Hanya yang punya draft_url
-      let arr = arrRaw.filter(s => !!(s.draft_url && String(s.draft_url).trim() !== ''));
-
-      // Filter keyword (nama, open_id, username, draft_url)
-      const kw = (currentKeyword || '').toLowerCase().trim();
-      if (kw) {
-        arr = arr.filter(s => {
-          const name = kolNameOf(s);
-          const uname = s.tiktok_username ? '@' + s.tiktok_username : '';
-          const hay = [
-            name,
-            uname,
-            s.tiktok_user_id || '',
-            s.draft_url || '',
-          ].join(' ').toLowerCase();
-        return hay.includes(kw);
-        });
-      }
-
-      // Group by open_id & ambil terbaru per KOL (draft_submitted_at || updated_at || created_at)
+      const rows = Array.isArray(res?.data) ? res.data : (res?.data?.data || []); // support both paginator styles
+      // Group by influencer open_id
       const groups = new Map();
-      const ts = (s) => new Date(s.draft_submitted_at || s.updated_at || s.created_at || 0).getTime();
-
-      for (const s of arr) {
-        const key = s.tiktok_user_id || `anon:${kolNameOf(s)}`;
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(s);
+      for (const d of rows) {
+        const inf = d.influencer || {};
+        const key = inf.open_id || d.submission?.tiktok_user_id || `anon:${kolNameOf(inf)}`;
+        if (!groups.has(key)) groups.set(key, { inf, drafts: [] });
+        groups.get(key).drafts.push(d);
       }
 
-      const latestByKol = [];
-      for (const [_openId, items] of groups.entries()) {
-        items.sort((a, b) => ts(b) - ts(a));
-        latestByKol.push(items[0]);
-      }
+      // Build HTML
+      const blocks = [];
+      if (groups.size === 0) {
+        blocks.push(`<div class="text-center text-muted">Tidak ada draft untuk campaign ini.</div>`);
+      } else {
+        for (const [, { inf, drafts }] of groups.entries()) {
+          // influencer header
+          const name = kolNameOf(inf);
+          const addr = addressOf(inf);
+          const avatarHtml = avatarTag(kolAvatarOf(inf));
 
-      // Build rows
-      const rowsHtml = [];
+          // sort drafts by slot asc then updated desc
+          drafts.sort((a, b) => {
+            const sa = Number(a.slot || 0), sb = Number(b.slot || 0);
+            if (sa !== sb) return sa - sb;
+            const ta = new Date(a.updated_at || a.submitted_at || 0).getTime();
+            const tb = new Date(b.updated_at || b.submitted_at || 0).getTime();
+            return tb - ta;
+          });
 
-      for (const s of latestByKol) {
-        const displayName = kolNameOf(s);
-        const addr = addressOf(s);
-        const avatarUrl = kolAvatarOf(s);
-        const avatar = avatarUrl ? `<img src="${avatarUrl}" alt="" style="width:28px;height:28px;border-radius:50%;object-fit:cover">` : '';
-        const draftUrl = s.draft_url || '';
-        const statusHtml = badgeForStatus(s.draft_status || 'pending');
-        const updated = fmtDateTime(s.draft_submitted_at || s.updated_at || s.created_at);
+          const draftRows = drafts.map(d => {
+            const link = d.url || '';
+            const hasLink = !!(link && link.trim());
+            const updated = fmtDateTime(d.updated_at || d.submitted_at);
+            const noteVal = (d.reviewer_note || '').replace(/"/g,'&quot;');
 
-        // Header per KOL: avatar + nama + alamat + tombol Approval
-        rowsHtml.push(`
-          <tr>
-            <td colspan="3">
-              <div class="d-flex justify-content-between align-items-center">
-                <div class="d-flex align-items-start gap-2">
-                  ${avatar}
+            return `
+              <tr data-draft-id="${d.id}">
+                <td class="text-center" style="width:70px">${Number(d.slot) || '-'}</td>
+                <td style="width:160px">
+                  ${
+                    hasLink
+                      ? `<a class="btn btn-sm btn-outline-secondary w-100 text-truncate" title="${link.replace(/"/g,'&quot;')}"
+                            href="${link}" target="_blank" rel="noopener">
+                            <i class="bi bi-box-arrow-up-right"></i> Open Draft
+                         </a>`
+                      : '<span class="text-muted">—</span>'
+                  }
+                </td>
+                <td style="width:${BADGE_WIDTH + 20}px">
+                  ${badgeForStatus(d.status)}
+                </td>
+                <td style="width:200px">
+                  <select class="form-select form-select-sm js-status">
+                    <option value="pending"  ${d.status==='pending'?'selected':''}>Waiting for Approval</option>
+                    <option value="approved" ${d.status==='approved'?'selected':''}>Approve</option>
+                    <option value="rejected" ${d.status==='rejected'?'selected':''}>Need to Revise</option>
+                  </select>
+                </td>
+                <td>
+                  <input type="text" class="form-control form-control-sm js-note"
+                         placeholder="Catatan untuk KOL…" value="${noteVal}">
+                </td>
+                <td style="width:160px" class="text-muted small">${updated}</td>
+                <td style="width:130px" class="text-end">
+                  <button class="btn btn-sm btn-outline-primary js-save">
+                    <i class="bi bi-check2-circle"></i> Simpan
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+
+          blocks.push(`
+            <div class="card mb-3">
+              <div class="card-header bg-white">
+                <div class="d-flex align-items-center gap-2">
+                  ${avatarHtml}
                   <div>
-                    <div class="fw-semibold">${displayName}</div>
+                    <div class="fw-semibold">${name}</div>
                     ${addr ? `<div class="text-muted small">${addr}</div>` : ''}
                   </div>
                 </div>
-                <div class="d-flex flex-wrap gap-2">
-                  <button class="btn btn-sm btn-outline-primary btn-approve-draft"
-                          data-id="${s.id}"
-                          data-name="${(displayName || '').replace(/"/g,'&quot;')}"
-                          data-url="${(draftUrl || '').replace(/"/g,'&quot;')}"
-                          data-status="${(s.draft_status || 'pending').replace(/"/g,'&quot;')}"
-                          data-note="${(s.draft_reviewer_note || '').replace(/"/g,'&quot;')}">
-                    <i class="bi bi-check2-circle"></i> Approval
-                  </button>
+              </div>
+              <div class="card-body p-0">
+                <div class="table-responsive">
+                  <table class="table mb-0">
+                    <thead>
+                      <tr class="table-light">
+                        <th style="width:70px" class="text-center">Slot</th>
+                        <th style="width:160px">Draft</th>
+                        <th style="width:${BADGE_WIDTH + 20}px">Status</th>
+                        <th style="width:200px">Action</th>
+                        <th>Reviewer Note</th>
+                        <th style="width:160px">Updated</th>
+                        <th style="width:130px"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${draftRows}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            </td>
-          </tr>
-        `);
-
-        // Baris konten tunggal: link draft + status + updated_at
-        rowsHtml.push(`
-          <tr data-submission-id="${s.id}">
-            <td style="min-width:360px">
-              ${draftUrl ? `<a href="${draftUrl}" target="_blank" rel="noopener">${draftUrl}</a>` : '<span class="text-muted">—</span>'}
-            </td>
-            <td style="width:180px">${statusHtml}</td>
-            <td style="width:220px" class="text-muted small">${updated}</td>
-          </tr>
-        `);
+            </div>
+          `);
+        }
       }
 
-      const tableHtml = `
-        <table class="table table-bordered bg-white">
-          <thead>
-            <tr><th colspan="3" class="text-uppercase">Draft Content</th></tr>
-            <tr>
-              <th>Draft Link</th>
-              <th style="width:180px">Status</th>
-              <th style="width:220px">Updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml.filter(Boolean).join('') || `
-              <tr><td colspan="3" class="text-center text-muted">Tidak ada draft untuk campaign ini.</td></tr>
-            `}
-          </tbody>
-        </table>
-      `;
+      listWrap.innerHTML = blocks.join('');
 
-      listWrap.innerHTML = tableHtml;
-
-      // Pagination UI dari backend
+      // Pagination UI (Laravel paginator)
+      const current = res.current_page ?? res?.data?.current_page ?? 1;
+      const last = res.last_page ?? res?.data?.last_page ?? 1;
       pager.innerHTML = '';
-      if (res?.last_page > 1) {
-        for (let i = 1; i <= res.last_page; i++) {
+      if (last > 1) {
+        for (let i = 1; i <= last; i++) {
           const li = document.createElement('li');
-          li.className = `page-item ${i === res.current_page ? 'active' : ''}`;
+          li.className = `page-item ${i === current ? 'active' : ''}`;
           li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
           li.addEventListener('click', (e) => {
             e.preventDefault();
@@ -404,26 +341,49 @@ export async function render(target, path, query = {}, labelOverride = null) {
         }
       }
 
-      attachRowHandlers();
+      attachInlineHandlers();
 
     } catch (err) {
       console.error(err);
       listWrap.innerHTML = `<div class="text-danger">Gagal memuat draft.</div>`;
+      pager.innerHTML = '';
     } finally {
       hideLoader();
     }
   }
 
-  function attachRowHandlers() {
-    document.querySelectorAll('.btn-approve-draft').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        const id = btn.getAttribute('data-id');
-        const name = btn.getAttribute('data-name') || '—';
-        const url = btn.getAttribute('data-url') || '#';
-        const status = btn.getAttribute('data-status') || 'pending';
-        const note = btn.getAttribute('data-note') || '';
-        openApprovalModal({ id, kolName: name, draftUrl: url, status, note });
+  // ---------- inline handlers ----------
+  function attachInlineHandlers() {
+    listWrap.querySelectorAll('tr[data-draft-id]').forEach(tr => {
+      const draftId = tr.getAttribute('data-draft-id');
+      const statusSel = tr.querySelector('.js-status');
+      const noteEl = tr.querySelector('.js-note');
+      const saveBtn = tr.querySelector('.js-save');
+
+      // Enter di input note => trigger simpan
+      noteEl?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault(); // jangan submit form/line-break
+          saveBtn?.click();
+        }
+      });
+
+      saveBtn?.addEventListener('click', async () => {
+        const status = statusSel?.value || 'pending';
+        const note = (noteEl?.value || '').trim();
+        const old = saveBtn.innerHTML;
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Simpan…`;
+        try {
+          await updateDraftApprovalInline(draftId, { status, note });
+          showToast('Approval tersimpan.');
+          await loadDrafts(currentPage);
+        } catch (e) {
+          showToast(e?.message || 'Gagal menyimpan approval', 'error');
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = old;
+        }
       });
     });
   }

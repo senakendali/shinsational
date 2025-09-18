@@ -91,7 +91,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       $('#role-list').innerHTML = `
         <table class="table table-bordered bg-white">
-          <thead>
+          <thead class="table-light">
             <tr><th colspan="4" class="text-uppercase">Roles</th></tr>
             <tr>
               <th style="width:72px">#</th>

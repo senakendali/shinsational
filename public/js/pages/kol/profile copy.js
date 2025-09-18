@@ -81,27 +81,24 @@ export function render(target, params, query = {}, labelOverride = null) {
             <div class="card mb-4" id="draftSection">
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-2">
-                  <div>
-                    <h6 class="mb-0">Draft Konten</h6>
-                    <div class="small text-muted" id="draftQuotaHint">Isi minimal sesuai target konten.</div>
-                  </div>
+                  <h6 class="mb-0">Draft Konten</h6>
                   <button type="button" id="submitDraftBtn" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-send"></i> Kirim Draft
                   </button>
                 </div>
 
-                <!-- Dynamic rows: each has URL + Admin Status -->
-                <div id="draftRows" class="row g-2"></div>
+                <textarea id="draft_text" class="form-control" rows="4"
+                  placeholder="Input Google Drive link atau tempat kamu menyimpan draft konten"></textarea>
                 <div class="small text-muted mt-2">
-                  Admin akan meninjau draf yang kamu kirim dan memberikan approval / revisi.
+                  Admin akan meninjau draf ini dan memberikan approval / revisi.
                 </div>
 
-                <!-- status draft terakhir (global) -->
+                <!-- status draft terakhir -->
                 <div id="draftStatus" class="mt-3 d-none">
                   <div class="small">
                     Status terakhir:
                     <span id="draftStatusBadge" class="badge bg-secondary">-</span>
-                    <span id="draftUpdatedAt" class="text-muted ms-2">-</span>
+                    <span id="draftUpdatedAt" class="text-muted ms-2">—</span>
                   </div>
                   <div id="draftReviewerNote" class="small text-muted mt-1 d-none"></div>
                 </div>
@@ -116,13 +113,13 @@ export function render(target, params, query = {}, labelOverride = null) {
                   <div class="row g-3 align-items-end">
                     <div class="col-md-4">
                       <label for="link-1" class="form-label text-muted">Link Postingan 1</label>
-                      <input type="url" class="form-control" id="link-1" placeholder="https://www.tiktok.com/...">
-                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
+                      <input type="url" class="form-control" id="link-1" placeholder="https://www.tiktok.com/..." required>
+                      <div class="invalid-feedback">Link Postingan 1 wajib diisi (URL valid).</div>
                     </div>
                     <div class="col-md-4">
                       <label for="post_date_1" class="form-label text-muted">Tanggal Postingan 1</label>
-                      <input type="date" class="form-control" id="post_date_1">
-                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
+                      <input type="date" class="form-control" id="post_date_1" required>
+                      <div class="invalid-feedback">Tanggal Postingan 1 wajib diisi.</div>
                     </div>
                     <div class="col-md-4">
                       <label for="screenshot_1" class="form-label text-muted">Screenshot Postingan 1</label>
@@ -217,11 +214,10 @@ export function render(target, params, query = {}, labelOverride = null) {
                 </div>
 
                 <!-- Add more button -->
-                <div class="col-12 d-flex align-items-center gap-3 d-none">
+                <div class="col-12">
                   <button type="button" id="addMoreBtn" class="btn btn-outline-dark btn-sm">
                     + Tambah Postingan
                   </button>
-                  <span class="small text-muted" id="postQuotaHint"></span>
                 </div>
 
                 <!-- CARA MENDAPATKAN PRODUK -->
@@ -316,26 +312,6 @@ export function render(target, params, query = {}, labelOverride = null) {
       renderFooterKol();
 
       // ===== Helpers
-
-      // Status → label & badge color (UPDATED)
-      const statusTextMap = {
-        pending: 'Waiting for Approval',
-        approved: 'Approve',
-        rejected: 'Need to Revise',
-      };
-      const statusBadgeMap = {
-        pending: 'warning',
-        approved: 'success',
-        rejected: 'danger',
-      };
-      const statusToUi = (raw) => {
-        const s = String(raw || '').toLowerCase();
-        return {
-          text: statusTextMap[s] || '-',
-          badge: statusBadgeMap[s] || 'secondary'
-        };
-      };
-
       const $ = (sel) => document.querySelector(sel);
       const safe = (v, d = '') => (v == null ? d : v);
       const hasVal = (v) => v !== undefined && v !== null && String(v).trim() !== '';
@@ -347,7 +323,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         return k.toISOString().slice(0,10);
       };
 
-      // CSRF helpers
+      // CSRF helpers (hindari "Page Expired")
       let csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || window.CSRF_TOKEN || null;
       async function ensureCsrf() {
         if (csrfToken) return csrfToken;
@@ -372,7 +348,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         return fetch(url, { ...options, headers });
       }
 
-      // profile helpers
       const normalizeHandle = (val) => (val || '').toString().trim().replace(/^@+/, '');
       const makePseudoId = (handle) => {
         const h = normalizeHandle(handle).toLowerCase();
@@ -476,365 +451,24 @@ export function render(target, params, query = {}, labelOverride = null) {
       let currentSubmission = null;
       let isEditing = false;
 
-      // Draft locks per slot (lock ONLY when draft exists and NOT approved)
-      let draftLockBySlot = new Set();
-
       // Registrations per campaign
-      let regsMapByCampaign = new Map();
+      let regsMapByCampaign = new Map(); // campaign_id -> registration record
       let currentRegistration = null;
 
-      // ===== Content quota / slots =====
+      // ===== Multi-slot posts
       const MAX_SLOTS = 5;
-      let requiredPostCount = 1;   // target minimal posting (opsional/NOT mandatory)
-      let requiredDraftCount = 1;  // minimal draft WAJIB: minimal isi 1 saat submit
       let visibleSlots = 2;
-
-      const campaignDetailCache = new Map();
-
-      const clampInt = (n, min, max) => {
-        const x = Math.floor(Number(n) || 0);
-        return Math.min(Math.max(x, min), max);
-      };
-      const coalesceNumber = (...vals) => {
-        for (const v of vals) {
-          if (v == null) continue;
-          const n = Number(v);
-          if (!Number.isNaN(n)) return n;
-        }
-        return null;
-      };
-
-      async function fetchCampaignDetail(campaignId) {
-        const key = String(campaignId);
-        if (campaignDetailCache.has(key)) return campaignDetailCache.get(key);
-        try {
-          const r = await fetch(`/api/campaigns/${campaignId}?_=${Date.now()}`, {
-            headers: { 'Accept':'application/json' },
-            credentials: 'same-origin',
-            cache: 'no-store'
-          });
-          if (!r.ok) return null;
-          const j = await r.json();
-          campaignDetailCache.set(key, j);
-          return j;
-        } catch { return null; }
-      }
-
-      async function getCampaignContentTarget(campaignId) {
-        const detail = await fetchCampaignDetail(campaignId);
-        if (!detail) return null;
-        const kpi = detail.kpi_targets || detail.kpi || detail.kpiTargets || {};
-        const target = coalesceNumber(
-          detail.content_quota,
-          detail.content_target, detail.post_target, detail.posts_target, detail.total_posts_target,
-          kpi?.content_quota, kpi?.content, kpi?.contents, kpi?.posts
-        );
-        if (target == null) return null;
-        return clampInt(target, 1, MAX_SLOTS);
-      }
-
-      // ===== Multi-slot posts UI
       const slotRow = (i) => document.querySelector(`#row-slot-${i}`);
-      const showSlot = (i) => {
-        if (i <= 2) return; // baris 1-2 selalu terlihat
-        const row = slotRow(i);
-        if (row) row.classList.remove('d-none');
-        if (visibleSlots < i) visibleSlots = i;
-        updateAddMoreBtn();
-      };
+      const showSlot = (i) => { const row = slotRow(i); if (row) row.classList.remove('d-none'); if (visibleSlots < i) visibleSlots = i; updateAddMoreBtn(); };
       const hideSlot = (i) => { const row = slotRow(i); if (row) row.classList.add('d-none'); };
-      const updateAddMoreBtn = () => {
-        const btn = $("#addMoreBtn");
-        if (!btn) return;
-        btn.classList.toggle('d-none', visibleSlots >= MAX_SLOTS);
-      };
+      const updateAddMoreBtn = () => { const btn = $("#addMoreBtn"); if (!btn) return; btn.classList.toggle('d-none', visibleSlots >= MAX_SLOTS); };
       const revealNextSlot = () => { if (visibleSlots < MAX_SLOTS) showSlot(visibleSlots + 1); };
       $("#addMoreBtn")?.addEventListener('click', revealNextSlot);
-
       const slotHasData = (rec, i) => {
-        const has = (k) => rec && hasVal(rec[k]);
+        const has = (k) => rec && rec[k] != null && String(rec[k]).trim() !== '';
         return has(`link_${i}`) || has(`post_date_${i}`) || has(`screenshot_${i}_url`) || has(`screenshot_${i}_path`);
       };
-      const resetSlotVisibility = () => {
-        visibleSlots = Math.max(2, requiredPostCount);
-        for (let i = 3; i <= MAX_SLOTS; i++) {
-          if (i <= visibleSlots) showSlot(i);
-          else hideSlot(i);
-        }
-        updateAddMoreBtn();
-      };
-
-      // >>> posts tidak mandatory: hanya ubah hint
-      function applyRequiredAttributes() {
-        const postHint = $("#postQuotaHint");
-        if (postHint) {
-          postHint.textContent = `Target minimal posting: ${requiredPostCount} konten (opsional, bisa dilengkapi kapan saja)`;
-        }
-        const draftHint = $("#draftQuotaHint");
-        if (draftHint) {
-          draftHint.textContent = `Jumlah draft konten yang perlu dikirim: ${requiredDraftCount} draft konten`;
-        }
-      }
-
-      // ===== Draft Rows (URL + STATUS ADMIN) =====
-      const draftRowsWrap = () => $("#draftRows");
-      let currentDraftRowCount = 0;
-      function buildDraftRows(count) {
-        const c = clampInt(count || 1, 1, MAX_SLOTS);
-        const wrap = draftRowsWrap();
-        if (!wrap) return;
-        wrap.innerHTML = '';
-        for (let i = 1; i <= c; i++) {
-          const row = document.createElement('div');
-          row.className = 'col-12 draft-row';
-          row.innerHTML = `
-            <div class="row g-2 align-items-center">
-              <div class="col-md-6">
-                <label class="form-label text-muted">Draft ${i} (URL)</label>
-                <input type="url" class="form-control draft-url" id="draft_url_${i}" placeholder="https://...">
-                <div class="invalid-feedback">Masukkan URL draft yang valid.</div>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label text-muted d-block">Status & Catatan Admin</label>
-                <div class="d-flex align-items-center gap-2">
-                  <span id="draft_status_badge_${i}" class="badge bg-secondary">-</span>
-                  <small id="draft_status_time_${i}" class="text-muted"></small>
-                </div>
-                <div id="draft_admin_note_${i}" class="small text-muted mt-1">-</div>
-              </div>
-            </div>
-          `;
-          wrap.appendChild(row);
-        }
-        currentDraftRowCount = c;
-      }
-      function ensureDraftRowExists(slot) {
-        if (slot <= currentDraftRowCount) return;
-        buildDraftRows(slot);
-      }
-
-      function setDraftButtonState(disabled) {
-        const submitDraftBtn = $("#submitDraftBtn");
-        if (!submitDraftBtn) return;
-        submitDraftBtn.disabled = !!disabled;
-        submitDraftBtn.innerHTML = disabled
-          ? `<span class="spinner-border spinner-border-sm me-1"></span> Mengirim…`
-          : `<i class="bi bi-send"></i> Kirim Draft`;
-      }
-
-      // Status draft (global)
-      const draftStatusWrap    = $('#draftStatus');
-      const draftStatusBadge   = $('#draftStatusBadge');
-      const draftUpdatedAtEl   = $('#draftUpdatedAt');
-      const draftReviewerNote  = $('#draftReviewerNote');
-
-      function showDraftStatus({ status = '-', updated_at = null, reviewer_note = '' } = {}) {
-        if (!draftStatusWrap) return;
-        //draftStatusWrap.classList.remove('d-none');
-
-        const { text, badge } = statusToUi(status);
-
-        draftStatusBadge.className = `badge bg-${badge}`;
-        draftStatusBadge.textContent = text;
-        draftUpdatedAtEl.textContent = updated_at ? new Date(updated_at).toLocaleString('id-ID') : '';
-
-        if (reviewer_note && reviewer_note.trim()) {
-          draftReviewerNote.textContent = `Catatan reviewer: ${reviewer_note}`;
-          draftReviewerNote.classList.remove('d-none');
-        } else {
-          draftReviewerNote.classList.add('d-none');
-          draftReviewerNote.textContent = '';
-        }
-      }
-
-      // Per-baris status helper (UPDATED text)
-      function showRowDraftStatus(i, { status = '-', reviewer_note = '', updated_at = null } = {}) {
-        const badgeEl = document.getElementById(`draft_status_badge_${i}`);
-        const timeEl  = document.getElementById(`draft_status_time_${i}`);
-        const noteEl  = document.getElementById(`draft_admin_note_${i}`);
-
-        const s = String(status).toLowerCase();
-        const badge = statusBadgeMap[s] || 'secondary';
-        const text  = statusTextMap[s] || '-';
-
-        if (badgeEl) { badgeEl.className = `badge bg-${badge}`; badgeEl.textContent = text; }
-        if (timeEl)  { timeEl.textContent = updated_at ? new Date(updated_at).toLocaleString('id-ID') : ''; }
-        if (noteEl)  { noteEl.textContent = reviewer_note?.trim() ? reviewer_note : '-'; }
-      }
-
-      // Prefill draft dari submission (legacy single-slot support)
-      function prefillDraftFromSubmission(rec) {
-        const url = rec?.draft_url || rec?.draft_link || rec?.draft_text || rec?.draft || '';
-        const u1 = $("#draft_url_1");
-        if (u1 && !u1.value) u1.value = url || '';
-
-        const status = rec?.draft_status || null;
-        const ts     = rec?.draft_submitted_at || rec?.updated_at || rec?.created_at || null;
-        const reviewerNote = rec?.draft_reviewer_note || '';
-        if (status || reviewerNote || ts) {
-          showDraftStatus({ status: status || 'pending', updated_at: ts, reviewer_note: reviewerNote });
-        } else {
-          draftStatusWrap?.classList.add('d-none');
-        }
-      }
-
-      // Build lock set dari data draft terbaru per slot
-      function updateSlotLocksFromMap(bySlotMap) {
-        const next = new Set();
-        bySlotMap.forEach((d, slot) => {
-          const s = String(d.status || d.draft_status || '').toLowerCase();
-          // LOCK kalau draft ADA dan status BUKAN approved
-          if (s && s !== 'approved') next.add(slot);
-        });
-        draftLockBySlot = next;
-        enforceSlotLocks();
-      }
-
-      // Load status + PREFILL URL per-slot (UPDATED)
-      async function loadDraftStatus() {
-        if (!openId || !selectedCampaignId) {
-          draftStatusWrap?.classList.add('d-none');
-          for (let i = 1; i <= requiredDraftCount; i++) showRowDraftStatus(i, {});
-          draftLockBySlot.clear();
-          enforceSlotLocks();
-          return;
-        }
-        try {
-          const qs = new URLSearchParams({
-            tiktok_user_id: openId,
-            campaign_id: selectedCampaignId,
-            per_page: String(MAX_SLOTS),
-            _: String(Date.now()),
-          }).toString();
-
-          const r = await fetch(`/api/influencer-submissions/draft?${qs}`, {
-            headers: { 'Accept': 'application/json' },
-            credentials: 'same-origin',
-            cache: 'no-store',
-          });
-
-          if (!r.ok) { draftStatusWrap?.classList.add('d-none'); return; }
-
-          const j = await r.json();
-          const arr = Array.isArray(j) ? j : (j?.data || []);
-
-          // Global (pakai item terbaru by updated_at)
-          const latest = arr[0];
-          if (latest) {
-            showDraftStatus({
-              status: latest.status || latest.draft_status || 'pending',
-              updated_at: latest.updated_at || latest.submitted_at || latest.created_at,
-              reviewer_note: latest.reviewer_note || latest.note || '',
-            });
-          } else {
-            draftStatusWrap?.classList.add('d-none');
-          }
-
-          // Pastikan jumlah row cukup utk slot terbesar yang ada
-          let maxSlotSeen = requiredDraftCount;
-          for (const d of arr) {
-            const slot = Number(d.slot ?? d.index ?? d.draft_slot ?? 0);
-            if (slot > maxSlotSeen) maxSlotSeen = slot;
-          }
-          ensureDraftRowExists(maxSlotSeen);
-
-          // Per-slot map + PREFILL URL
-          const bySlot = new Map();
-          for (const d of arr) {
-            const slot = Number(d.slot ?? d.index ?? d.draft_slot ?? 0);
-            if (!slot) continue;
-            if (!bySlot.has(slot)) bySlot.set(slot, d);
-
-            // Prefill URL untuk slot tsb
-            const url = d.url || d.draft_url || d.link || d.draft_link || '';
-            const uEl = document.getElementById(`draft_url_${slot}`);
-            if (uEl && !uEl.value && url) uEl.value = url;
-          }
-          for (let i = 1; i <= currentDraftRowCount; i++) {
-            const d = bySlot.get(i);
-            if (d) {
-              showRowDraftStatus(i, {
-                status: d.status || d.draft_status || '-',
-                reviewer_note: d.reviewer_note || d.note || '',
-                updated_at: d.updated_at || d.submitted_at || d.created_at || null,
-              });
-            } else {
-              showRowDraftStatus(i, {});
-            }
-          }
-
-          // Terapkan kunci per slot (lock jika BELUM approved)
-          updateSlotLocksFromMap(bySlot);
-        } catch {
-          draftStatusWrap?.classList.add('d-none');
-        }
-      }
-
-      function refreshDraftUiAvailability() {
-        const can = !!(openId && selectedCampaignId);
-        const submitDraftBtn = $("#submitDraftBtn");
-        if (submitDraftBtn) submitDraftBtn.disabled = !can;
-        if (!can && draftStatusWrap) draftStatusWrap.classList.add('d-none');
-        // enable/disable URL inputs sesuai ketersediaan campaign
-        for (let i = 1; i <= currentDraftRowCount; i++) {
-          const u = $("#draft_url_"+i);
-          if (u) u.disabled = !can;
-        }
-      }
-
-      // Submit multi-draft (minimal 1 URL) — posts TIDAK mandatory
-      $("#submitDraftBtn")?.addEventListener('click', async () => {
-        if (!selectedCampaignId || !openId) {
-          showToast('Pilih campaign dulu ya.', 'error');
-          return;
-        }
-
-        // Kumpulkan URL yang terisi dari SEMUA baris draft yang ada
-        const filled = [];
-        for (let i = 1; i <= currentDraftRowCount; i++) {
-          const uVal = $("#draft_url_"+i)?.value.trim();
-          if (uVal) filled.push({ index: i, url: uVal });
-        }
-
-        // Minimal 1 draft saja
-        if (filled.length < 1) {
-          showToast('Minimal 1 draft (URL) harus diisi.', 'error');
-          return;
-        }
-
-        setDraftButtonState(true);
-        try {
-          let ok = 0, fail = 0;
-          for (const item of filled) {
-            const uok = /^https?:\/\//i.test(item.url) || /^(drive|docs)\.google\.com/i.test(item.url);
-            if (!uok) { fail++; continue; }
-
-            const fd = new FormData();
-            fd.set('campaign_id', String(selectedCampaignId));
-            fd.set('tiktok_user_id', String(openId));
-            fd.set('draft_url', item.url);
-            fd.set('slot', String(item.index));
-
-            const r = await fetchWithCsrf('/api/influencer-submissions/draft', {
-              method: 'POST',
-              credentials: 'same-origin',
-              body: fd,
-            });
-            if (r.ok) ok++; else fail++;
-          }
-          if (ok && !fail) showToast(`Berhasil mengirim ${ok} draft.`);
-          else if (ok && fail) showToast(`Sebagian terkirim: ${ok} sukses, ${fail} gagal.`, 'warning');
-          else showToast('Gagal mengirim draft.', 'error');
-
-          await loadDraftStatus();
-          const fresh = await fetchSubmissionForCampaign({ tiktok_user_id: openId, campaign_id: selectedCampaignId });
-          if (fresh) { currentSubmission = fresh; prefillDraftFromSubmission(currentSubmission); }
-        } catch (err) {
-          showToast(err?.message || 'Gagal mengirim draft.', 'error');
-        } finally {
-          setDraftButtonState(false);
-        }
-      });
+      const resetSlotVisibility = () => { visibleSlots = 2; for (let i = 3; i <= MAX_SLOTS; i++) hideSlot(i); updateAddMoreBtn(); };
 
       // ===== UI helpers
       const setTitle = (txt) => { $("#mainCampaignTitle").textContent = txt || 'My Campaign'; };
@@ -858,6 +492,201 @@ export function render(target, params, query = {}, labelOverride = null) {
       const contactEmailEl = $("#contact_email");
       const contactAddressEl = $("#contact_address");
       const saveContactBtn = $("#saveContactBtn");
+
+      // ===== Draft Konten (Approval) DOM =====
+      const draftTextEl        = document.querySelector('#draft_text');
+      const submitDraftBtn     = document.querySelector('#submitDraftBtn');
+      const draftStatusWrap    = document.querySelector('#draftStatus');
+      const draftStatusBadge   = document.querySelector('#draftStatusBadge');
+      const draftUpdatedAtEl   = document.querySelector('#draftUpdatedAt');
+      const draftReviewerNote  = document.querySelector('#draftReviewerNote');
+
+      function setDraftButtonState(disabled) {
+        if (!submitDraftBtn) return;
+        submitDraftBtn.disabled = !!disabled;
+        submitDraftBtn.innerHTML = disabled
+          ? `<span class="spinner-border spinner-border-sm me-1"></span> Mengirim…`
+          : `<i class="bi bi-send"></i> Kirim Draft`;
+      }
+
+      // Set draft text ke textarea; by default tidak override user yang sedang ngetik
+      function setDraftText(val, { force = false } = {}) {
+        if (!draftTextEl) return;
+        if (!force && draftTextEl.value.trim()) return;
+        draftTextEl.value = val || '';
+      }
+
+      function showDraftStatus({ status = '-', updated_at = null, reviewer_note = '' } = {}) {
+        if (!draftStatusWrap) return;
+        draftStatusWrap.classList.remove('d-none');
+
+        const map = { pending: 'warning', approved: 'success', rejected: 'danger' };
+        const badge = map[String(status).toLowerCase()] || 'secondary';
+
+        draftStatusBadge.className = `badge bg-${badge}`;
+        draftStatusBadge.textContent = String(status).toUpperCase();
+        draftUpdatedAtEl.textContent = updated_at ? new Date(updated_at).toLocaleString('id-ID') : '';
+
+        if (reviewer_note && reviewer_note.trim()) {
+          draftReviewerNote.textContent = `Catatan reviewer: ${reviewer_note}`;
+          draftReviewerNote.classList.remove('d-none');
+        } else {
+          draftReviewerNote.classList.add('d-none');
+          draftReviewerNote.textContent = '';
+        }
+      }
+
+      // Prefill dari submission record jika ada kolom draft_* di table influencer_submissions
+      function prefillDraftFromSubmission(rec) {
+        if (!rec) {
+          if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+          return;
+        }
+        // Prioritaskan draft_url dari backend
+        const txt = rec.draft_url || rec.draft_link || rec.draft_text || rec.draft || '';
+        if (txt) setDraftText(txt, { force: true });
+
+        const status = rec.draft_status || null;
+        const note   = rec.draft_reviewer_note || '';
+        const ts     = rec.draft_submitted_at || rec.updated_at || rec.created_at || null;
+
+        if (status || note || ts) {
+          showDraftStatus({
+            status: status || 'pending',
+            updated_at: ts,
+            reviewer_note: note || '',
+          });
+        } else {
+          if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+        }
+      }
+
+
+      // Load status & (kalau ada) prefill dari endpoint /api/influencer-submissions/draft
+      async function loadDraftStatus() {
+        if (!openId || !selectedCampaignId) {
+          if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+          return;
+        }
+        try {
+          const qs = new URLSearchParams({
+            tiktok_user_id: openId,
+            campaign_id: selectedCampaignId,
+            per_page: '1',
+            _: String(Date.now()),
+          }).toString();
+
+          const r = await fetch(`/api/influencer-submissions/draft?${qs}`, {
+            headers: { 'Accept': 'application/json' },
+            credentials: 'same-origin',
+            cache: 'no-store',
+          });
+
+          if (!r.ok) { // endpoint belum ada → skip silently
+            if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+            return;
+          }
+
+          const j = await r.json();
+          const arr = Array.isArray(j) ? j : (j?.data || []);
+          if (!arr.length) {
+            if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+            return;
+          }
+
+          const d = arr[0];
+          // Prefill textarea dari data draft terakhir
+          const txt = d.text || d.draft_text || d.link || d.url || '';
+          if (txt) setDraftText(txt, { force: true });
+
+          showDraftStatus({
+            status: d.status || d.draft_status || 'pending',
+            updated_at: d.updated_at || d.submitted_at || d.created_at,
+            reviewer_note: d.reviewer_note || d.note || '',
+          });
+        } catch {
+          if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+        }
+      }
+
+      function refreshDraftUiAvailability() {
+        const can = !!(openId && selectedCampaignId);
+        if (submitDraftBtn) submitDraftBtn.disabled = !can;
+        if (!can && draftStatusWrap) draftStatusWrap.classList.add('d-none');
+      }
+
+      // Draft submit
+      // Submit draft → POST /api/influencer-submissions/draft
+      submitDraftBtn?.addEventListener('click', async () => {
+        const url = (draftTextEl?.value || '').trim();
+
+        if (!selectedCampaignId || !openId) {
+          showToast('Pilih campaign dulu ya.', 'error');
+          return;
+        }
+        if (!url) {
+          showToast('Link draft tidak boleh kosong.', 'error');
+          draftTextEl?.focus();
+          return;
+        }
+        // validasi URL sederhana
+        const urlOk = /^https?:\/\//i.test(url) || /^(drive|docs)\.google\.com/i.test(url);
+        if (!urlOk) {
+          showToast('Masukkan URL yang valid (http/https).', 'error');
+          draftTextEl?.focus();
+          return;
+        }
+        if (url.length > 2000) {
+          showToast('URL terlalu panjang (maks 2000 karakter).', 'error');
+          draftTextEl?.focus();
+          return;
+        }
+
+        const fd = new FormData();
+        fd.set('campaign_id', String(selectedCampaignId));
+        fd.set('tiktok_user_id', String(openId));
+        fd.set('draft_url', url); // ← CHANGED: backend expects `draft_url`
+
+        setDraftButtonState(true);
+        try {
+          const r = await fetchWithCsrf('/api/influencer-submissions/draft', {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: fd,
+          });
+
+          if (!r.ok) {
+            let msg = 'Gagal mengirim draft.';
+            try {
+              const j = await r.json();
+              if (j?.errors?.draft_url?.[0]) msg = j.errors.draft_url[0];
+              else if (j?.message) msg = j.message;
+            } catch {
+              msg = await r.text();
+            }
+            throw new Error(msg || 'Gagal mengirim draft.');
+          }
+
+          const j = await r.json().catch(()=>({}));
+          showToast(j?.message || 'Draft terkirim. Menunggu approval.');
+
+          // Prefill & status lokal
+          setDraftText(url, { force: true });
+          showDraftStatus({ status: 'pending', updated_at: new Date().toISOString(), reviewer_note: '' });
+
+          // Refresh submission agar status dari DB terambil
+          const fresh = await fetchSubmissionForCampaign({ tiktok_user_id: openId, campaign_id: selectedCampaignId });
+          if (fresh) {
+            currentSubmission = fresh;
+            prefillDraftFromSubmission(currentSubmission);
+          }
+        } catch (err) {
+          showToast(err?.message || 'Gagal mengirim draft.', 'error');
+        } finally {
+          setDraftButtonState(false);
+        }
+      });
+
 
       const applyAcquisitionVisibility = () => {
         const mode = acquisitionEl.value;
@@ -935,19 +764,14 @@ export function render(target, params, query = {}, labelOverride = null) {
         $("#shipping_courier").value           = safe(rec.shipping_courier, '');
         $("#shipping_tracking_number").value   = safe(rec.shipping_tracking_number, '');
 
-        // slot visibility: tampilkan semua yang ada data + minimal required
-        visibleSlots = Math.max(requiredPostCount, 2);
-        for (let i = 3; i <= MAX_SLOTS; i++) if (slotHasData(rec, i)) visibleSlots = Math.max(visibleSlots, i);
-        for (let i = 3; i <= MAX_SLOTS; i++) (i <= visibleSlots) ? showSlot(i) : hideSlot(i);
+        resetSlotVisibility();
+        for (let i = 3; i <= MAX_SLOTS; i++) if (slotHasData(rec, i)) showSlot(i);
         updateAddMoreBtn();
 
         applyAcquisitionVisibility();
 
-        // Prefill draft legacy (slot 1)
+        // Prefill draft dari record submission bila ada
         prefillDraftFromSubmission(rec);
-
-        // update hints
-        applyRequiredAttributes();
       };
 
       // Contact helpers
@@ -967,56 +791,39 @@ export function render(target, params, query = {}, labelOverride = null) {
         const phone = fromReg.phone || fallback.phone || '';
         const email = fromReg.email || fallback.email || '';
         const addr  = fromReg.addr  || fallback.addr  || '';
-        $("#contact_phone").value = phone;
-        $("#contact_email").value = email;
-        $("#contact_address").value = addr;
+        contactPhoneEl.value = phone;
+        contactEmailEl.value = email;
+        contactAddressEl.value = addr;
       };
 
-      function enforceSlotLocks() {
-        for (let i = 1; i <= MAX_SLOTS; i++) {
-          const locked = draftLockBySlot.has(i); // true bila draft ada & belum approved
-          const linkEl = document.getElementById('link-' + i);
-          const dateEl = document.getElementById('post_date_' + i);
-
-          if (linkEl) {
-            // jika locked → disable; jika approved (not locked) biarkan normal (boleh isi)
-            linkEl.disabled = locked ? true : linkEl.disabled && !isEditing ? true : false;
-            linkEl.classList.toggle('is-draft-locked', locked);
-            if (locked) linkEl.title = 'Terkunci: draft untuk slot ini belum disetujui';
-            else linkEl.removeAttribute('title');
-          }
-          if (dateEl) {
-            dateEl.disabled = locked ? true : dateEl.disabled && !isEditing ? true : false;
-            dateEl.classList.toggle('is-draft-locked', locked);
-            if (locked) dateEl.title = 'Terkunci: draft untuk slot ini belum disetujui';
-            else dateEl.removeAttribute('title');
-          }
-        }
-      }
-
       const applyViewMode = () => {
-        // lock fields yang sudah terisi (posts tetap tidak mandatory)
-        const controls = [];
-        for (let i = 1; i <= MAX_SLOTS; i++) {
-          controls.push({ id: 'link-'+i, key: 'link_'+i });
-          controls.push({ id: 'post_date_'+i, key: 'post_date_'+i });
-        }
-        controls.push({ id:'acquisition_method', key:'acquisition_method' });
-        controls.push({ id:'purchase_platform',  key:'purchase_platform'  });
-        controls.push({ id:'purchase_price',     key:'purchase_price'     });
-
-        controls.forEach(({ id, key }) => {
+        const controls = [
+          // slots 1–5
+          { id: 'link-1',  key: 'link_1',  required: true  },
+          { id: 'post_date_1', key: 'post_date_1', required: true  },
+          { id: 'link-2',  key: 'link_2',  required: false },
+          { id: 'post_date_2', key: 'post_date_2', required: false },
+          { id: 'link-3',  key: 'link_3',  required: false },
+          { id: 'post_date_3', key: 'post_date_3', required: false },
+          { id: 'link-4',  key: 'link_4',  required: false },
+          { id: 'post_date_4', key: 'post_date_4', required: false },
+          { id: 'link-5',  key: 'link_5',  required: false },
+          { id: 'post_date_5', key: 'post_date_5', required: false },
+          // acquisition (shipping tetap view-only)
+          { id: 'acquisition_method', key: 'acquisition_method', required: false },
+          { id: 'purchase_platform',  key: 'purchase_platform',  required: false },
+          { id: 'purchase_price',     key: 'purchase_price',     required: false },
+        ];
+        controls.forEach(({ id, key, required }) => {
           const el = $("#"+id);
           if (!el) return;
           const filled = hasVal(currentSubmission?.[key]);
-          el.disabled = filled;              // tetap kunci kalau sudah terisi
-          el.removeAttribute('required');    // pastikan tidak mandatory
+          el.disabled = filled;
+          if (!filled && required) el.setAttribute('required','required'); else el.removeAttribute('required');
         });
 
         // shipping inputs ALWAYS disabled (view-only)
-        [$("#shipping_courier"), $("#shipping_tracking_number")].forEach(el => {
-          el?.setAttribute('disabled','disabled'); el?.removeAttribute('required');
-        });
+        [shippingCourierEl, shippingResiEl].forEach(el => { el?.setAttribute('disabled','disabled'); el?.removeAttribute('required'); });
 
         // file controls
         setFileControls('screenshot_1', getFileUrl(currentSubmission, 'screenshot_1'), { editMode: false });
@@ -1031,30 +838,25 @@ export function render(target, params, query = {}, labelOverride = null) {
         applyAcquisitionVisibility();
         updateButtonsVisibility();
         updateAddMoreBtn();
-
-        // TERAPKAN kunci draft per-slot (approved → tidak dikunci)
-        enforceSlotLocks();
       };
 
       const applyEditMode = () => {
-        // buka semua input (kecuali shipping); posts tidak mandatory
-        for (let i = 1; i <= MAX_SLOTS; i++) {
-          ['link-'+i,'post_date_'+i].forEach(id => {
-            const el = $("#"+id);
-            if (!el) return;
-            el.disabled = false;
-            el.removeAttribute('required');
-          });
-        }
-        ['acquisition_method','purchase_platform','purchase_price'].forEach(id => {
+        [
+          // slots 1–5
+          'link-1','post_date_1','link-2','post_date_2',
+          'link-3','post_date_3','link-4','post_date_4','link-5','post_date_5',
+          // acquisition (shipping tetap tidak diedit)
+          'acquisition_method','purchase_platform','purchase_price'
+        ].forEach(id => {
           const el = $("#"+id);
-          if (el) { el.disabled = false; el.removeAttribute('required'); }
+          if (!el) return;
+          el.disabled = false;
+          if (id === 'link-1' || id === 'post_date_1') el.setAttribute('required','required');
+          else el.removeAttribute('required');
         });
 
-        // shipping tetap disabled
-        [$("#shipping_courier"), $("#shipping_tracking_number")].forEach(el => {
-          el?.setAttribute('disabled','disabled'); el?.removeAttribute('required');
-        });
+        // shipping: tetap disabled (view-only)
+        [shippingCourierEl, shippingResiEl].forEach(el => { el?.setAttribute('disabled','disabled'); el?.removeAttribute('required'); });
 
         setFileControls('screenshot_1', getFileUrl(currentSubmission, 'screenshot_1'), { editMode: true });
         setFileControls('screenshot_2', getFileUrl(currentSubmission, 'screenshot_2'), { editMode: true });
@@ -1068,9 +870,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         applyAcquisitionVisibility();
         updateButtonsVisibility();
         updateAddMoreBtn();
-
-        // Saat edit: tetap hormati lock karena draft belum approved
-        enforceSlotLocks();
       };
 
       const clearSubmissionView = () => {
@@ -1079,23 +878,20 @@ export function render(target, params, query = {}, labelOverride = null) {
         $("#existingNotice")?.classList.add('d-none');
         $("#submissionForm").reset();
 
-        for (let i = 1; i <= MAX_SLOTS; i++) {
-          ['link-'+i,'post_date_'+i].forEach(id => {
-            const el = $("#"+id);
-            if (!el) return;
-            el.disabled = false;
-            el.removeAttribute('required');
-          });
-        }
-        ['acquisition_method','purchase_platform','purchase_price'].forEach(id => {
+        [
+          'link-1','post_date_1','link-2','post_date_2',
+          'link-3','post_date_3','link-4','post_date_4','link-5','post_date_5',
+          'acquisition_method','purchase_platform','purchase_price'
+        ].forEach(id => {
           const el = $("#"+id);
-          if (el) { el.disabled = false; el.removeAttribute('required'); }
+          if (!el) return;
+          el.disabled = false;
+          if (id === 'link-1' || id === 'post_date_1') el.setAttribute('required','required');
+          else el.removeAttribute('required');
         });
 
         // keep shipping view-only
-        [$("#shipping_courier"), $("#shipping_tracking_number")].forEach(el => {
-          el?.setAttribute('disabled','disabled'); el?.removeAttribute('required'); if (el) el.value='';
-        });
+        [shippingCourierEl, shippingResiEl].forEach(el => { el?.setAttribute('disabled','disabled'); el?.removeAttribute('required'); el.value=''; });
 
         setFileControls('screenshot_1', '', { editMode: true });
         setFileControls('screenshot_2', '', { editMode: true });
@@ -1105,18 +901,12 @@ export function render(target, params, query = {}, labelOverride = null) {
         setFileControls('invoice_file', '', { editMode: true });
         setFileControls('review_proof_file', '', { editMode: true });
 
-        // reset draft UI
-        draftStatusWrap?.classList.add('d-none');
-        buildDraftRows(requiredDraftCount);
-        refreshDraftUiAvailability();
-        loadDraftStatus();
+        // kosongkan UI draft (tetap biarkan user bisa isi)
+        if (draftStatusWrap) draftStatusWrap.classList.add('d-none');
+        if (draftTextEl) draftTextEl.value = '';
 
         applyAcquisitionVisibility();
         resetSlotVisibility();
-
-        draftLockBySlot.clear();
-        enforceSlotLocks();
-
         updateButtonsVisibility();
       };
 
@@ -1182,19 +972,6 @@ export function render(target, params, query = {}, labelOverride = null) {
         return Array.from(m.values());
       };
 
-      async function ensureQuotaForCampaign(campaignId) {
-        // hitung minimal required berdasarkan content quota (max 5)
-        const t = await getCampaignContentTarget(campaignId);
-        const minRequired = clampInt(t ?? 1, 1, MAX_SLOTS);
-        requiredPostCount  = minRequired; // hanya hint / default slot; BUKAN mandatory
-        requiredDraftCount = minRequired; // draft rows ditampilkan, tapi submit minimal 1
-
-        buildDraftRows(requiredDraftCount);
-        applyRequiredAttributes();
-        resetSlotVisibility();
-        refreshDraftUiAvailability();
-      }
-
       const loadSubmissionForSelected = async () => {
         isEditing = false;
         refreshDraftUiAvailability();
@@ -1202,11 +979,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         if (!openId || !selectedCampaignId) { clearSubmissionView(); fillContactFields(null, {}); return; }
         try {
           showLoader();
-
-          // Pastikan quota untuk campaign terpilih
-          await ensureQuotaForCampaign(selectedCampaignId);
-
-          // set currentRegistration untuk campaign ini
+          // set currentRegistration for this campaign
           currentRegistration = regsMapByCampaign.get(Number(selectedCampaignId)) || null;
           const contactFallback = getContactFrom(currentRegistration || {});
           fillContactFields(currentRegistration, contactFallback);
@@ -1220,7 +993,7 @@ export function render(target, params, query = {}, labelOverride = null) {
             clearSubmissionView();
           }
 
-          // Status draft terakhir + prefill URLs per-slot
+          // Load status draft terakhir dari endpoint (opsional)
           await loadDraftStatus();
         } catch (e) {
           console.warn('fetchSubmissionForCampaign error', e);
@@ -1281,15 +1054,16 @@ export function render(target, params, query = {}, labelOverride = null) {
       }
 
       // Save Contact button
-      $("#saveContactBtn")?.addEventListener('click', async () => {
+      saveContactBtn?.addEventListener('click', async () => {
         if (!currentRegistration?.id) {
           showToast('Registrasi untuk campaign ini tidak ditemukan.', 'error');
           return;
         }
-        const phone = $("#contact_phone").value.trim();
-        const email = $("#contact_email").value.trim();
-        const addr  = $("#contact_address").value.trim();
+        const phone = contactPhoneEl.value.trim();
+        const email = contactEmailEl.value.trim();
+        const addr  = contactAddressEl.value.trim();
 
+        // minimal validation email jika diisi
         if (email && !/^\S+@\S+\.\S+$/.test(email)) {
           showToast('Format email tidak valid.', 'error');
           return;
@@ -1343,9 +1117,6 @@ export function render(target, params, query = {}, labelOverride = null) {
       const form = $("#submissionForm");
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
-
-        // Posts TIDAK mandatory → tidak ada pre-check jumlah posting
-
         if (!form.checkValidity()) {
           e.stopPropagation();
           form.classList.add("was-validated");
@@ -1370,10 +1141,16 @@ export function render(target, params, query = {}, labelOverride = null) {
         };
 
         // slot 1–5
-        for (let i = 1; i <= MAX_SLOTS; i++) {
-          addField('link-'+i, 'link_'+i, forceAll);
-          addField('post_date_'+i, 'post_date_'+i, forceAll);
-        }
+        addField('link-1','link_1', forceAll);
+        addField('post_date_1','post_date_1', forceAll);
+        addField('link-2','link_2', forceAll);
+        addField('post_date_2','post_date_2', forceAll);
+        addField('link-3','link_3', forceAll);
+        addField('post_date_3','post_date_3', forceAll);
+        addField('link-4','link_4', forceAll);
+        addField('post_date_4','post_date_4', forceAll);
+        addField('link-5','link_5', forceAll);
+        addField('post_date_5','post_date_5', forceAll);
 
         // acquisition (TANPA shipping)
         addField('acquisition_method','acquisition_method', forceAll);
@@ -1381,14 +1158,13 @@ export function render(target, params, query = {}, labelOverride = null) {
         addField('purchase_price','purchase_price', forceAll);
 
         // Files
-        const fileOf = id => $("#"+id)?.files?.[0];
-        const sc1 = fileOf('screenshot_1');
-        const sc2 = fileOf('screenshot_2');
-        const sc3 = fileOf('screenshot_3');
-        const sc4 = fileOf('screenshot_4');
-        const sc5 = fileOf('screenshot_5');
-        const inv = fileOf('invoice_file');
-        const rev = fileOf('review_proof_file');
+        const sc1 = $("#screenshot_1")?.files?.[0];
+        const sc2 = $("#screenshot_2")?.files?.[0];
+        const sc3 = $("#screenshot_3")?.files?.[0];
+        const sc4 = $("#screenshot_4")?.files?.[0];
+        const sc5 = $("#screenshot_5")?.files?.[0];
+        const inv = $("#invoice_file")?.files?.[0];
+        const rev = $("#review_proof_file")?.files?.[0];
         if (sc1) fd.set('screenshot_1', sc1);
         if (sc2) fd.set('screenshot_2', sc2);
         if (sc3) fd.set('screenshot_3', sc3);
@@ -1498,7 +1274,6 @@ export function render(target, params, query = {}, labelOverride = null) {
       }
 
       // Init visibility
-      await ensureQuotaForCampaign(selectedCampaignId || 0); // set default hints/rows
       applyAcquisitionVisibility();
       resetSlotVisibility();
       refreshDraftUiAvailability();

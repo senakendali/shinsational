@@ -23,7 +23,9 @@ export const ownerMenu = [
     icon: "bi-file-earmark-bar-graph",
     can: ["submission.viewAny"],
     children: [
-      { label: "Content Approval", path: "/admin/drafts", icon: "bi-list-check", can: "submission.viewAny" },
+      { label: "KOL", path: "/admin/kol", icon: "bi-people", can: "kol.viewAny" },
+      { label: "Content Approval", path: "/admin/drafts", icon: "bi-list-check", can: "draft.viewAny" },
+      { label: "Manage Shipments", path: "/admin/manage-shipments", icon: "bi-list-check", can: "shipment.viewAny" },
       { label: "Submission", path: "/admin/submissions", icon: "bi-list-check", can: "submission.viewAny" },
     ],
   },

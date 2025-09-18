@@ -16,6 +16,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     brandMod,
     campaignMod,
     submissionMod,
+    registrationMod, // <-- NEW
   ] = await Promise.all([
     import(`/js/components/header.js?v=${v}`),
     import(`/js/components/breadcrumb.js?v=${v}`),
@@ -24,6 +25,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     import(`/js/services/brandService.js?v=${v}`),
     import(`/js/services/campaignService.js?v=${v}`),
     import(`/js/services/influencerSubmissionService.js?v=${v}`),
+    import(`/js/services/influencerRegistrationService.js?v=${v}`), // <-- NEW
   ]);
 
   if (target.dataset.brandDashInstance !== INSTANCE_KEY) return;
@@ -35,6 +37,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const { brandService } = brandMod;
   const { campaignService } = campaignMod;
   const { submissionService } = submissionMod;
+  const { influencerService } = registrationMod; // <-- NEW
 
   // helpers
   const $  = (sel) => target.querySelector(sel);
@@ -49,13 +52,22 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return x.toLocaleString('id-ID');
   };
 
-  // layout (khusus brand)
+  // JSON helpers
+  const parseMaybeJSON = (val) => {
+    if (!val) return null;
+    if (typeof val === 'string') { try { return JSON.parse(val); } catch { return null; } }
+    if (typeof val === 'object') return val;
+    return null;
+  };
+  const unwrapCampaign = (obj) => (obj?.data ?? obj?.campaign ?? obj ?? null);
+
+  // layout
   target.innerHTML = `
     <div id="brand-dashboard-root">
       <div id="__breadcrumb_mount"></div>
 
-      <!-- KPI cards: brand-scope -->
-      <div class="row g-3 mb-4 d-none" id="kpi-cards">
+      <!-- KPI cards (optional) -->
+      <div class="row g-3 mb-2 d-none" id="kpi-cards">
         <div class="col-md-3">
           <div class="dashboard-card text-center h-100 brand">
             <div class="dashboard-card-body">
@@ -91,7 +103,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         </div>
       </div>
 
-      <!-- chart + active campaigns -->
+      <!-- chart + right column -->
       <div class="d-flex flex-column flex-lg-row gap-4 mb-5 pt-2">
         <div class="flex-grow-1">
           <div class="d-flex justify-content-between align-items-start mb-3">
@@ -110,7 +122,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
             </div>
           </div>
 
-          <!-- Donut charts: Actual vs KPI per metric -->
+          <!-- Donut KPI (views/likes/comments/shares) -->
           <div class="row g-3" id="kpi-donuts" style="display:none;">
             <div class="col-6 col-md-3">
               <div class="card h-100">
@@ -160,7 +172,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
             <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Shares</div><div class="fs-5" id="es-shares">-</div></div></div></div>
           </div>
 
-          <!-- KPI targets -->
+          <!-- KPI targets (views/likes/comments/shares) -->
           <div class="mt-3" id="kpi-section">
             <div class="row gx-3 gy-2 d-none" id="kpi-targets">
               <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Target Views</div><div class="fs-6" id="kt-views">-</div></div></div></div>
@@ -172,21 +184,82 @@ export async function render(target, path, query = {}, labelOverride = null) {
         </div>
 
         <div class="w-100 w-lg-50" style="max-width:540px">
-          <div id="selected-campaign-posts" class="mb-3 campaign-posts">
-            <div class="dashboard-card text-center h-100">
-              <div class="card-body">
-                
-                 <h6 class="card-title">TOTAL CONTENT</h6>
-                <div class="fs-3 fw-bold" id="kpi-posts-selected">-</div>
+
+          <!-- TOTAL CONTENT -> 2 box (Info & Donut) -->
+          <div id="content-summary-row" class="row g-3 mb-3 d-none">
+            <div class="col-12 col-md-6">
+              <div class="dashboard-card h-100">
+                <div class="card-body">
+                  <h6 class="card-title mb-2"><i class="bi bi-card-list"></i> CONTENT SUMMARY</h6>
+
+                  <!-- Info rows -->
+                  <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold">
+                      <i class="bi bi-bullseye"></i> Target
+                    </div>
+                    <div class="fs-5 fw-bold" id="kpi-posts-target">-</div>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold">
+                      <i class="bi bi-card-checklist"></i> Sudah Dibuat
+                    </div>
+                    <div class="fs-6 fw-semibold" id="kpi-posts-created">-</div>
+                  </div>
+
+                  <!-- Status rows (placeholder 0) -->
+                  <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold">
+                      <i class="bi bi-hourglass-split"></i> Waiting Draft
+                    </div>
+                    <div class="fs-6 fw-semibold" id="kpi-posts-waiting-draft">0</div>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold">
+                      <i class="bi bi-hourglass-split"></i> Waiting for Approval
+                    </div>
+                    <div class="fs-6 fw-semibold" id="kpi-posts-waiting-approval">0</div>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold">
+                      <i class="bi bi-pencil-square"></i> On Revision
+                    </div>
+                    <div class="fs-6 fw-semibold" id="kpi-posts-revision">0</div>
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center py-1">
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold">
+                      <i class="bi bi-arrow-right-square"></i> Ready to Post
+                    </div>
+                    <div class="fs-6 fw-semibold" id="kpi-posts-ready">0</div>
+                  </div>
+
+                  <div class="small mt-2 text-muted" id="cap-posts-selected"></div>
+                </div>
+              </div>
+            </div>
+            <div class="col-12 col-md-6">
+              <div class="dashboard-card h-100">
+                <div class="card-body d-flex flex-column align-items-center">
+                  <div class="small text-muted mb-2">Progress</div>
+                  <canvas id="donut-content" height="120"></canvas>
+                  <div class="small mt-2 text-center" id="cap-content">-</div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div class="d-flex justify-content-between align-items-center mb-2">
+          <!-- NEW: KOL progress (campaign terpilih) -->
+          <div class="d-flex justify-content-between align-items-center mb-2 d-none" id="kol-stats-header">
+            <h6 class="mb-0 text-uppercase fw-bold"><i class="bi bi-people"></i> KOL SUMMARY (Campaign Terpilih)</h6>
+          </div>
+          <ul class="list-group d-none" id="kol-stats-list">
+            <li class="list-group-item text-muted">Pilih campaign…</li>
+          </ul>
+
+          <!-- Active campaigns for this brand -->
+          <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
             <h6 class="mb-0 text-uppercase fw-bold">
               <i class="bi bi-list"></i> Campaign Aktif Brand Ini
             </h6>
-            
           </div>
           <ul class="list-group" id="active-campaigns">
             <li class="list-group-item text-muted">Memuat…</li>
@@ -207,12 +280,10 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
   // ====== Ambil brand user yang login
   async function getMyBrand() {
-    // 1) dari global (SSR/boot)
     const g = (window.CURRENT_USER || window.__AUTH_USER__ || {});
     if (g?.brand_id || g?.brand?.id) {
       return { id: g.brand_id ?? g.brand?.id ?? null, name: g.brand?.name ?? g.brand_name ?? '-' };
     }
-    // 2) fallback hit endpoint me
     try {
       const res = await fetch('/api/me?include=brand', { credentials: 'include' });
       if (res.ok) {
@@ -243,12 +314,18 @@ export async function render(target, path, query = {}, labelOverride = null) {
   // ==== donut/chart builders
   const donutIds = ['views','likes','comments','shares'];
   const donutCharts = Object.fromEntries(donutIds.map(id => [id, null]));
+  let contentDonut = null;
+
   function destroyDonuts() {
     for (const k of donutIds) {
       try { donutCharts[k]?.destroy?.(); donutCharts[k] = null; } catch {}
       destroyChartIfExists(`donut-${k}`);
     }
+    try { contentDonut?.destroy?.(); } catch {}
+    contentDonut = null;
+    destroyChartIfExists('donut-content');
   }
+
   function renderOneDonut(kind, actual, targetVal) {
     const canvas = $(`#donut-${kind}`);
     const cap = $(`#cap-${kind}`);
@@ -257,7 +334,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
     if (!(Number(targetVal) > 0) && !(Number(actual) > 0)) {
       cap.textContent = '-';
       try { donutCharts[kind]?.destroy?.(); } catch {}
-      donutCharts[kind] = null; return;
+      donutCharts[kind] = null;
+      destroyChartIfExists(`donut-${kind}`);
+      return;
     }
 
     const T = Math.max(0, Number(targetVal)||0);
@@ -282,6 +361,43 @@ export async function render(target, path, query = {}, labelOverride = null) {
       options: { responsive: true, cutout: '65%', plugins: { legend: { display: false } } }
     });
   }
+
+  function renderContentDonut(actual, targetVal) {
+    const canvas = $('#donut-content');
+    const cap = $('#cap-content');
+    if (!canvas || !cap) return;
+
+    if (!(Number(targetVal) > 0) && !(Number(actual) > 0)) {
+      cap.textContent = '-';
+      try { contentDonut?.destroy?.(); } catch {}
+      contentDonut = null;
+      destroyChartIfExists('donut-content');
+      return;
+    }
+
+    const T = Math.max(0, Number(targetVal)||0);
+    const A = Math.max(0, Number(actual)||0);
+    const remain = Math.max(0, T - A);
+    const pct = T > 0 ? Math.min(100, Math.round((A/T)*100)) : 100;
+    cap.textContent = T > 0 ? `${fmtShort(A)} / ${fmtShort(T)} (${pct}%)` : `${fmtShort(A)} (no target)`;
+
+    try { contentDonut?.destroy?.(); } catch {}
+    destroyChartIfExists('donut-content');
+
+    contentDonut = new Chart(canvas.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Dibuat','Sisa'],
+        datasets: [{
+          data: T > 0 ? [Math.min(A, T), remain] : [A, 0],
+          backgroundColor: ['rgba(25,135,84,0.85)', 'rgba(200,200,200,0.45)'],
+          borderWidth: 0
+        }]
+      },
+      options: { responsive: true, cutout: '65%', plugins: { legend: { display: false } } }
+    });
+  }
+
   function renderKpiDonuts(totals, kpi) {
     const wrap = $('#kpi-donuts');
     if (!wrap) return;
@@ -293,6 +409,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     renderOneDonut('comments', totals.comments, kpi.comments);
     renderOneDonut('shares', totals.shares, kpi.shares);
   }
+
   function renderChart(views, likes, comments, shares) {
     const canvas = $('#engagementChart');
     const ctx = canvas.getContext('2d');
@@ -322,13 +439,20 @@ export async function render(target, path, query = {}, labelOverride = null) {
     });
   }
 
-  // === helpers: hitung total konten dari link_1..link_5
+  // === helpers: fields & total konten dari link_1..link_5
   function isFilled(v) {
     if (v == null) return false;
     const s = String(v).trim();
     if (!s) return false;
     if (s.toUpperCase() === 'NULL') return false;
     return true;
+  }
+  function getField(obj, names) {
+    if (!obj) return undefined;
+    for (const n of names) {
+      if (n in obj) return obj[n];
+    }
+    return undefined;
   }
   function countSubmissionPosts(sub) {
     if (!sub || typeof sub !== 'object') return 0;
@@ -343,7 +467,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
   // ===== get brand context
   const myBrand = await getMyBrand();
   if (!myBrand.id) {
-    // brand belum terhubung
     $('#kpi-brand-name').textContent = '—';
     $('#kpi-brand-id').textContent = 'Akun brand belum terhubung';
     hideLoader();
@@ -353,27 +476,26 @@ export async function render(target, path, query = {}, labelOverride = null) {
   $('#kpi-brand-name').textContent = myBrand.name || '(Tanpa nama)';
   $('#kpi-brand-id').textContent = `ID: ${myBrand.id}`;
 
-  // ===== KPI global utk brand
+  // ===== KPI global utk brand (opsional)
   try {
-    // total campaigns by brand
     const cs = await campaignService.getAll({ page: 1, per_page: 100, brand_id: myBrand.id, include: 'brand' });
     const campaigns = cs?.data || [];
     const totalCampaigns = cs?.total ?? cs?.meta?.total ?? cs?.pagination?.total ?? campaigns.length;
 
-    // posts & KOL aggregate (best-effort: sum per-campaign total submissions)
     let totalPosts = 0;
     const kolSet = new Set();
 
-    // batasi looping supaya nggak berat
     const capped = campaigns.slice(0, 50);
     for (const c of capped) {
       const sres = await submissionService.getAll({ page: 1, per_page: 1, campaign_id: c.id });
       const t = sres?.total ?? sres?.meta?.total ?? sres?.pagination?.total ?? (sres?.data?.length || 0);
       totalPosts += Number(t) || 0;
 
-      // ambil 1 page buat distinct kol best-effort
       const sres2 = await submissionService.getAll({ page: 1, per_page: 100, campaign_id: c.id });
-      (sres2?.data || []).forEach(s => { if (s.tiktok_user_id) kolSet.add(String(s.tiktok_user_id)); });
+      (sres2?.data || []).forEach(s => {
+        const key = String(s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id);
+        kolSet.add(key);
+      });
     }
 
     $('#kpi-campaigns').textContent = fmt(totalCampaigns);
@@ -397,7 +519,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       `<option value="">- Pilih Campaign -</option>` +
       items.map(c => {
         const cname = escapeHtml(c.name || `Campaign ${c.id}`);
-        const kt = c.kpi_targets || c.kpi || c.kpiTargets || null;
+        const kt = parseMaybeJSON(c.kpi_targets) || parseMaybeJSON(c.kpi) || parseMaybeJSON(c.kpiTargets) || null;
         if (kt) campaignKpiMap.set(String(c.id), kt);
         return `<option value="${c.id}">${cname}</option>`;
       }).join('');
@@ -462,15 +584,74 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#kt-shares').textContent   = kpi.shares   != null ? fmt(Number(kpi.shares))   : '-';
     row.classList.remove('d-none');
   }
+
   async function ensureCampaignKpi(campaignId) {
     if (!campaignId) return null;
     if (campaignKpiMap.has(String(campaignId))) return campaignKpiMap.get(String(campaignId));
     try {
       const detail = await campaignService.get(campaignId);
-      const kpi = detail?.kpi_targets || detail?.kpi || detail?.kpiTargets || null;
+      const c = unwrapCampaign(detail);
+      const raw = c?.kpi_targets ?? c?.kpi ?? c?.kpiTargets ?? null;
+      const kpi = parseMaybeJSON(raw) || (typeof raw === 'object' ? raw : null);
       if (kpi) campaignKpiMap.set(String(campaignId), kpi);
       return kpi;
     } catch { return null; }
+  }
+
+  // ===== TARGET TOTAL KONTEN: dari kpi_targets.contents (fallback content)
+  async function getCampaignContentTarget(campaignId) {
+    if (!campaignId) return null;
+    const kpi = await ensureCampaignKpi(campaignId);
+    const raw = (kpi?.contents ?? kpi?.content);
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // ===== KOL progress UI helpers (UPDATED: + kolTotal)
+  function renderKolStats(buyCount, rateCount, shipCount, kolTotal) {
+    const header = $('#kol-stats-header');
+    const list = $('#kol-stats-list');
+    if (!header || !list) return;
+    header.classList.remove('d-none');
+    list.classList.remove('d-none');
+    list.innerHTML = `
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">Jumlah KOL Join</div>
+          <div class="small text-muted">total pendaftar/terdaftar</div>
+        </div>
+        <span class="badge bg-dark">${fmt(kolTotal)}</span>
+      </li>
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">KOL Sudah Beli</div>
+          <div class="small text-muted">invoice terunggah</div>
+        </div>
+        <span class="badge bg-primary">${fmt(buyCount)}</span>
+      </li>
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">KOL Sudah Rating</div>
+          <div class="small text-muted">bukti rating terunggah</div>
+        </div>
+        <span class="badge bg-success">${fmt(rateCount)}</span>
+      </li>
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+        <div>
+          <div class="fw-semibold">KOL Dapat Resi</div>
+          <div class="small text-muted">courier & tracking ada</div>
+        </div>
+        <span class="badge bg-warning text-dark">${fmt(shipCount)}</span>
+      </li>
+    `;
+  }
+  function hideKolStats() {
+    $('#kol-stats-header')?.classList.add('d-none');
+    const list = $('#kol-stats-list');
+    if (list) {
+      list.classList.add('d-none');
+      list.innerHTML = `<li class="list-group-item text-muted">Pilih campaign…</li>`;
+    }
   }
 
   // sinkronisasi totals & kpi untuk donuts
@@ -482,35 +663,67 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
     ensureCampaignKpi(campaignId).then((kpi) => {
       if (target.dataset.brandDashInstance !== INSTANCE_KEY) return;
-      lastKpi = kpi || null; applyKpiTargets(lastKpi); renderKpiDonuts(lastTotals, lastKpi);
+      lastKpi = kpi || null; applyKpiTargets(lastKpi); renderKpiDonuts(lastTotals, lastKpi || {});
     });
 
-    const box    = $('#selected-campaign-posts');
-    const boxVal = $('#kpi-posts-selected');
-    const boxCap = $('#cap-posts-selected');
+    const rowWrap  = $('#content-summary-row');
+    const elTarget = $('#kpi-posts-target');
+    const elMade   = $('#kpi-posts-created');
+    const elWaitDraft    = $('#kpi-posts-waiting-draft');
+    const elWaitApproval = $('#kpi-posts-waiting-approval');
+    const elRevision     = $('#kpi-posts-revision');
+    const elReady        = $('#kpi-posts-ready');
 
     if (!campaignId) {
       lastTotals = { views:0, likes:0, comments:0, shares:0 };
-      renderKpiDonuts(lastTotals, lastKpi);
+      renderKpiDonuts(lastTotals, lastKpi || {});
       renderChart(0,0,0,0);
       $('#es-views').textContent = '-';
       $('#es-likes').textContent = '-';
       $('#es-comments').textContent = '-';
       $('#es-shares').textContent = '-';
-      if (box) box.classList.add('d-none');
+
+      if (rowWrap) rowWrap.classList.add('d-none');
+      destroyChartIfExists('donut-content');
+      try { contentDonut?.destroy?.(); } catch {}
+      contentDonut = null;
+      $('#cap-content') && ($('#cap-content').textContent = '-');
+
+      hideKolStats();
+      hideLoader();
       return;
     } else {
-      if (box) box.classList.remove('d-none');
-      if (boxCap) boxCap.textContent = 'Campaign terpilih';
-      if (boxVal) boxVal.textContent = '…';
+      if (rowWrap) rowWrap.classList.remove('d-none');
+      if (elTarget) elTarget.textContent = '…';
+      if (elMade)   elMade.textContent   = '…';
+      if (elWaitDraft)    elWaitDraft.textContent = '0';
+      if (elWaitApproval) elWaitApproval.textContent = '0';
+      if (elRevision)     elRevision.textContent = '0';
+      if (elReady)        elReady.textContent = '0';
+      $('#cap-content') && ($('#cap-content').textContent = 'Memuat…');
+
+      const hdr = $('#kol-stats-header'); const lst = $('#kol-stats-list');
+      hdr?.classList.remove('d-none'); lst?.classList.remove('d-none');
+      if (lst) lst.innerHTML = `<li class="list-group-item text-muted">Menghitung…</li>`;
     }
 
+    const targetPromise = getCampaignContentTarget(campaignId).catch(()=>null);
+
+    // Aggregasi engagement, total konten & KOL progress
     let page = 1;
     const perPage = 100;
     let lastPage = 1;
 
     const agg = { views: 0, likes: 0, comments: 0, shares: 0 };
     let totalPostedContents = 0;
+
+    const buyerSet  = new Set();
+    const ratingSet = new Set();
+    const shipSet   = new Set();
+
+    const kolKeyOf = (s) => String(
+      s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id
+    );
 
     do {
       const res = await submissionService.getAll({
@@ -524,7 +737,18 @@ export async function render(target, path, query = {}, labelOverride = null) {
         agg.likes    += safe(Number(s.likes_1))    + safe(Number(s.likes_2));
         agg.comments += safe(Number(s.comments_1)) + safe(Number(s.comments_2));
         agg.shares   += safe(Number(s.shares_1))   + safe(Number(s.shares_2));
+
         totalPostedContents += countSubmissionPosts(s);
+
+        // progress KOL
+        const key = kolKeyOf(s);
+        const invoice = getField(s, ['invoice_file_path']);
+        if (isFilled(invoice)) buyerSet.add(key);
+        const reviewProof = getField(s, ['review_proof_file_patch','review_proof_file_path']);
+        if (isFilled(reviewProof)) ratingSet.add(key);
+        const courier = getField(s, ['shipping_courir','shipping_courier']);
+        const tracking = getField(s, ['shipping_tracking_number']);
+        if (isFilled(courier) && isFilled(tracking)) shipSet.add(key);
       });
 
       lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
@@ -532,17 +756,29 @@ export async function render(target, path, query = {}, labelOverride = null) {
     } while (page <= lastPage && page <= 5);
 
     lastTotals = agg;
-    renderKpiDonuts(lastTotals, lastKpi);
+    renderKpiDonuts(lastTotals, lastKpi || {});
     renderChart(agg.views, agg.likes, agg.comments, agg.shares);
     $('#es-views').textContent = fmt(agg.views);
     $('#es-likes').textContent = fmt(agg.likes);
     $('#es-comments').textContent = fmt(agg.comments);
     $('#es-shares').textContent = fmt(agg.shares);
 
-    if (boxVal) {
-      boxVal.textContent = fmt(totalPostedContents);
-      boxVal.title = 'Total konten terdeteksi dari kolom link_1 s/d link_5';
-    }
+    const targetVal = await targetPromise;
+    if (elTarget) elTarget.textContent = targetVal != null ? fmt(targetVal) : '-';
+    if (elMade)   elMade.textContent   = fmt(totalPostedContents);
+    renderContentDonut(totalPostedContents, targetVal ?? 0);
+
+    // ===== JUMLAH KOL JOIN (NEW)
+    let kolCount = 0;
+    try {
+      const regs = await influencerService.getAll({ page: 1, per_page: 1, campaign_id: campaignId });
+      kolCount = regs?.total ?? regs?.meta?.total ?? regs?.pagination?.total ?? 0;
+    } catch { kolCount = 0; }
+
+    // Render KOL summary (+kolCount)
+    renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);
+
+    hideLoader();
   }
 
   // initial
@@ -576,8 +812,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     });
   });
 
-  hideLoader();
-
   function escapeHtml(str) {
     if (str == null) return '';
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;')
@@ -605,7 +839,7 @@ export function cleanupBrandDashboard() {
   try { if (window.Chart && typeof Chart.getChart === 'function') {
     const prev = Chart.getChart('engagementChart') || null; prev?.destroy?.();
   }} catch {}
-  ['donut-views','donut-likes','donut-comments','donut-shares'].forEach(id => {
+  ['donut-views','donut-likes','donut-comments','donut-shares','donut-content'].forEach(id => {
     try { const prev = Chart.getChart?.(id) || null; prev?.destroy?.(); } catch {}
   });
 }

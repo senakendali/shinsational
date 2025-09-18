@@ -20,6 +20,7 @@ use App\Models\InfluencerRegistration; // fallback token kalau perlu
 use Illuminate\Routing\Attributes\Middleware;
 
 use App\Exports\InfluencerSubmissionsExport;
+use App\Exports\KolDataExport;
 use Maatwebsite\Excel\Facades\Excel;
 use App\Services\TikTokDisplayApi;
 
@@ -650,83 +651,106 @@ protected function oembedAuthor(?string $url): ?array
     // App\Http\Controllers\Api\InfluencerSubmissionController.php
 
     public function index(Request $request)
-    {
-        $perPage = (int) $request->input('per_page', 10);
+{
+    $perPage = (int) $request->input('per_page', 10);
 
-        $q = \App\Models\InfluencerSubmission::query()
-            ->select([
-                'influencer_submissions.*',
-                \DB::raw('influencer_submissions.created_at as submission_created_at'),
-                \DB::raw('influencer_submissions.updated_at as submission_updated_at'),
-            ])
-            ->addSelect([
-                // identitas dasar (registrations)
-                'full_name' => \App\Models\InfluencerRegistration::select('full_name')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
+    $q = \App\Models\InfluencerSubmission::query()
+        ->select([
+            'influencer_submissions.*',
+            \DB::raw('influencer_submissions.created_at as submission_created_at'),
+            \DB::raw('influencer_submissions.updated_at as submission_updated_at'),
+        ])
+        ->addSelect([
+            // identitas dasar (registrations)
+            'full_name' => \App\Models\InfluencerRegistration::select('full_name')
+                ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                ->latest()->limit(1),
 
-                'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
+            'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
+                ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                ->latest()->limit(1),
 
-                // ✅ avatar utama dari influencer_accounts
-                'avatar_url' => \App\Models\InfluencerAccount::select('avatar_url')
-                    ->whereColumn('influencer_accounts.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->orderByDesc('id')->limit(1),
+            // avatar utama dari influencer_accounts
+            'avatar_url' => \App\Models\InfluencerAccount::select('avatar_url')
+                ->whereColumn('influencer_accounts.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                ->orderByDesc('id')->limit(1),
 
-                // ✅ profile_pic_url = avatar dari accounts, fallback ke registrations.profile_pic_url
-                'profile_pic_url' => \DB::raw("
-                    COALESCE(
+            // profile_pic_url (alias jelas)
+            \DB::raw("
+                COALESCE(
                     (SELECT ia.avatar_url
-                        FROM influencer_accounts ia
-                        WHERE ia.tiktok_user_id = influencer_submissions.tiktok_user_id
-                    ORDER BY ia.id DESC
-                        LIMIT 1),
+                       FROM influencer_accounts ia
+                      WHERE ia.tiktok_user_id = influencer_submissions.tiktok_user_id
+                   ORDER BY ia.id DESC
+                      LIMIT 1),
                     (SELECT ir.profile_pic_url
-                        FROM influencer_registrations ir
-                        WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id
+                       FROM influencer_registrations ir
+                      WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id
                         AND ir.campaign_id    = influencer_submissions.campaign_id
-                    ORDER BY ir.id DESC
-                        LIMIT 1)
-                    )
-                "),
+                   ORDER BY ir.id DESC
+                      LIMIT 1)
+                ) AS profile_pic_url
+            "),
 
-                // kontak dari registrations (terbaru by id)
-                'phone' => \App\Models\InfluencerRegistration::select('phone')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
+            // kontak dari registrations
+            'phone' => \App\Models\InfluencerRegistration::select('phone')
+                ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                ->latest()->limit(1),
 
-                'email' => \App\Models\InfluencerRegistration::select('email')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
+            'email' => \App\Models\InfluencerRegistration::select('email')
+                ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                ->latest()->limit(1),
 
-                'address' => \App\Models\InfluencerRegistration::select('address')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
-            ])
-            ->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name']);
+            'address' => \App\Models\InfluencerRegistration::select('address')
+                ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                ->latest()->limit(1),
 
-        // filter opsional
-        if ($request->filled('tiktok_user_id')) {
-            $q->where('influencer_submissions.tiktok_user_id', $request->input('tiktok_user_id'));
-        }
-        if ($request->filled('campaign_id')) {
-            $q->where('influencer_submissions.campaign_id', (int) $request->input('campaign_id'));
-        }
+            // GENDER dari registrations
+            'gender' => \App\Models\InfluencerRegistration::select('gender')
+                ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                ->latest()->limit(1),
 
-        // terbaru di-update
-        $q->latest('influencer_submissions.updated_at');
+            // AGE: hanya pakai birth_date (kalau NULL → hasil NULL)
+            \DB::raw("
+                TIMESTAMPDIFF(
+                    YEAR,
+                    (
+                        SELECT ir.birth_date
+                          FROM influencer_registrations ir
+                         WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id
+                           AND ir.campaign_id    = influencer_submissions.campaign_id
+                      ORDER BY ir.id DESC
+                         LIMIT 1
+                    ),
+                    CURDATE()
+                ) AS age
+            "),
+        ])
+        ->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name']);
 
-        if ($perPage === 0) {
-            return response()->json($q->get());
-        }
-        return response()->json($q->paginate($perPage));
+    // filter opsional
+    if ($request->filled('tiktok_user_id')) {
+        $q->where('influencer_submissions.tiktok_user_id', $request->input('tiktok_user_id'));
     }
+    if ($request->filled('campaign_id')) {
+        $q->where('influencer_submissions.campaign_id', (int) $request->input('campaign_id'));
+    }
+
+    // terbaru di-update
+    $q->latest('influencer_submissions.updated_at');
+
+    if ($perPage === 0) {
+        return response()->json($q->get());
+    }
+    return response()->json($q->paginate($perPage));
+}
+
 
 
 
@@ -1224,6 +1248,25 @@ protected function oembedAuthor(?string $url): ?array
         return Excel::download(new InfluencerSubmissionsExport($campaignId, $keyword), $filename);
     }
 
+    public function exportKols(Request $request)
+    {
+        $data = $request->validate([
+            'campaign_id' => ['required','integer','exists:campaigns,id'],
+            'q'           => ['nullable','string','max:200'],
+            'gender'      => ['nullable','string', 'in:Male,Female,Other,Unknown'],
+        ]);
+
+        $campaignId = (int) $data['campaign_id'];
+        $keyword    = $data['q'] ?? null;
+        $gender     = $data['gender'] ?? null;
+
+        $campaignName = \App\Models\Campaign::whereKey($campaignId)->value('name') ?? ('campaign_'.$campaignId);
+        $safeName     = Str::of($campaignName)->slug('_');
+        $filename     = 'kols_'.$safeName.'_'.now()->format('Ymd_His').'.xlsx';
+
+        return Excel::download(new KolDataExport($campaignId, $keyword, $gender), $filename);
+    }
+
     public function submitDraft(Request $request)
     {
         // Validasi minimal: identitas + URL draft
@@ -1305,6 +1348,126 @@ protected function oembedAuthor(?string $url): ?array
                 'draft_reviewer_note'  => $submission->draft_reviewer_note,
                 'draft_submitted_at'   => $submission->draft_submitted_at,
                 'updated_at'           => $submission->updated_at,
+            ],
+        ]);
+    }
+
+    public function shipmentsIndex(Request $request)
+    {
+        $data = $request->validate([
+            'campaign_id' => ['required','integer','exists:campaigns,id'],
+            'per_page'    => ['nullable','integer','min:1','max:100'],
+            'q'           => ['nullable','string','max:200'],
+        ]);
+
+        $perPage = (int)($data['per_page'] ?? 20);
+        $kw      = trim((string)($data['q'] ?? ''));
+
+        $q = InfluencerSubmission::query()
+            ->where('campaign_id', (int)$data['campaign_id'])
+            ->where('acquisition_method', 'sent_by_brand')
+            ->select([
+                'influencer_submissions.*',
+                \DB::raw('influencer_submissions.created_at as submission_created_at'),
+                \DB::raw('influencer_submissions.updated_at as submission_updated_at'),
+            ])
+            ->addSelect([
+                // identity from latest registration in this campaign
+                'full_name' => \App\Models\InfluencerRegistration::select('full_name')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+
+                'tiktok_username' => \App\Models\InfluencerRegistration::select('tiktok_username')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+
+                // avatar (prefer accounts → fallback registrations.profile_pic_url)
+                'avatar_url' => \App\Models\InfluencerAccount::select('avatar_url')
+                    ->whereColumn('influencer_accounts.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->orderByDesc('id')->limit(1),
+
+                'profile_pic_url' => \DB::raw("
+                    COALESCE(
+                        (SELECT ia.avatar_url
+                        FROM influencer_accounts ia
+                        WHERE ia.tiktok_user_id = influencer_submissions.tiktok_user_id
+                    ORDER BY ia.id DESC
+                        LIMIT 1),
+                        (SELECT ir.profile_pic_url
+                        FROM influencer_registrations ir
+                        WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id
+                            AND ir.campaign_id    = influencer_submissions.campaign_id
+                    ORDER BY ir.id DESC
+                        LIMIT 1)
+                    )
+                "),
+
+                // contacts from latest registration
+                'phone' => \App\Models\InfluencerRegistration::select('phone')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+
+                'email' => \App\Models\InfluencerRegistration::select('email')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+
+                'address' => \App\Models\InfluencerRegistration::select('address')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()->limit(1),
+            ])
+            ->with(['campaign:id,name']);
+
+        // keyword filter
+        if ($kw !== '') {
+            $q->where(function ($qq) use ($kw) {
+                $kwLike = '%'.$kw.'%';
+                $qq->where('influencer_submissions.tiktok_user_id', 'like', $kwLike)
+                ->orWhereRaw("(SELECT full_name FROM influencer_registrations ir WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id AND ir.campaign_id = influencer_submissions.campaign_id ORDER BY ir.id DESC LIMIT 1) LIKE ?", [$kwLike])
+                ->orWhereRaw("(SELECT phone FROM influencer_registrations ir WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id AND ir.campaign_id = influencer_submissions.campaign_id ORDER BY ir.id DESC LIMIT 1) LIKE ?", [$kwLike])
+                ->orWhereRaw("(SELECT email FROM influencer_registrations ir WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id AND ir.campaign_id = influencer_submissions.campaign_id ORDER BY ir.id DESC LIMIT 1) LIKE ?", [$kwLike])
+                ->orWhereRaw("(SELECT address FROM influencer_registrations ir WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id AND ir.campaign_id = influencer_submissions.campaign_id ORDER BY ir.id DESC LIMIT 1) LIKE ?", [$kwLike]);
+            });
+        }
+
+        $q->latest('influencer_submissions.updated_at');
+
+        return $perPage === 0
+            ? response()->json(['data' => $q->get()])
+            : response()->json($q->paginate($perPage));
+    }
+
+    /**
+     * PATCH /api/influencer-submissions/{id}/shipment
+     * Body: shipping_courier (required), shipping_tracking_number (required)
+     */
+    public function shipmentsUpdate(Request $request, $id)
+    {
+        $submission = InfluencerSubmission::findOrFail($id);
+
+        $data = $request->validate([
+            'shipping_courier'         => ['required','string','max:100'],
+            'shipping_tracking_number' => ['required','string','max:100'],
+        ]);
+
+        // keep acquisition_method if already set; do not force override
+        $submission->shipping_courier         = $data['shipping_courier'];
+        $submission->shipping_tracking_number = $data['shipping_tracking_number'];
+        $submission->save();
+
+        return response()->json([
+            'message' => 'Shipment updated.',
+            'data' => [
+                'id'                        => $submission->id,
+                'campaign_id'               => $submission->campaign_id,
+                'tiktok_user_id'            => $submission->tiktok_user_id,
+                'shipping_courier'          => $submission->shipping_courier,
+                'shipping_tracking_number'  => $submission->shipping_tracking_number,
+                'updated_at'                => $submission->updated_at,
             ],
         ]);
     }

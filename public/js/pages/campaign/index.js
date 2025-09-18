@@ -144,7 +144,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       document.getElementById('campaign-list').innerHTML = `
         <table class="table table-bordered bg-white">
-          <thead>
+          <thead class="table-light">
             <tr><th colspan="7" class="text-uppercase">Campaigns</th></tr>
             <tr>
               <th>#</th>

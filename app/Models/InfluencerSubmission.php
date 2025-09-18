@@ -152,4 +152,20 @@ class InfluencerSubmission extends Model
     {
         return $this->fileViewerUrl($this->review_proof_file_path);
     }
+
+    public function drafts()
+    {
+        return $this->hasMany(InfluencerSubmissionDraft::class, 'influencer_submission_id');
+    }
+
+    public function latestDrafts()
+    {
+        return $this->drafts()->where('is_latest', true);
+    }
+
+    public function draftForSlot(int $slot)
+    {
+        return $this->latestDrafts()->where('slot', $slot)->first();
+    }
+
 }

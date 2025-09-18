@@ -113,6 +113,18 @@ export const routes = [
   {
     path: "/admin/kol",
     label: "KOL",
+    component: () => import("../pages/submission/kol-data.js?v=" + BUILD_ID),
+  },
+
+  {
+    path: "/admin/manage-shipments",
+    label: "Manage Shipments",
+    component: () => import("../pages/shipment/index.js?v=" + BUILD_ID),
+  },
+
+  {
+    path: "/admin/kol",
+    label: "KOL",
     component: () => import("../pages/kol/kol-list.js?v=" + BUILD_ID),
   },
 

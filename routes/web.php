@@ -74,11 +74,13 @@ Route::prefix('api')->middleware(['web','auth'])->group(function () {
     Route::get('influencer-submissions/export', [InfluencerSubmissionController::class, 'export'])
     ->name('api.influencer-submissions.export');
 
+    Route::get('/influencer-submissions/kols/export', [InfluencerSubmissionController::class, 'exportKols']);
+
     // ===== Influencer Submissions: submit draft (KOL)
-    Route::post('influencer-submissions/draft', [InfluencerSubmissionController::class, 'submitDraft'])
+    /*Route::post('influencer-submissions/draft', [InfluencerSubmissionController::class, 'submitDraft'])
     ->name('api.influencer-submissions.submit-draft');
 
-    Route::post('influencer-submissions/{id}/draft-approval', [InfluencerSubmissionController::class, 'approveDraft']);
+    Route::post('influencer-submissions/{id}/draft-approval', [InfluencerSubmissionController::class, 'approveDraft']);*/
 
     // List + filter (campaign_id, q) + pagination
     Route::get('influencer-accounts', [InfluencerAccountController::class, 'index'])

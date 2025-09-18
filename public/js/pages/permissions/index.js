@@ -86,7 +86,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       document.getElementById('perm-list').innerHTML = `
         <table class="table table-bordered bg-white">
-          <thead>
+          <thead class="table-light">
             <tr><th colspan="6" class="text-uppercase">Permissions</th></tr>
             <tr>
               <th style="width:64px">#</th>

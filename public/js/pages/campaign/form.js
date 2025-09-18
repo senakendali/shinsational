@@ -53,7 +53,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         </div>
 
         <div class="col-md-6">
-          ${formGroup('code', 'Kode (opsional)', 'text')}
+          ${formGroup('code', 'Kode (otomatis)', 'text')}
         </div>
 
         <div class="col-md-6">
@@ -115,8 +115,6 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
           </select>
         </div>
 
-       
-
         <!-- NEW: Persyaratan KOL (usia) -->
         <div class="col-12">
           <div class="border rounded p-3">
@@ -142,9 +140,8 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
             <div class="mb-2 fw-semibold">Konten Wajib</div>
             <div class="row g-3">
               <div class="col-md-4">
-                <label class="form-label" for="content_quota">Jumlah Konten Wajib Dibuat</label>
-                <input id="content_quota" name="content_quota" type="text" class="form-control" placeholder="cth. 10">
-                <small class="text-muted">Total minimal konten yang harus diproduksi dalam campaign ini.</small>
+                <label class="form-label" for="content_quota">Jumlah Konten yang Wajib Dibuat oleh KOL</label>
+                <input id="content_quota" name="content_quota" type="text" class="form-control" placeholder="cth. 2">
                 <div class="invalid-feedback d-block" id="error-content_quota"></div>
               </div>
             </div>
@@ -153,7 +150,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
         <div class="col-12">
           <div class="border rounded p-3">
-            <div class="mb-2 fw-semibold">Target KPI (opsional)</div>
+            <div class="mb-2 fw-semibold">Target KPI</div>
             <div class="row g-3">
               <!-- KPI juga TEXT agar bisa diformat 1.000 -->
               <div class="col-md-3">
@@ -174,10 +171,10 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
               </div>
 
               <!-- NEW: KPI Jumlah Konten Upload -->
-              <div class="col-md-3 d-none">
+              <div class="col-md-3">
                 <label class="form-label">Konten Upload (KPI)</label>
-                <input id="kpi_contents" type="text" class="form-control" placeholder="cth. 20">
-                <small class="text-muted">Target jumlah postingan yang berhasil diunggah.</small>
+                <input id="kpi_contents" type="text" class="form-control" placeholder="cth. 200">
+                <small class="text-muted">Target jumlah postingan yang diunggah.</small>
               </div>
             </div>
             <div class="invalid-feedback d-block" id="error-kpi_targets"></div>
@@ -208,6 +205,32 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     history.pushState(null, '', '/admin/campaigns');
     window.dispatchEvent(new PopStateEvent('popstate'));
   });
+
+  // === Random code (6 alfanumerik) + read-only ===
+  function generateRandomCode(len = 6) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let out = '';
+    if (window.crypto && window.crypto.getRandomValues) {
+      const arr = new Uint32Array(len);
+      window.crypto.getRandomValues(arr);
+      for (let i = 0; i < len; i++) out += chars[arr[i] % chars.length];
+    } else {
+      for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return out;
+  }
+  // set readonly + auto value (create only)
+  const codeEl = document.getElementById('code');
+  if (codeEl) {
+    codeEl.readOnly = true;
+    codeEl.placeholder = 'AUTO';
+    if (!isEdit) {
+      codeEl.value = generateRandomCode(6);
+      codeEl.title = 'Kode di-generate otomatis';
+    } else {
+      codeEl.title = 'Read-only';
+    }
+  }
 
   // Auto-slug
   const nameEl = document.getElementById('name');
@@ -280,7 +303,6 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     }
   }
 
-
   // Submit
   document.getElementById('campaign-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -292,7 +314,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
     const fd = new FormData();
     const brand_id = document.getElementById('brand_id').value;
-    const code = (document.getElementById('code')?.value || '').trim();
+    const code = (document.getElementById('code')?.value || '').trim(); // read-only & auto
     const name = (document.getElementById('name')?.value || '').trim();
     const slug = (document.getElementById('slug')?.value || '').trim();
     const objective = (document.getElementById('objective')?.value || '').trim();
@@ -402,9 +424,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       ]);
 
       // brands
-      
       const brands = brandsRes?.data || [];
-      
       const sel = document.getElementById('brand_id');
       sel.innerHTML = '';
       const ph = document.createElement('option');
@@ -421,10 +441,11 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
       sel.value = String(data.brand_id);
 
-
       // fields
       const set = (id, v) => { const el = document.getElementById(id); if (el && el.type !== 'file') el.value = v ?? ''; };
-      set('code', data.code);
+      set('code', data.code); // tetap read-only
+      const codeEl2 = document.getElementById('code'); if (codeEl2) codeEl2.readOnly = true;
+
       set('name', data.name);
       set('slug', data.slug);
       set('objective', data.objective);
@@ -448,14 +469,14 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
       // KPI → format ribuan
       const kt = data.kpi_targets || {};
-      const fmt = (n) => (n == null || n === '' ? '' : formatNumber(String(Math.trunc(Number(n)))));
-      document.getElementById('kpi_views').value = fmt(kt.views);
-      document.getElementById('kpi_likes').value = fmt(kt.likes);
-      document.getElementById('kpi_comments').value = fmt(kt.comments);
-      document.getElementById('kpi_shares').value = fmt(kt.shares);
+      const fmtR = (n) => (n == null || n === '' ? '' : formatNumber(String(Math.trunc(Number(n)))));
+      document.getElementById('kpi_views').value = fmtR(kt.views);
+      document.getElementById('kpi_likes').value = fmtR(kt.likes);
+      document.getElementById('kpi_comments').value = fmtR(kt.comments);
+      document.getElementById('kpi_shares').value = fmtR(kt.shares);
       // NEW: KPI contents
       const kpiContentsEl = document.getElementById('kpi_contents');
-      if (kpiContentsEl) kpiContentsEl.value = fmt(kt.contents);
+      if (kpiContentsEl) kpiContentsEl.value = fmtR(kt.contents);
 
       // hashtags
       const tags = Array.isArray(data.hashtags) ? data.hashtags.join(', ') : '';

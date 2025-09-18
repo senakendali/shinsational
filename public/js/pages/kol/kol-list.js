@@ -317,7 +317,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       const tableHtml = `
         <table class="table table-bordered bg-white">
-          <thead>
+          <thead class="table-light">
             <tr><th colspan="7" class="text-uppercase">KOL Accounts</th></tr>
             <tr>
               <th style="min-width:260px">KOL</th>

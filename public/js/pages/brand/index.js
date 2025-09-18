@@ -100,7 +100,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       document.getElementById('brand-list').innerHTML = `
         <table class="table table-bordered bg-white">
-          <thead>
+          <thead class="table-light">
             <tr><th colspan="6" class="text-uppercase">Brands</th></tr>
             <tr>
               <th>#</th>
