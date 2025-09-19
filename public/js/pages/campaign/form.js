@@ -115,7 +115,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
           </select>
         </div>
 
-        <!-- NEW: Persyaratan KOL (usia) -->
+        <!-- NEW: Persyaratan KOL (usia + gender) -->
         <div class="col-12">
           <div class="border rounded p-3">
             <div class="mb-2 fw-semibold">Persyaratan KOL</div>
@@ -130,9 +130,21 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
                 <input id="max_age" name="max_age" type="number" min="0" class="form-control" placeholder="cth. 35">
                 <div class="invalid-feedback d-block" id="error-max_age"></div>
               </div>
+
+              <!-- NEW: Gender -->
+              <div class="col-md-3">
+                <label class="form-label" for="gender">Gender</label>
+                <select id="gender" name="gender" class="form-select">
+                  <option value="all" selected>All</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+                <div class="invalid-feedback d-block" id="error-gender"></div>
+              </div>
             </div>
           </div>
         </div>
+
 
         <!-- NEW: Kuota konten wajib (per campaign) -->
         <div class="col-12">
@@ -332,6 +344,8 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     const max_age = (document.getElementById('max_age')?.value || '').trim();
     const content_quota_formatted = (document.getElementById('content_quota')?.value || '').trim();
 
+    const gender = (document.getElementById('gender')?.value || 'all').trim();
+
     // KPI (ambil angka polos)
     const numFromField = (id) => {
       const f = (document.getElementById(id)?.value || '').trim();
@@ -382,6 +396,8 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       if (cqDigits) fd.set('content_quota', cqDigits);
     }
 
+    if (gender) fd.set('gender', gender);
+
     if (Object.keys(kpi).length) fd.set('kpi_targets', JSON.stringify(kpi));
     if (tags.length) fd.set('hashtags', JSON.stringify(tags));
     if (notes) fd.set('notes', notes);
@@ -407,6 +423,7 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         if (err.errors.min_age) document.getElementById('error-min_age').textContent = Array.isArray(err.errors.min_age) ? err.errors.min_age.join(', ') : String(err.errors.min_age);
         if (err.errors.max_age) document.getElementById('error-max_age').textContent = Array.isArray(err.errors.max_age) ? err.errors.max_age.join(', ') : String(err.errors.max_age);
         if (err.errors.content_quota) document.getElementById('error-content_quota').textContent = Array.isArray(err.errors.content_quota) ? err.errors.content_quota.join(', ') : String(err.errors.content_quota);
+        
       }
     } finally {
       hideLoader();
@@ -459,6 +476,8 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       // NEW: usia + kuota konten
       set('min_age', data.min_age);
       set('max_age', data.max_age);
+      set('gender', (data.gender || 'all').toLowerCase());
+      
       const cqEl = document.getElementById('content_quota');
       if (cqEl) cqEl.value = (data.content_quota == null || data.content_quota === '') ? '' : formatNumber(String(Math.trunc(Number(data.content_quota))));
 

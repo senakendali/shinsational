@@ -133,7 +133,6 @@ class InfluencerRegistrationController extends Controller
             $campaignId = Campaign::where('slug', $campaignSlug)->value('id');
         }
 
-        // (opsional) fallback format lama: ?my-campaign-slug (tanpa key)
         if (!$campaignId && !$campaignSlug) {
             $raw = $request->getQueryString();
             if ($raw && !str_contains($raw, '=')) {
@@ -141,16 +140,24 @@ class InfluencerRegistrationController extends Controller
             }
         }
 
-        // Ambil setting usia dari campaign (kalau ada)
-        $campaign = $campaignId ? Campaign::select('id', 'name', 'slug', 'min_age', 'max_age')->find($campaignId) : null;
+        // Ambil setting usia + gender dari campaign (kalau ada)  // NEW: gender
+        $campaign = $campaignId
+            ? Campaign::select('id','name','slug','min_age','max_age','gender')->find($campaignId)
+            : null;
 
         // Bersihkan username dari awalan '@'
         $username = ltrim((string) $request->input('tiktok_username', ''), '@');
 
+        // Normalisasi gender input (optional, biar konsisten)   // NEW: normalize gender
+        $gRaw = strtolower((string) $request->input('gender', ''));
+        $gMap = ['m'=>'male','f'=>'female','male'=>'male','female'=>'female','other'=>'other'];
+        $normGender = $gMap[$gRaw] ?? $gRaw;
+
         // Siapkan payload mentah utk validasi/penyimpanan
         $payload = $request->all();
         $payload['tiktok_username'] = $username;
-        $payload['campaign_id']     = $campaignId; // bisa null → validasi akan fail kalau kosong
+        $payload['campaign_id']     = $campaignId;
+        $payload['gender']          = $normGender; // NEW
 
         // ===== Idempotent check (tetap sama) =====
         if ($campaignId && ($request->filled('tiktok_user_id') || $username !== '')) {
@@ -181,8 +188,7 @@ class InfluencerRegistrationController extends Controller
             }
         }
 
-        // ===== Validasi (PAKAI USIA DARI CAMPAIGN) =====
-        // Build aturan usia dinamis dari campaign
+        // ===== Validasi (pakai usia & gender dari campaign) =====
         $birthDateRules = ['required','date'];
         $messages = [
             'tiktok_user_id.required'   => 'ID TikTok wajib diisi.',
@@ -202,13 +208,11 @@ class InfluencerRegistrationController extends Controller
         ];
 
         if ($campaign) {
-            // umur ≥ min_age  → lahir <= today - min_age tahun
             if ($campaign->min_age !== null) {
                 $minAgeCutoff = \Carbon\Carbon::today()->subYears((int)$campaign->min_age)->format('Y-m-d');
                 $birthDateRules[] = 'before_or_equal:'.$minAgeCutoff;
                 $messages['birth_date.before_or_equal'] = 'Umur minimal '.$campaign->min_age.' tahun.';
             }
-            // umur ≤ max_age  → lahir >= today - max_age tahun
             if ($campaign->max_age !== null) {
                 $maxAgeCutoff = \Carbon\Carbon::today()->subYears((int)$campaign->max_age)->format('Y-m-d');
                 $birthDateRules[] = 'after_or_equal:'.$maxAgeCutoff;
@@ -228,6 +232,15 @@ class InfluencerRegistrationController extends Controller
             'profile_pic_url'  => ['nullable','url','max:2048'],
             'campaign_id'      => ['required','exists:campaigns,id'],
         ];
+
+        // === NEW: pembatasan gender sesuai campaign
+        if ($campaign && in_array($campaign->gender, ['male','female'], true)) {
+            // timpa/ketatkan rule 'gender' supaya harus sama dengan campaign
+            $rules['gender'] = ['required', \Illuminate\Validation\Rule::in([$campaign->gender])];
+            $messages['gender.in'] = 'Campaign ini hanya menerima KOL ' .
+                ($campaign->gender === 'male' ? 'laki-laki.' : 'perempuan.');
+        }
+        // kalau campaign->gender = 'all', rule default di atas tetap berlaku (male|female|other diperbolehkan)
 
         // Unik PER CAMPAIGN
         if ($campaignId) {
@@ -265,6 +278,7 @@ class InfluencerRegistrationController extends Controller
             'data'    => $reg->load('campaign:id,name,slug'),
         ], 201);
     }
+
 
 
     public function update(Request $request, $id)
