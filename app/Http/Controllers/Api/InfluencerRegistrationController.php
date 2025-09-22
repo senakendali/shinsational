@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\InfluencerRegistration;
+use App\Models\InfluencerSubmission;
 use App\Models\Campaign;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -11,6 +12,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use App\Models\InfluencerAccount;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 
 class InfluencerRegistrationController extends Controller
@@ -124,6 +127,216 @@ class InfluencerRegistrationController extends Controller
      */
 
     public function store(Request $request)
+    {
+        // --- Resolve campaign dari form/query ---
+        $campaignId   = $request->integer('campaign_id');
+        $campaignSlug = (string) $request->input('campaign', '');
+
+        if (!$campaignId && $campaignSlug) {
+            $campaignId = Campaign::where('slug', $campaignSlug)->value('id');
+        }
+
+        if (!$campaignId && !$campaignSlug) {
+            $raw = $request->getQueryString();
+            if ($raw && !str_contains($raw, '=')) {
+                $campaignId = Campaign::where('slug', $raw)->value('id');
+            }
+        }
+
+        // Ambil setting usia + gender dari campaign (kalau ada)  // NEW: gender
+        $campaign = $campaignId
+            ? Campaign::select('id','name','slug','min_age','max_age','gender')->find($campaignId)
+            : null;
+
+        // Bersihkan username dari awalan '@'
+        $username = ltrim((string) $request->input('tiktok_username', ''), '@');
+
+        // Normalisasi gender input (optional, biar konsisten)   // NEW: normalize gender
+        $gRaw = strtolower((string) $request->input('gender', ''));
+        $gMap = ['m'=>'male','f'=>'female','male'=>'male','female'=>'female','other'=>'other'];
+        $normGender = $gMap[$gRaw] ?? $gRaw;
+
+        // Siapkan payload mentah utk validasi/penyimpanan
+        $payload = $request->all();
+        $payload['tiktok_username'] = $username;
+        $payload['campaign_id']     = $campaignId;
+        $payload['gender']          = $normGender; // NEW
+
+        // ===== Idempotent check (tetap sama) =====
+        if ($campaignId && ($request->filled('tiktok_user_id') || $username !== '')) {
+            $existing = InfluencerRegistration::where('campaign_id', $campaignId)
+                ->where(function ($q) use ($request, $username) {
+                    $tid = (string) $request->input('tiktok_user_id', '');
+                    if ($tid !== '') $q->orWhere('tiktok_user_id', $tid);
+                    if ($username !== '') $q->orWhere('tiktok_username', $username);
+                })
+                ->latest('id')
+                ->first();
+
+            if ($existing) {
+                $fillable = ['full_name','phone','address','birth_date','profile_pic_url','gender'];
+                $update = [];
+                foreach ($fillable as $f) {
+                    if (empty($existing->$f) && $request->filled($f)) {
+                        $update[$f] = $request->input($f);
+                    }
+                }
+                if ($update) $existing->fill($update)->save();
+
+                // === NEW: pastikan submission-nya ada (buat kalau belum ada)
+                $this->ensureSubmissionFor($existing->campaign_id, $existing);
+
+                return response()->json([
+                    'message' => 'Anda sudah terdaftar untuk campaign ini.',
+                    'exists'  => true,
+                    'data'    => $existing->load('campaign:id,name,slug'),
+                ], 200);
+            }
+        }
+
+        // ===== Validasi (pakai usia & gender dari campaign) =====
+        $birthDateRules = ['required','date'];
+        $messages = [
+            'tiktok_user_id.required'   => 'ID TikTok wajib diisi.',
+            'full_name.required'        => 'Nama lengkap wajib diisi.',
+            'tiktok_username.required'  => 'Username TikTok wajib diisi.',
+            'tiktok_username.regex'     => 'Username hanya boleh huruf, angka, underscore, dan titik.',
+            'phone.required'            => 'Nomor telepon wajib diisi.',
+            'email.required'            => 'Email wajib diisi.',
+            'address.required'          => 'Alamat wajib diisi.',
+            'birth_date.required'       => 'Tanggal lahir wajib diisi.',
+            'birth_date.date'           => 'Tanggal lahir tidak valid.',
+            'gender.required'           => 'Gender wajib diisi.',
+            'gender.in'                 => 'Gender tidak valid.',
+            'profile_pic_url.url'       => 'URL foto profil tidak valid.',
+            'campaign_id.required'      => 'Campaign tidak ditemukan.',
+            'campaign_id.exists'        => 'Campaign tidak valid.',
+        ];
+
+        if ($campaign) {
+            if ($campaign->min_age !== null) {
+                $minAgeCutoff = \Carbon\Carbon::today()->subYears((int)$campaign->min_age)->format('Y-m-d');
+                $birthDateRules[] = 'before_or_equal:'.$minAgeCutoff;
+                $messages['birth_date.before_or_equal'] = 'Umur minimal '.$campaign->min_age.' tahun.';
+            }
+            if ($campaign->max_age !== null) {
+                $maxAgeCutoff = \Carbon\Carbon::today()->subYears((int)$campaign->max_age)->format('Y-m-d');
+                $birthDateRules[] = 'after_or_equal:'.$maxAgeCutoff;
+                $messages['birth_date.after_or_equal'] = 'Umur maksimal '.$campaign->max_age.' tahun.';
+            }
+        }
+
+        $rules = [
+            'tiktok_user_id'   => ['required','string','max:100'],
+            'full_name'        => ['required','string','max:150'],
+            'tiktok_username'  => ['required','string','max:100','regex:/^[A-Za-z0-9_.]+$/'],
+            'phone'            => ['required','string','max:30'],
+            'email'            => ['required','email','max:255'],
+            'address'          => ['required','string','max:255'],
+            'birth_date'       => $birthDateRules,
+            'gender'           => ['required', \Illuminate\Validation\Rule::in(['male','female','other'])],
+            'profile_pic_url'  => ['nullable','url','max:2048'],
+            'campaign_id'      => ['required','exists:campaigns,id'],
+        ];
+
+        // === NEW: pembatasan gender sesuai campaign
+        if ($campaign && in_array($campaign->gender, ['male','female'], true)) {
+            $rules['gender'] = ['required', \Illuminate\Validation\Rule::in([$campaign->gender])];
+            $messages['gender.in'] = 'Campaign ini hanya menerima KOL ' .
+                ($campaign->gender === 'male' ? 'laki-laki.' : 'perempuan.');
+        }
+
+        // Unik PER CAMPAIGN
+        if ($campaignId) {
+            $rules['tiktok_user_id'][] = \Illuminate\Validation\Rule::unique('influencer_registrations', 'tiktok_user_id')
+                ->where(fn($q) => $q->where('campaign_id', $campaignId));
+            $rules['tiktok_username'][] = \Illuminate\Validation\Rule::unique('influencer_registrations', 'tiktok_username')
+                ->where(fn($q) => $q->where('campaign_id', $campaignId));
+            $messages['tiktok_user_id.unique']  = 'Akun TikTok ini sudah terdaftar untuk campaign ini.';
+            $messages['tiktok_username.unique'] = 'Username TikTok ini sudah terdaftar untuk campaign ini.';
+        }
+
+        $validated = validator($payload, $rules, $messages)->validate();
+
+        // Simpan row baru + pastikan submission tersedia (pakai transaksi biar rapi)
+        $reg = \DB::transaction(function () use ($validated) {
+            $reg = InfluencerRegistration::create($validated);
+
+            // === Link token akun (optional)
+            if ($reg->tiktok_user_id) {
+                $acc = InfluencerAccount::where('tiktok_user_id', $reg->tiktok_user_id)->first();
+                if ($acc) {
+                    $reg->token_type        = $acc->token_type ?: ($reg->token_type ?: 'Bearer');
+                    $reg->access_token      = $acc->access_token;
+                    $reg->refresh_token     = $acc->refresh_token;
+                    $reg->expires_at        = $acc->expires_at ? \Carbon\Carbon::parse($acc->expires_at) : null;
+                    $reg->last_refreshed_at = $acc->last_refreshed_at ?: now();
+                    $reg->revoked_at        = null;
+                    $reg->scopes            = $acc->scopes ?? [];
+                    $reg->save();
+                }
+            }
+
+            // === NEW: ensure submission row exists for this KOL & campaign
+            $this->ensureSubmissionFor($reg->campaign_id, $reg);
+
+            return $reg;
+        });
+
+        return response()->json([
+            'message' => 'Registrasi berhasil disimpan.',
+            'exists'  => false,
+            'data'    => $reg->load('campaign:id,name,slug'),
+        ], 201);
+    }
+
+    /**
+     * Pastikan ada 1 baris submission untuk (campaign_id, tiktok_user_id).
+     * Tidak overwrite jika sudah ada. Inisialisasi angka ke 0 agar agregasi aman.
+     */
+    protected function ensureSubmissionFor($campaignId, $reg): void
+    {
+        if (!$campaignId || !$reg?->tiktok_user_id) return;
+
+        $submission = InfluencerSubmission::where('campaign_id', $campaignId)
+            ->where('tiktok_user_id', $reg->tiktok_user_id)
+            ->first();
+
+        if ($submission) return;
+
+        $submission = new InfluencerSubmission();
+        $submission->campaign_id     = $campaignId;
+        $submission->tiktok_user_id  = $reg->tiktok_user_id;
+        // simpan beberapa info bantu (jika kolom ada di tabel)
+        if (Schema::hasColumn('influencer_submissions', 'tiktok_username')) {
+            $submission->tiktok_username = $reg->tiktok_username ?? null;
+        }
+        if (Schema::hasColumn('influencer_submissions', 'influencer_id')) {
+            $submission->influencer_id = $reg->id; // relasi balik ke registration kalau ada kolomnya
+        }
+        if (Schema::hasColumn('influencer_submissions', 'influencer_name')) {
+            $submission->influencer_name = $reg->full_name ?? null;
+        }
+
+        // Inisialisasi metric ke 0 agar perhitungan tidak NaN
+        foreach ([1,2,3,4,5] as $i) {
+            foreach (['views','likes','comments','shares'] as $m) {
+                $col = "{$m}_{$i}";
+                if (Schema::hasColumn('influencer_submissions', $col)) {
+                    $submission->{$col} = 0;
+                }
+            }
+            $linkCol = "link_{$i}";
+            if (Schema::hasColumn('influencer_submissions', $linkCol)) {
+                $submission->{$linkCol} = null;
+            }
+        }
+
+        $submission->save();
+    }
+
+
+    public function store_(Request $request)
     {
         // --- Resolve campaign dari form/query ---
         $campaignId   = $request->integer('campaign_id');

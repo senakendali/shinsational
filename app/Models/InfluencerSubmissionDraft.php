@@ -17,6 +17,8 @@ class InfluencerSubmissionDraft extends Model
         'reviewed_at',
         'reviewed_by',
         'reviewer_note',
+        'reviewer_note_1',
+        'reviewer_note_2',
         'revision',
         'is_latest',
     ];

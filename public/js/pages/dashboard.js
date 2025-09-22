@@ -125,11 +125,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
                 <div class="card-body">
                   <h6 class="card-title mb-2"><i class="bi bi-card-list"></i> CONTENT SUMMARY</h6>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-bullseye"></i> Target</div>
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-bullseye"></i> KPI</div>
                     <div class="fs-5 fw-bold" id="kpi-posts-target">-</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-card-checklist"></i> Sudah Dibuat</div>
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-card-checklist"></i> Posted</div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-created">-</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
@@ -137,7 +137,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-draft">0</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-hourglass-split"></i> Waiting for Approval</div>
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-hourglass-split"></i> ⁠Waiting feedback</div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-approval">0</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
@@ -600,21 +600,24 @@ export async function render(target, path, query = {}, labelOverride = null) {
     list.innerHTML = `
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">Jumlah KOL Join</div>
-          <div class="small text-muted">total pendaftar/terdaftar</div>
+          <div class="fw-semibold"> ⁠KOL locked</div>
+          <div class="small text-muted">Total KOL sudah daftar</div>
         </div>
         <span class="badge bg-dark">${fmt(kolTotal)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
-        <div><div class="fw-semibold">KOL Sudah Beli</div><div class="small text-muted">invoice terunggah</div></div>
+        <div><div class="fw-semibold">⁠Done purchased</div>
+        <div class="small text-muted">⁠Total KOL sudah beli product</div></div>
         <span class="badge bg-primary">${fmt(buyCount)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
-        <div><div class="fw-semibold">KOL Sudah Rating</div><div class="small text-muted">bukti rating terunggah</div></div>
+        <div><div class="fw-semibold">⁠Done Rating & Review
+        </div><div class="small text-muted">Total KOL sudah upload bukti rating & review</div></div>
         <span class="badge bg-success">${fmt(rateCount)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
-        <div><div class="fw-semibold">KOL Dapat Resi</div><div class="small text-muted">courier & tracking ada</div></div>
+        <div><div class="fw-semibold">Product Sent</div>
+        <div class="small text-muted">Total KOL sudah dapat resi</div></div>
         <span class="badge bg-warning text-dark">${fmt(shipCount)}</span>
       </li>
     `;
@@ -672,14 +675,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
       if (lst) lst.innerHTML = `<li class="list-group-item text-muted">Menghitung…</li>`;
     }
 
-    const targetPromise = getCampaignContentTarget(campaignId).catch(() => null);
-
+    // ===== Engagement totals (views/likes/comments/shares dari submissions)
     let page = 1;
     const perPage = 100;
     let lastPage = 1;
-
     const agg = { views: 0, likes: 0, comments: 0, shares: 0 };
-    let totalPostedContents = 0;
 
     const subLinksMap = new Map();
     const buyerSet  = new Set();
@@ -698,8 +698,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
         agg.likes    += safe(Number(s.likes_1))    + safe(Number(s.likes_2));
         agg.comments += safe(Number(s.comments_1)) + safe(Number(s.comments_2));
         agg.shares   += safe(Number(s.shares_1))   + safe(Number(s.shares_2));
-
-        totalPostedContents += countSubmissionPosts(s);
 
         const id = s.id;
         const pres = {}; for (let i = 1; i <= 5; i++) pres[i] = isFilled(s[`link_${i}`]);
@@ -727,12 +725,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#es-comments').textContent = fmt(agg.comments);
     $('#es-shares').textContent = fmt(agg.shares);
 
-    const targetVal = await targetPromise;
-    if (elTarget) elTarget.textContent = targetVal != null ? fmt(targetVal) : '-';
-    if (elMade)   elMade.textContent   = fmt(totalPostedContents);
-    renderContentDonut(totalPostedContents, targetVal ?? 0);
-
-    // ===== Waiting Draft = (#KOL * perKol) - (jumlah draft yang sudah dibuat untuk slot 1..perKol)
+    // ===== Ambil KOL count & target konten per KOL
     let kolCount = 0;
     try {
       const regs = await influencerService.getAll({ page: 1, per_page: 1, campaign_id: campaignId });
@@ -740,12 +733,27 @@ export async function render(target, path, query = {}, labelOverride = null) {
     } catch { kolCount = 0; }
     const perKol = await getCampaignContentPerKol(campaignId);
 
+    // ===== Ambil Target dari KPI campaign (fallback ke KOL*perKol jika kosong)
+    const kpiTargetVal = await getCampaignContentTarget(campaignId);
+    const fallbackTarget = Number(kolCount) * Number(perKol || 1);
+    const contentTarget = Number.isFinite(kpiTargetVal) ? Number(kpiTargetVal) : fallbackTarget;
+    if (elTarget) elTarget.textContent = fmt(contentTarget);
+
+    // ===== Hitung total draft dibuat (semua status, slot 1..perKol)
     let totalDraftsCreated = 0;
     for (let slot = 1; slot <= perKol; slot++) {
       totalDraftsCreated += await countDrafts(campaignId, { slot }); // semua status
     }
-    const waitingDraftTotal = Math.max(0, (Number(kolCount) * Number(perKol)) - Number(totalDraftsCreated));
+
+    // ===== Content Summary: Sudah Dibuat = total draft dibuat
+    if (elMade) elMade.textContent = fmt(totalDraftsCreated);
+
+    // ===== Waiting Draft = Target - Sudah Dibuat (dibatasi >= 0)
+    const waitingDraftTotal = Math.max(0, Number(contentTarget) - Number(totalDraftsCreated));
     if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
+
+    // ===== Donut Progress: pakai draft vs target
+    renderContentDonut(totalDraftsCreated, contentTarget);
 
     // ===== Waiting for Approval = pending
     const draftPendingCount = await countDrafts(campaignId, { status: 'pending' });
@@ -755,7 +763,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const draftRejectedCount = await countDrafts(campaignId, { status: 'rejected' });
     if (elRevision) elRevision.textContent = fmt(draftRejectedCount);
 
-    // ===== Ready to Post = approved tapi slot BELUM dipost
+    // ===== Ready to Post = approved tapi slot BELUM dipost (link kosong)
     const approvedDrafts = await fetchApprovedDraftsForReadyToPost(campaignId);
     let readyToPost = 0;
     for (const row of approvedDrafts) {
@@ -768,8 +776,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }
     if (elReady) elReady.textContent = fmt(readyToPost);
 
+    // ===== KOL Stats
     renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);
-
   }
 
   await loadCampaignEngagement(currentCampaignId);

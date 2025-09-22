@@ -176,13 +176,16 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return r.json();
   }
 
-  async function updateDraftApprovalInline(draftId, { status, note }) {
+  // Kirim 2 reviewer note terpisah
+  async function updateDraftApprovalInline(draftId, { status, note1, note2 }) {
     const r = await fetchWithCsrf(`/api/influencer-submissions/draft/${encodeURIComponent(draftId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         status: String(status || 'pending').toLowerCase(),
-        reviewer_note: note || null,
+        reviewer_note_1: note1 ?? null,
+        reviewer_note_2: note2 ?? null,
+        reviewer_note: null, // legacy field dimatikan
       })
     });
     if (!r.ok) {
@@ -246,7 +249,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
             const link = d.url || '';
             const hasLink = !!(link && link.trim());
             const updated = fmtDateTime(d.updated_at || d.submitted_at);
-            const noteVal = (d.reviewer_note || '').replace(/"/g,'&quot;');
+            const note1Val = (d.reviewer_note_1 ?? d.reviewer_note ?? '').replace(/"/g,'&quot;');
+            const note2Val = (d.reviewer_note_2 ?? '').replace(/"/g,'&quot;');
 
             return `
               <tr data-draft-id="${d.id}">
@@ -271,9 +275,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
                     <option value="rejected" ${d.status==='rejected'?'selected':''}>Need to Revise</option>
                   </select>
                 </td>
-                <td>
-                  <input type="text" class="form-control form-control-sm js-note"
-                         placeholder="Catatan untuk KOL…" value="${noteVal}">
+                <td style="min-width:220px">
+                  <input type="text" class="form-control form-control-sm js-note-1"
+                         placeholder="Reviewer Note #1…" value="${note1Val}">
+                </td>
+                <td style="min-width:220px">
+                  <input type="text" class="form-control form-control-sm js-note-2"
+                         placeholder="Reviewer Note #2…" value="${note2Val}">
                 </td>
                 <td style="width:160px" class="text-muted small">${updated}</td>
                 <td style="width:130px" class="text-end">
@@ -305,7 +313,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
                         <th style="width:160px">Draft</th>
                         <th style="width:${BADGE_WIDTH + 20}px">Status</th>
                         <th style="width:200px">Action</th>
-                        <th>Reviewer Note</th>
+                        <th style="min-width:220px">Reviewer Note (Brand)</th>
+                        <th style="min-width:220px">Reviewer Note (Dream)</th>
                         <th style="width:160px">Updated</th>
                         <th style="width:130px"></th>
                       </tr>
@@ -357,25 +366,26 @@ export async function render(target, path, query = {}, labelOverride = null) {
     listWrap.querySelectorAll('tr[data-draft-id]').forEach(tr => {
       const draftId = tr.getAttribute('data-draft-id');
       const statusSel = tr.querySelector('.js-status');
-      const noteEl = tr.querySelector('.js-note');
+      const note1El = tr.querySelector('.js-note-1');
+      const note2El = tr.querySelector('.js-note-2');
       const saveBtn = tr.querySelector('.js-save');
 
-      // Enter di input note => trigger simpan
-      noteEl?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          e.preventDefault(); // jangan submit form/line-break
-          saveBtn?.click();
-        }
+      // Enter di input note#1 / note#2 => trigger simpan
+      const enterToSave = (el) => el?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); saveBtn?.click(); }
       });
+      enterToSave(note1El);
+      enterToSave(note2El);
 
       saveBtn?.addEventListener('click', async () => {
         const status = statusSel?.value || 'pending';
-        const note = (noteEl?.value || '').trim();
+        const note1 = (note1El?.value || '').trim();
+        const note2 = (note2El?.value || '').trim();
         const old = saveBtn.innerHTML;
         saveBtn.disabled = true;
         saveBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Simpan…`;
         try {
-          await updateDraftApprovalInline(draftId, { status, note });
+          await updateDraftApprovalInline(draftId, { status, note1, note2 });
           showToast('Approval tersimpan.');
           await loadDrafts(currentPage);
         } catch (e) {

@@ -195,13 +195,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
                   <!-- Info rows -->
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <div class="small text-muted text-uppercase fs-12 fw-semibold">
-                      <i class="bi bi-bullseye"></i> Target
+                      <i class="bi bi-bullseye"></i> KPI
                     </div>
                     <div class="fs-5 fw-bold" id="kpi-posts-target">-</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <div class="small text-muted text-uppercase fs-12 fw-semibold">
-                      <i class="bi bi-card-checklist"></i> Sudah Dibuat
+                      <i class="bi bi-card-checklist"></i> Posted
                     </div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-created">-</div>
                   </div>
@@ -215,7 +215,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <div class="small text-muted text-uppercase fs-12 fw-semibold">
-                      <i class="bi bi-hourglass-split"></i> Waiting for Approval
+                      <i class="bi bi-hourglass-split"></i> Waiting feedback
+
                     </div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-approval">0</div>
                   </div>
@@ -309,6 +310,71 @@ export async function render(target, path, query = {}, labelOverride = null) {
         if (found?.destroy) found.destroy();
       }
     } catch {}
+  }
+
+  // === CSRF & Draft helpers (minimal) ===
+  function getCsrfToken() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    if (m?.content) return m.content;
+    const xsrf = document.cookie.split(';').map(s=>s.trim()).find(s=>s.startsWith('XSRF-TOKEN='));
+    if (!xsrf) return '';
+    try { return decodeURIComponent(xsrf.split('=')[1]); } catch { return ''; }
+  }
+  async function fetchWithCsrf(input, init = {}) {
+    const headers = new Headers(init.headers || {});
+    headers.set('X-Requested-With', 'XMLHttpRequest');
+    const token = getCsrfToken();
+    if (token) headers.set('X-CSRF-TOKEN', token);
+    return fetch(input, { ...init, headers, credentials: 'same-origin' });
+  }
+  // Draft pagination (support status & slot)
+  async function fetchDraftPage({ campaign_id, status = '', slot = '', page = 1, per_page = 50 }) {
+    const qs = new URLSearchParams({
+      campaign_id: String(campaign_id),
+      per_page: String(per_page),
+      page: String(page),
+    });
+    if (status) qs.set('status', status);
+    if (slot) qs.set('slot', String(slot));
+    const url = `/api/influencer-submissions/draft/with-influencer?${qs.toString()}`;
+    const r = await fetchWithCsrf(url);
+    if (!r.ok) throw new Error('Gagal memuat draft');
+    return r.json();
+  }
+  async function countDrafts(campaignId, { status = '', slot = '' } = {}) {
+    let total = 0, page = 1, lastPage = 1, perPage = 50;
+    do {
+      const res = await fetchDraftPage({ campaign_id: campaignId, status, slot, page, per_page: perPage });
+      const pTotal = res?.total ?? res?.meta?.total ?? res?.pagination?.total;
+      if (typeof pTotal === 'number') {
+        total = pTotal;
+        lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
+        break;
+      } else {
+        const data = res?.data || res;
+        const arr = Array.isArray(data) ? data : (data?.data || []);
+        total += Array.isArray(arr) ? arr.length : 0;
+        lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
+      }
+      page += 1;
+    } while (page <= lastPage);
+    return total;
+  }
+  // (opsional) baca content per KOL dari campaign/kpi
+  async function getCampaignContentPerKol(campaignId) {
+    if (!campaignId) return 1;
+    try {
+      const detail = await campaignService.get(campaignId);
+      const c = unwrapCampaign(detail);
+      if (!c) return 1;
+      const direct = Number(c.contents_per_kol ?? c.content_per_kol ?? c.posts_per_kol ?? c.post_per_kol);
+      if (Number.isFinite(direct) && direct > 0) return direct;
+      const kpiRaw = c?.kpi_targets ?? c?.kpi ?? c?.kpiTargets ?? null;
+      const kpi = parseMaybeJSON(kpiRaw) || (typeof kpiRaw === 'object' ? kpiRaw : null);
+      const fromKpi = Number(kpi?.contents_per_kol ?? kpi?.content_per_kol ?? kpi?.posts_per_kol ?? kpi?.post_per_kol);
+      if (Number.isFinite(fromKpi) && fromKpi > 0) return fromKpi;
+      return 1;
+    } catch { return 1; }
   }
 
   // ==== donut/chart builders
@@ -617,29 +683,29 @@ export async function render(target, path, query = {}, labelOverride = null) {
     list.innerHTML = `
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">Jumlah KOL Join</div>
-          <div class="small text-muted">total pendaftar/terdaftar</div>
+          <div class="fw-semibold"> ⁠KOL locked</div>
+          <div class="small text-muted">Total KOL sudah daftar</div>
         </div>
         <span class="badge bg-dark">${fmt(kolTotal)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">KOL Sudah Beli</div>
-          <div class="small text-muted">invoice terunggah</div>
+          <div class="fw-semibold">⁠Done purchased</div>
+          <div class="small text-muted">⁠Total KOL sudah beli product</div>
         </div>
         <span class="badge bg-primary">${fmt(buyCount)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">KOL Sudah Rating</div>
-          <div class="small text-muted">bukti rating terunggah</div>
+          <div class="fw-semibold">⁠Done Rating & Review</div>
+          <div class="small text-muted">Total KOL sudah upload bukti rating & review</div>
         </div>
         <span class="badge bg-success">${fmt(rateCount)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">KOL Dapat Resi</div>
-          <div class="small text-muted">courier & tracking ada</div>
+          <div class="fw-semibold">Product Sent</div>
+          <div class="small text-muted">Total KOL sudah dapat resi</div>
         </div>
         <span class="badge bg-warning text-dark">${fmt(shipCount)}</span>
       </li>
@@ -763,19 +829,38 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#es-comments').textContent = fmt(agg.comments);
     $('#es-shares').textContent = fmt(agg.shares);
 
-    const targetVal = await targetPromise;
-    if (elTarget) elTarget.textContent = targetVal != null ? fmt(targetVal) : '-';
-    if (elMade)   elMade.textContent   = fmt(totalPostedContents);
-    renderContentDonut(totalPostedContents, targetVal ?? 0);
+    // ==== Hitung Target & Sudah Dibuat (berbasis draft) ====
+    const kpiTargetVal = await targetPromise;
 
-    // ===== JUMLAH KOL JOIN (NEW)
+    // KOL count + content per KOL (untuk fallback target & iterasi slot)
     let kolCount = 0;
     try {
       const regs = await influencerService.getAll({ page: 1, per_page: 1, campaign_id: campaignId });
       kolCount = regs?.total ?? regs?.meta?.total ?? regs?.pagination?.total ?? 0;
     } catch { kolCount = 0; }
+    const perKol = await getCampaignContentPerKol(campaignId);
 
-    // Render KOL summary (+kolCount)
+    const fallbackTarget = Number(kolCount) * Number(perKol || 1);
+    const contentTarget = Number.isFinite(kpiTargetVal) ? Number(kpiTargetVal) : fallbackTarget;
+
+    if (elTarget) elTarget.textContent = fmt(contentTarget);
+
+    // Sudah Dibuat = total draft (semua status) untuk slot 1..perKol
+    let totalDraftsCreated = 0;
+    for (let slot = 1; slot <= perKol; slot++) {
+      totalDraftsCreated += await countDrafts(campaignId, { slot });
+    }
+    if (elMade) elMade.textContent = fmt(totalDraftsCreated);
+
+    // Waiting Draft = Target − Sudah Dibuat (min 0)
+    const waitingDraftTotal = Math.max(0, Number(contentTarget) - Number(totalDraftsCreated));
+    if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
+
+    // Donut progress pakai draft vs target
+    renderContentDonut(totalDraftsCreated, contentTarget);
+
+    // ===== JUMLAH KOL JOIN (NEW)
+    // (sudah dihitung kolCount di atas) — render KOL summary
     renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);
 
     hideLoader();
