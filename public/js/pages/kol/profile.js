@@ -806,11 +806,8 @@ export function render(target, params, query = {}, labelOverride = null) {
                 function updateSlotLocksFromMap(bySlotMap) {
                     const next = new Set();
                     bySlotMap.forEach((d, slot) => {
-                        const s = String(
-                            d.status || d.draft_status || ""
-                        ).toLowerCase();
-                        // LOCK kalau draft ADA dan status BUKAN approved
-                        if (s && s !== "approved") next.add(slot);
+                        const s = String(d.status || d.draft_status || '').toLowerCase();
+                        if (s && s !== 'approved') next.add(slot); // lock hanya kalau BUKAN approved
                     });
                     draftLockBySlot = next;
                     enforceSlotLocks();
@@ -1228,133 +1225,56 @@ export function render(target, params, query = {}, labelOverride = null) {
 
                 function enforceSlotLocks() {
                     for (let i = 1; i <= MAX_SLOTS; i++) {
-                        const draftStatusBadgeEl = document.getElementById(
-                            `draft_status_badge_${i}`
-                        );
-                        const isApproved =
-                            draftStatusBadgeEl &&
-                            (draftStatusBadgeEl.classList.contains(
-                                "bg-success"
-                            ) ||
-                                draftStatusBadgeEl.textContent
-                                    .trim()
-                                    .toLowerCase() === "approved");
-                        const locked = !isApproved; // true bila belum approved
-                        const linkEl = document.getElementById("link-" + i);
-                        const dateEl = document.getElementById(
-                            "post_date_" + i
-                        );
-                        const screenshotEl = document.getElementById(
-                            "screenshot_" + i
-                        );
-                        const buyMethodEl =
-                            document.getElementById("acquisition_method");
+                        // locked = true kalau slot BELUM approved (ada di Set)
+                        const locked = draftLockBySlot.has(i);
 
-                        const reviewEl =
-                            document.getElementById("review_proof_file");
+                        const linkEl       = document.getElementById('link-' + i);
+                        const dateEl       = document.getElementById('post_date_' + i);
+                        const screenshotEl = document.getElementById('screenshot_' + i);
 
+                        // --- per-slot controls: enable kalau approved, lock kalau belum
                         if (linkEl) {
-                            // jika locked → disable; jika approved (not locked) biarkan normal (boleh isi)
-                            linkEl.disabled = locked
-                                ? true
-                                : linkEl.disabled && !isEditing
-                                ? true
-                                : false;
-                            linkEl.classList.toggle("is-draft-locked", locked);
-                            if (locked)
-                                linkEl.title =
-                                    "Terkunci: draft untuk slot ini belum disetujui";
-                            else linkEl.removeAttribute("title");
+                            linkEl.disabled = !!locked;
+                            linkEl.classList.toggle('is-draft-locked', !!locked);
+                            if (locked) linkEl.title = 'Terkunci: draft untuk slot ini belum disetujui';
+                            else linkEl.removeAttribute('title');
                         }
                         if (dateEl) {
-                            dateEl.disabled = locked
-                                ? true
-                                : dateEl.disabled && !isEditing
-                                ? true
-                                : false;
-                            dateEl.classList.toggle("is-draft-locked", locked);
-                            if (locked)
-                                dateEl.title =
-                                    "Terkunci: draft untuk slot ini belum disetujui";
-                            else dateEl.removeAttribute("title");
-                        }
-                        if (buyMethodEl) {
-                            buyMethodEl.disabled = locked
-                                ? true
-                                : buyMethodEl.disabled && !isEditing
-                                ? true
-                                : false;
-                            buyMethodEl.classList.toggle(
-                                "is-draft-locked",
-                                locked
-                            );
-                            if (locked)
-                                buyMethodEl.title =
-                                    "Terkunci: draft untuk slot ini belum disetujui";
-                            else buyMethodEl.removeAttribute("title");
+                            dateEl.disabled = !!locked;
+                            dateEl.classList.toggle('is-draft-locked', !!locked);
+                            if (locked) dateEl.title = 'Terkunci: draft untuk slot ini belum disetujui';
+                            else dateEl.removeAttribute('title');
                         }
                         if (screenshotEl) {
-                            screenshotEl.disabled = locked
-                                ? true
-                                : screenshotEl.disabled && !isEditing
-                                ? true
-                                : false;
-                            screenshotEl.classList.toggle(
-                                "is-draft-locked",
-                                locked
-                            );
-                            if (locked)
-                                screenshotEl.title =
-                                    "Terkunci: draft untuk slot ini belum disetujui";
-                            else screenshotEl.removeAttribute("title");
-                        }
-                        if (reviewEl) {
-                            reviewEl.disabled = locked
-                                ? true
-                                : reviewEl.disabled && !isEditing
-                                ? true
-                                : false;
-                            reviewEl.classList.toggle(
-                                "is-draft-locked",
-                                locked
-                            );
-                            if (locked)
-                                reviewEl.title =
-                                    "Terkunci: draft untuk slot ini belum disetujui";
-                            else reviewEl.removeAttribute("title");
+                            screenshotEl.disabled = !!locked;
+                            screenshotEl.classList.toggle('is-draft-locked', !!locked);
+                            if (locked) screenshotEl.title = 'Terkunci: draft untuk slot ini belum disetujui';
+                            else screenshotEl.removeAttribute('title');
                         }
                     }
+
+                    // --- JANGAN kunci field non per-slot di sini (tetap selalu kebuka):
+                    // acquisition_method, purchase_platform, purchase_price,
+                    // invoice_file, review_proof_file, dst.
                 }
 
                 const applyViewMode = () => {
-                    // lock fields yang sudah terisi (posts tetap tidak mandatory)
-                    const controls = [];
+                    // Jangan kunci field non-slot; semua input (kecuali shipping) kebuka.
                     for (let i = 1; i <= MAX_SLOTS; i++) {
-                        controls.push({ id: "link-" + i, key: "link_" + i });
-                        controls.push({
-                            id: "post_date_" + i,
-                            key: "post_date_" + i,
-                        });
+                        const linkEl = $("#link-" + i);
+                        const dateEl = $("#post_date_" + i);
+                        linkEl && linkEl.removeAttribute("required");
+                        dateEl && dateEl.removeAttribute("required");
+                        // biarkan enforceSlotLocks yang menentukan disabled utk slot
                     }
-                    controls.push({
-                        id: "acquisition_method",
-                        key: "acquisition_method",
-                    });
-                    controls.push({
-                        id: "purchase_platform",
-                        key: "purchase_platform",
-                    });
-                    controls.push({
-                        id: "purchase_price",
-                        key: "purchase_price",
-                    });
 
-                    controls.forEach(({ id, key }) => {
+                    // Non-slot: selalu kebuka
+                    ["acquisition_method", "purchase_platform", "purchase_price"].forEach((id) => {
                         const el = $("#" + id);
-                        if (!el) return;
-                        const filled = hasVal(currentSubmission?.[key]);
-                        el.disabled = filled; // tetap kunci kalau sudah terisi
-                        el.removeAttribute("required"); // pastikan tidak mandatory
+                        if (el) {
+                            el.disabled = false;
+                            el.removeAttribute("required");
+                        }
                     });
 
                     // shipping inputs ALWAYS disabled (view-only)
@@ -1366,41 +1286,41 @@ export function render(target, params, query = {}, labelOverride = null) {
                         el?.removeAttribute("required");
                     });
 
-                    // file controls
+                    // file controls: tetap edit-able di view mode juga
                     setFileControls(
                         "screenshot_1",
                         getFileUrl(currentSubmission, "screenshot_1"),
-                        { editMode: false }
+                        { editMode: true }
                     );
                     setFileControls(
                         "screenshot_2",
                         getFileUrl(currentSubmission, "screenshot_2"),
-                        { editMode: false }
+                        { editMode: true }
                     );
                     setFileControls(
                         "screenshot_3",
                         getFileUrl(currentSubmission, "screenshot_3"),
-                        { editMode: false }
+                        { editMode: true }
                     );
                     setFileControls(
                         "screenshot_4",
                         getFileUrl(currentSubmission, "screenshot_4"),
-                        { editMode: false }
+                        { editMode: true }
                     );
                     setFileControls(
                         "screenshot_5",
                         getFileUrl(currentSubmission, "screenshot_5"),
-                        { editMode: false }
+                        { editMode: true }
                     );
                     setFileControls(
                         "invoice_file",
                         getFileUrl(currentSubmission, "invoice_file"),
-                        { editMode: false, btnText: "Lihat File" }
+                        { editMode: true, btnText: "Lihat File" }
                     );
                     setFileControls(
                         "review_proof_file",
                         getFileUrl(currentSubmission, "review_proof_file"),
-                        { editMode: false, btnText: "Lihat File" }
+                        { editMode: true, btnText: "Lihat File" }
                     );
 
                     $("#existingNotice")?.classList.remove("d-none");
