@@ -254,8 +254,8 @@ protected function parseHandleFromUrl(?string $url): ?string
 
     try {
         $resp = Http::asForm()->post('https://open.tiktokapis.com/v2/oauth/token/', [
-            'client_key'    => TikTokAuthController::CLIENT_KEY,
-            'client_secret' => TikTokAuthController::CLIENT_SECRET,
+            'client_key'    => config('services.tiktok.client_key'),
+            'client_secret' => config('services.tiktok.client_secret'),
             'grant_type'    => 'refresh_token',
             'refresh_token' => $refresh,
         ]);
