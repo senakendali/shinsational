@@ -53,6 +53,7 @@ class InfluencerSubmission extends Model
         'purchase_price',              // decimal(12,2)
         'shipping_courier',            // JNE/J&T/...
         'shipping_tracking_number',    // resi
+        'shipment_status',             // dikirim / belum dikirim
 
         // Draft
         'draft_url',

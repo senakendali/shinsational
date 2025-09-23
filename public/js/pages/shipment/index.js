@@ -29,6 +29,23 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const $ = (sel) => document.querySelector(sel);
   const safe = (v, d='') => (v == null ? d : v);
 
+  const STATUS_OPTIONS = [
+    { value: 'on_the_way', label: 'Product on the way' },
+    { value: 'received',   label: 'Product Receive'   },
+  ];
+  const labelOfStatus = (val) => {
+    const n = normalizeStatus(val);
+    const found = STATUS_OPTIONS.find(o => o.value === n);
+    return found ? found.label : '';
+  };
+  const normalizeStatus = (val) => {
+    if (!val) return '';
+    const s = String(val).toLowerCase().trim();
+    if (['on_the_way','product on the way','on the way','product_on_the_way'].includes(s.replace(/\s+/g,'_'))) return 'on_the_way';
+    if (['received','product receive','product_received','product_receive'].includes(s.replace(/\s+/g,'_'))) return 'received';
+    return '';
+  };
+
   const kolNameOf = (s = {}) =>
     s.full_name ||
     (s.tiktok_username ? `@${s.tiktok_username}` : null) ||
@@ -38,9 +55,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
     s.creator_name ||
     s.influencer_name ||
     s.user_name ||
-    '—';
+    '-';
 
-  const tiktokUsernameOf = (s = {}) => s.tiktok_username ? `@${s.tiktok_username}` : '—';
+  const tiktokUsernameOf = (s = {}) => s.tiktok_username ? `@${s.tiktok_username}` : '-';
 
   const phoneOf = (s = {}) => {
     const k = ['contact_phone','phone','phone_number','whatsapp','wa','mobile','telp','no_hp'];
@@ -90,7 +107,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
       <div class="d-flex flex-wrap gap-2 align-items-center">
         <select id="campaignFilter" class="form-select" style="min-width:280px">
-          <option value="">— Select Campaign —</option>
+          <option value="">- Select Campaign -</option>
         </select>
         <input class="form-control" style="min-width:280px" type="search" placeholder="Search name/phone/email/address…" id="searchInput">
       </div>
@@ -119,7 +136,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const data = await campaignService.getAll({ page: 1, per_page: 100, status: '' });
     const items = data?.data || [];
     campaignFilter.innerHTML =
-      `<option value="">— Select Campaign —</option>` +
+      `<option value="">- Select Campaign -</option>` +
       items.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
     const preset = query?.campaign_id || new URL(location.href).searchParams.get('campaign_id');
     if (preset && campaignFilter.querySelector(`option[value="${preset}"]`)) {
@@ -151,13 +168,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return r.json();
   }
 
-  async function saveShipment(submissionId, { courier, tracking }) {
+  async function saveShipment(submissionId, { courier, tracking, status }) {
     const r = await fetchWithCsrf(`/api/influencer-submissions/${encodeURIComponent(submissionId)}/shipment`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         shipping_courier: courier,
         shipping_tracking_number: tracking,
+        shipment_status: status || null, // <-- NEW
       }),
     });
     if (!r.ok) {
@@ -193,23 +211,30 @@ export async function render(target, path, query = {}, labelOverride = null) {
         const id = s.id;
         const name = kolNameOf(s);
         const uname = tiktokUsernameOf(s);
-        const phone = safe(phoneOf(s), '—');
-        const email = safe(emailOf(s), '—');
-        const addr = safe(addressOf(s), '—');
+        const phone = safe(phoneOf(s), '-');
+        const email = safe(emailOf(s), '-');
+        const addr = safe(addressOf(s), '-');
 
         const courier = s.shipping_courier || '';
         const tracking = s.shipping_tracking_number || '';
 
-        // Enter in tracking triggers save
+        const currentStatusVal = normalizeStatus(s.shipment_status || s.shipping_status || '');
+        const statusOptionsHtml = `
+          <select class="form-select form-select-sm js-status" style="min-width:200px">
+            <option value="">- Select -</option>
+            ${STATUS_OPTIONS.map(o => `<option value="${o.value}" ${o.value===currentStatusVal?'selected':''}>${o.label}</option>`).join('')}
+          </select>
+        `;
+
         return `
           <tr data-id="${id}">
             <td style="min-width:240px">
               <div class="fw-semibold">${name}</div>
               <div class="small text-muted">${uname}</div>
             </td>
-            <td style="min-width:140px">${phone || '—'}</td>
-            <td style="min-width:220px">${email || '—'}</td>
-            <td style="min-width:320px">${addr || '—'}</td>
+            <td style="min-width:140px">${phone || '-'}</td>
+            <td style="min-width:220px">${email || '-'}</td>
+            <td style="min-width:320px">${addr || '-'}</td>
             <td style="width:200px">
               <input type="text" class="form-control form-control-sm js-courier" placeholder="Courier"
                      value="${courier?.replace(/"/g,'&quot;') || ''}">
@@ -217,6 +242,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
             <td style="width:220px">
               <input type="text" class="form-control form-control-sm js-tracking" placeholder="AWB / Tracking No."
                      value="${tracking?.replace(/"/g,'&quot;') || ''}">
+            </td>
+            <td style="width:220px">
+              ${statusOptionsHtml}
             </td>
             <td style="width:140px" class="text-end">
               <button class="btn btn-sm btn-outline-primary js-save">
@@ -238,11 +266,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
                 <th style="min-width:320px">Address</th>
                 <th style="width:200px">Courier</th>
                 <th style="width:220px">AWB / Tracking No.</th>
+                <th style="width:220px">Shipment Status</th> <!-- NEW -->
                 <th style="width:140px"></th>
               </tr>
             </thead>
             <tbody>
-              ${body || `<tr><td colspan="7" class="text-center text-muted">No data.</td></tr>`}
+              ${body || `<tr><td colspan="8" class="text-center text-muted">No data.</td></tr>`}
             </tbody>
           </table>
         </div>
@@ -284,6 +313,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       const id = tr.getAttribute('data-id');
       const courierEl = tr.querySelector('.js-courier');
       const trackingEl = tr.querySelector('.js-tracking');
+      const statusEl = tr.querySelector('.js-status'); // NEW
       const saveBtn = tr.querySelector('.js-save');
 
       // Pressing Enter in the tracking input triggers Save
@@ -294,9 +324,16 @@ export async function render(target, path, query = {}, labelOverride = null) {
         }
       });
 
+      // Optional: change status -> just enable save (no autosave to avoid surprises)
+      statusEl?.addEventListener('change', () => {
+        // no-op: user will click Save
+      });
+
       saveBtn?.addEventListener('click', async () => {
         const courier = (courierEl?.value || '').trim();
         const tracking = (trackingEl?.value || '').trim();
+        const status = normalizeStatus(statusEl?.value || '');
+
         if (!courier || !tracking) {
           showToast('Courier and tracking number are required.', 'error');
           return;
@@ -306,7 +343,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         saveBtn.disabled = true;
         saveBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Saving…`;
         try {
-          await saveShipment(id, { courier, tracking });
+          await saveShipment(id, { courier, tracking, status });
           showToast('Shipment saved.');
           await loadShipments(currentPage);
         } catch (e) {

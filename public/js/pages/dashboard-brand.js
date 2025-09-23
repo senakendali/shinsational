@@ -61,6 +61,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
   };
   const unwrapCampaign = (obj) => (obj?.data ?? obj?.campaign ?? obj ?? null);
 
+  function hasKpiEngagementMetrics(kpi) {
+    if (!kpi || typeof kpi !== 'object') return false;
+    const keys = ['views','likes','comments','shares'];
+    return keys.some(k => Number.isFinite(Number(kpi?.[k])));
+  }
+
+
   // layout
   target.innerHTML = `
     <div id="brand-dashboard-root">
@@ -195,18 +202,18 @@ export async function render(target, path, query = {}, labelOverride = null) {
                   <!-- Info rows -->
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <div class="small text-muted text-uppercase fs-12 fw-semibold">
-                      <i class="bi bi-bullseye"></i> Target
+                      <i class="bi bi-bullseye"></i> KPI
                     </div>
                     <div class="fs-5 fw-bold" id="kpi-posts-target">-</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <div class="small text-muted text-uppercase fs-12 fw-semibold">
-                      <i class="bi bi-card-checklist"></i> Sudah Dibuat
+                      <i class="bi bi-card-checklist"></i> Posted
                     </div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-created">-</div>
                   </div>
 
-                  <!-- Status rows (placeholder 0) -->
+                  <!-- Status rows -->
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <div class="small text-muted text-uppercase fs-12 fw-semibold">
                       <i class="bi bi-hourglass-split"></i> Waiting Draft
@@ -215,7 +222,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <div class="small text-muted text-uppercase fs-12 fw-semibold">
-                      <i class="bi bi-hourglass-split"></i> Waiting for Approval
+                      <i class="bi bi-hourglass-split"></i> Waiting feedback
                     </div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-approval">0</div>
                   </div>
@@ -311,6 +318,86 @@ export async function render(target, path, query = {}, labelOverride = null) {
     } catch {}
   }
 
+  // === CSRF & Draft helpers (minimal) ===
+  function getCsrfToken() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    if (m?.content) return m.content;
+    const xsrf = document.cookie.split(';').map(s=>s.trim()).find(s=>s.startsWith('XSRF-TOKEN='));
+    if (!xsrf) return '';
+    try { return decodeURIComponent(xsrf.split('=')[1]); } catch { return ''; }
+  }
+  async function fetchWithCsrf(input, init = {}) {
+    const headers = new Headers(init.headers || {});
+    headers.set('X-Requested-With', 'XMLHttpRequest');
+    const token = getCsrfToken();
+    if (token) headers.set('X-CSRF-TOKEN', token);
+    return fetch(input, { ...init, headers, credentials: 'same-origin' });
+  }
+  // Draft pagination (support status & slot)
+  async function fetchDraftPage({ campaign_id, status = '', slot = '', page = 1, per_page = 50 }) {
+    const qs = new URLSearchParams({
+      campaign_id: String(campaign_id),
+      per_page: String(per_page),
+      page: String(page),
+    });
+    if (status) qs.set('status', status);
+    if (slot) qs.set('slot', String(slot));
+    const url = `/api/influencer-submissions/draft/with-influencer?${qs.toString()}`;
+    const r = await fetchWithCsrf(url);
+    if (!r.ok) throw new Error('Gagal memuat draft');
+    return r.json();
+  }
+  async function countDrafts(campaignId, { status = '', slot = '' } = {}) {
+    let total = 0, page = 1, lastPage = 1, perPage = 50;
+    do {
+      const res = await fetchDraftPage({ campaign_id: campaignId, status, slot, page, per_page: perPage });
+      const pTotal = res?.total ?? res?.meta?.total ?? res?.pagination?.total;
+      if (typeof pTotal === 'number') {
+        total = pTotal;
+        lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
+        break;
+      } else {
+        const data = res?.data || res;
+        const arr = Array.isArray(data) ? data : (data?.data || []);
+        total += Array.isArray(arr) ? arr.length : 0;
+        lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
+      }
+      page += 1;
+    } while (page <= lastPage);
+    return total;
+  }
+  // NEW: untuk Ready to Post (ambil semua approved drafts)
+  async function fetchApprovedDraftsForReadyToPost(campaignId) {
+    let rows = [];
+    let page = 1, perPage = 50, lastPage = 1;
+    do {
+      const res = await fetchDraftPage({ campaign_id: campaignId, status: 'approved', page, per_page: perPage });
+      const data = res?.data || res;
+      const arr = Array.isArray(data) ? data : (data?.data || []);
+      rows = rows.concat(arr);
+      lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
+      page += 1;
+    } while (page <= lastPage);
+    return rows;
+  }
+
+  // (opsional) baca content per KOL dari campaign/kpi
+  async function getCampaignContentPerKol(campaignId) {
+    if (!campaignId) return 1;
+    try {
+      const detail = await campaignService.get(campaignId);
+      const c = unwrapCampaign(detail);
+      if (!c) return 1;
+      const direct = Number(c.contents_per_kol ?? c.content_per_kol ?? c.posts_per_kol ?? c.post_per_kol);
+      if (Number.isFinite(direct) && direct > 0) return direct;
+      const kpiRaw = c?.kpi_targets ?? c?.kpi ?? c?.kpiTargets ?? null;
+      const kpi = parseMaybeJSON(kpiRaw) || (typeof kpiRaw === 'object' ? kpiRaw : null);
+      const fromKpi = Number(kpi?.contents_per_kol ?? kpi?.content_per_kol ?? kpi?.posts_per_kol ?? kpi?.post_per_kol);
+      if (Number.isFinite(fromKpi) && fromKpi > 0) return fromKpi;
+      return 1;
+    } catch { return 1; }
+  }
+
   // ==== donut/chart builders
   const donutIds = ['views','likes','comments','shares'];
   const donutCharts = Object.fromEntries(donutIds.map(id => [id, null]));
@@ -401,14 +488,16 @@ export async function render(target, path, query = {}, labelOverride = null) {
   function renderKpiDonuts(totals, kpi) {
     const wrap = $('#kpi-donuts');
     if (!wrap) return;
-    const hasAnyKpi = kpi && [kpi.views,kpi.likes,kpi.comments,kpi.shares].some(v => Number(v) > 0);
+    const hasAnyKpi = hasKpiEngagementMetrics(kpi);
     wrap.style.display = hasAnyKpi ? '' : 'none';
     if (!hasAnyKpi) { destroyDonuts(); return; }
-    renderOneDonut('views', totals.views, kpi.views);
-    renderOneDonut('likes', totals.likes, kpi.likes);
+
+    renderOneDonut('views',    totals.views,    kpi.views);
+    renderOneDonut('likes',    totals.likes,    kpi.likes);
     renderOneDonut('comments', totals.comments, kpi.comments);
-    renderOneDonut('shares', totals.shares, kpi.shares);
+    renderOneDonut('shares',   totals.shares,   kpi.shares);
   }
+
 
   function renderChart(views, likes, comments, shares) {
     const canvas = $('#engagementChart');
@@ -476,26 +565,29 @@ export async function render(target, path, query = {}, labelOverride = null) {
   $('#kpi-brand-name').textContent = myBrand.name || '(Tanpa nama)';
   $('#kpi-brand-id').textContent = `ID: ${myBrand.id}`;
 
-  // ===== KPI global utk brand (opsional)
+  // ===== KPI global utk brand (UPDATED: POST = jumlah link_1..5 terisi)
   try {
     const cs = await campaignService.getAll({ page: 1, per_page: 100, brand_id: myBrand.id, include: 'brand' });
     const campaigns = cs?.data || [];
     const totalCampaigns = cs?.total ?? cs?.meta?.total ?? cs?.pagination?.total ?? campaigns.length;
 
-    let totalPosts = 0;
-    const kolSet = new Set();
+    let totalPosts = 0;         // posted contents (links filled)
+    const kolSet = new Set();   // unique KOLs across submissions
 
     const capped = campaigns.slice(0, 50);
     for (const c of capped) {
-      const sres = await submissionService.getAll({ page: 1, per_page: 1, campaign_id: c.id });
-      const t = sres?.total ?? sres?.meta?.total ?? sres?.pagination?.total ?? (sres?.data?.length || 0);
-      totalPosts += Number(t) || 0;
-
-      const sres2 = await submissionService.getAll({ page: 1, per_page: 100, campaign_id: c.id });
-      (sres2?.data || []).forEach(s => {
-        const key = String(s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id);
-        kolSet.add(key);
-      });
+      let page = 1, perPage = 200, lastPage = 1;
+      do {
+        const sres = await submissionService.getAll({ page, per_page: perPage, campaign_id: c.id });
+        const subs = sres?.data || [];
+        subs.forEach(s => {
+          totalPosts += countSubmissionPosts(s);
+          const key = String(s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id);
+          kolSet.add(key);
+        });
+        lastPage = sres?.last_page ?? sres?.meta?.last_page ?? sres?.pagination?.last_page ?? 1;
+        page += 1;
+      } while (page <= lastPage && page <= 10);
     }
 
     $('#kpi-campaigns').textContent = fmt(totalCampaigns);
@@ -572,18 +664,31 @@ export async function render(target, path, query = {}, labelOverride = null) {
   function applyKpiTargets(kpi) {
     const row = $('#kpi-targets');
     if (!row) return;
-    const hasAny = kpi && (safe(kpi.views) || safe(kpi.likes) || safe(kpi.comments) || safe(kpi.shares));
-    if (!hasAny) {
+
+    const show = hasKpiEngagementMetrics(kpi);
+
+    if (!show) {
+      // Sembunyikan semua UI KPI engagement
       row.classList.add('d-none');
-      ['kt-views','kt-likes','kt-comments','kt-shares'].forEach(id => { const el = $('#'+id); if (el) el.textContent = '-'; });
-      $('#kpi-donuts').style.display = 'none'; destroyDonuts(); return;
+      ['kt-views','kt-likes','kt-comments','kt-shares'].forEach(id => {
+        const el = $('#'+id); if (el) el.textContent = '-';
+      });
+      $('#kpi-donuts').style.display = 'none';
+      destroyDonuts(); // pastikan chart donut di-dispose
+      return;
     }
-    $('#kt-views').textContent    = kpi.views    != null ? fmt(Number(kpi.views))    : '-';
-    $('#kt-likes').textContent    = kpi.likes    != null ? fmt(Number(kpi.likes))    : '-';
-    $('#kt-comments').textContent = kpi.comments != null ? fmt(Number(kpi.comments)) : '-';
-    $('#kt-shares').textContent   = kpi.shares   != null ? fmt(Number(kpi.shares))   : '-';
+
+    // Tampilkan & isi target ketika KPI diisi (0 pun dianggap diisi)
+    const v = (x) => Number.isFinite(Number(x)) ? fmt(Number(x)) : '-';
+    $('#kt-views').textContent    = v(kpi.views);
+    $('#kt-likes').textContent    = v(kpi.likes);
+    $('#kt-comments').textContent = v(kpi.comments);
+    $('#kt-shares').textContent   = v(kpi.shares);
+
     row.classList.remove('d-none');
+    $('#kpi-donuts').style.display = '';
   }
+
 
   async function ensureCampaignKpi(campaignId) {
     if (!campaignId) return null;
@@ -617,29 +722,29 @@ export async function render(target, path, query = {}, labelOverride = null) {
     list.innerHTML = `
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">Jumlah KOL Join</div>
-          <div class="small text-muted">total pendaftar/terdaftar</div>
+          <div class="fw-semibold"> ⁠KOL locked</div>
+          <div class="small text-muted">Total KOL sudah daftar</div>
         </div>
         <span class="badge bg-dark">${fmt(kolTotal)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">KOL Sudah Beli</div>
-          <div class="small text-muted">invoice terunggah</div>
+          <div class="fw-semibold">⁠Done purchased</div>
+          <div class="small text-muted">⁠Total KOL sudah beli product</div>
         </div>
         <span class="badge bg-primary">${fmt(buyCount)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">KOL Sudah Rating</div>
-          <div class="small text-muted">bukti rating terunggah</div>
+          <div class="fw-semibold">⁠Done Rating & Review</div>
+          <div class="small text-muted">Total KOL sudah upload bukti rating & review</div>
         </div>
         <span class="badge bg-success">${fmt(rateCount)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">KOL Dapat Resi</div>
-          <div class="small text-muted">courier & tracking ada</div>
+          <div class="fw-semibold">Product Sent</div>
+          <div class="small text-muted">Total KOL sudah dapat resi</div>
         </div>
         <span class="badge bg-warning text-dark">${fmt(shipCount)}</span>
       </li>
@@ -709,7 +814,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
     const targetPromise = getCampaignContentTarget(campaignId).catch(()=>null);
 
-    // Aggregasi engagement, total konten & KOL progress
+    // Aggregasi engagement, posted links, peta link per submission, & KOL progress
     let page = 1;
     const perPage = 100;
     let lastPage = 1;
@@ -720,6 +825,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const buyerSet  = new Set();
     const ratingSet = new Set();
     const shipSet   = new Set();
+
+    // NEW: untuk ready-to-post
+    const subLinksMap = new Map();
 
     const kolKeyOf = (s) => String(
       s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id
@@ -738,7 +846,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
         agg.comments += safe(Number(s.comments_1)) + safe(Number(s.comments_2));
         agg.shares   += safe(Number(s.shares_1))   + safe(Number(s.shares_2));
 
-        totalPostedContents += countSubmissionPosts(s);
+        // posted = jumlah link_1..5 terisi + simpan peta per slot
+        const pres = {};
+        for (let i = 1; i <= 5; i++) {
+          const filled = isFilled(s[`link_${i}`]);
+          pres[i] = filled;
+          if (filled) totalPostedContents += 1;
+        }
+        subLinksMap.set(s.id, pres);
 
         // progress KOL
         const key = kolKeyOf(s);
@@ -763,19 +878,51 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#es-comments').textContent = fmt(agg.comments);
     $('#es-shares').textContent = fmt(agg.shares);
 
-    const targetVal = await targetPromise;
-    if (elTarget) elTarget.textContent = targetVal != null ? fmt(targetVal) : '-';
-    if (elMade)   elMade.textContent   = fmt(totalPostedContents);
-    renderContentDonut(totalPostedContents, targetVal ?? 0);
+    // ==== Target, KOL count, per KOL (fallback target)
+    const kpiTargetVal = await targetPromise;
 
-    // ===== JUMLAH KOL JOIN (NEW)
     let kolCount = 0;
     try {
       const regs = await influencerService.getAll({ page: 1, per_page: 1, campaign_id: campaignId });
       kolCount = regs?.total ?? regs?.meta?.total ?? regs?.pagination?.total ?? 0;
     } catch { kolCount = 0; }
+    const perKol = await getCampaignContentPerKol(campaignId);
 
-    // Render KOL summary (+kolCount)
+    const fallbackTarget = Number(kolCount) * Number(perKol || 1);
+    const contentTarget = Number.isFinite(kpiTargetVal) ? Number(kpiTargetVal) : fallbackTarget;
+    if (elTarget) elTarget.textContent = fmt(contentTarget);
+
+    // ==== POSTED (card) = jumlah link terisi
+    if (elMade) elMade.textContent = fmt(totalPostedContents);
+
+    // ==== Waiting Draft = Target - Posted
+    const waitingDraftTotal = Math.max(0, Number(contentTarget) - Number(totalPostedContents));
+    if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
+
+    // ==== Donut progress: posted vs target
+    renderContentDonut(totalPostedContents, contentTarget);
+
+    // ==== Waiting feedback (pending) & On Revision (rejected)
+    const draftPendingCount = await countDrafts(campaignId, { status: 'pending' });
+    if (elWaitApproval) elWaitApproval.textContent = fmt(draftPendingCount);
+
+    const draftRejectedCount = await countDrafts(campaignId, { status: 'rejected' });
+    if (elRevision) elRevision.textContent = fmt(draftRejectedCount);
+
+    // ==== Ready to Post = approved tapi slot BELUM ada link
+    const approvedDrafts = await fetchApprovedDraftsForReadyToPost(campaignId);
+    let readyToPost = 0;
+    for (const row of approvedDrafts) {
+      const subId = row?.submission?.id ?? row?.submission_id;
+      const slot = Number(row?.slot || 0);
+      if (!subId || !(slot >= 1 && slot <= 5)) continue;
+      const pres = subLinksMap.get(subId);
+      const posted = pres ? !!pres[slot] : false;
+      if (!posted) readyToPost += 1;
+    }
+    if (elReady) elReady.textContent = fmt(readyToPost);
+
+    // ===== JUMLAH KOL JOIN (render KOL summary)
     renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);
 
     hideLoader();

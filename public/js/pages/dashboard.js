@@ -50,6 +50,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
   };
   const unwrapCampaign = (obj) => (obj?.data ?? obj?.campaign ?? obj ?? null);
 
+  function hasKpiEngagementMetrics(kpi) {
+    if (!kpi || typeof kpi !== 'object') return false;
+    const keys = ['views','likes','comments','shares'];
+    return keys.some(k => Number.isFinite(Number(kpi?.[k])));
+  }
+
   let lastTotals = { views: 0, likes: 0, comments: 0, shares: 0 };
   let lastKpi = null;
 
@@ -125,11 +131,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
                 <div class="card-body">
                   <h6 class="card-title mb-2"><i class="bi bi-card-list"></i> CONTENT SUMMARY</h6>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-bullseye"></i> Target</div>
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-bullseye"></i> KPI</div>
                     <div class="fs-5 fw-bold" id="kpi-posts-target">-</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-card-checklist"></i> Sudah Dibuat</div>
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-card-checklist"></i> Posted</div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-created">-</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
@@ -137,7 +143,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-draft">0</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-hourglass-split"></i> Waiting for Approval</div>
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-hourglass-split"></i> ⁠Waiting feedback</div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-approval">0</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
@@ -234,6 +240,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       totalKols = regs?.total ?? regs?.meta?.total ?? regs?.pagination?.total ?? 0;
     } catch {}
 
+    // Top KPI: total posted (link_1..5) across all submissions
     let totalPosts = 0;
     let page = 1;
     const perPage = 200;
@@ -252,7 +259,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#kpi-campaigns').textContent = fmt(totalCampaigns);
     $('#kpi-kols').textContent = fmt(totalKols);
     $('#kpi-posts').textContent = fmt(totalPosts);
-    $('#kpi-posts').title = 'Total konten dibuat (link_1..link_5) dari semua submissions';
+    $('#kpi-posts').title = 'Total konten diposting (link_1..link_5) dari semua submissions';
   } catch (e) {
     console.error('Load KPIs error', e);
     showToast('Gagal memuat ringkasan KPI', 'error');
@@ -382,20 +389,31 @@ export async function render(target, path, query = {}, labelOverride = null) {
   function applyKpiTargets(kpi) {
     const row = $('#kpi-targets');
     if (!row) return;
-    const hasAny = kpi && (safe(kpi.views) || safe(kpi.likes) || safe(kpi.comments) || safe(kpi.shares));
-    if (!hasAny) {
+
+    const show = hasKpiEngagementMetrics(kpi);
+
+    if (!show) {
+      // Sembunyikan semua UI KPI engagement
       row.classList.add('d-none');
-      ['kt-views','kt-likes','kt-comments','kt-shares'].forEach(id => { const el = $('#'+id); if (el) el.textContent = '-'; });
+      ['kt-views','kt-likes','kt-comments','kt-shares'].forEach(id => {
+        const el = $('#'+id); if (el) el.textContent = '-';
+      });
       $('#kpi-donuts').style.display = 'none';
-      destroyDonuts();
+      destroyDonuts(); // pastikan chart donut di-dispose
       return;
     }
-    $('#kt-views').textContent    = kpi.views    != null ? fmt(Number(kpi.views))    : '-';
-    $('#kt-likes').textContent    = kpi.likes    != null ? fmt(Number(kpi.likes))    : '-';
-    $('#kt-comments').textContent = kpi.comments != null ? fmt(Number(kpi.comments)) : '-';
-    $('#kt-shares').textContent   = kpi.shares   != null ? fmt(Number(kpi.shares))   : '-';
+
+    // Tampilkan & isi target ketika KPI diisi (0 pun dianggap diisi)
+    const v = (x) => Number.isFinite(Number(x)) ? fmt(Number(x)) : '-';
+    $('#kt-views').textContent    = v(kpi.views);
+    $('#kt-likes').textContent    = v(kpi.likes);
+    $('#kt-comments').textContent = v(kpi.comments);
+    $('#kt-shares').textContent   = v(kpi.shares);
+
     row.classList.remove('d-none');
+    $('#kpi-donuts').style.display = '';
   }
+
 
   async function ensureCampaignKpi(campaignId) {
     if (!campaignId) return null;
@@ -486,14 +504,16 @@ export async function render(target, path, query = {}, labelOverride = null) {
   function renderKpiDonuts(totals, kpi) {
     const wrap = $('#kpi-donuts');
     if (!wrap) return;
-    const hasAnyKpi = kpi && [kpi.views,kpi.likes,kpi.comments,kpi.shares].some(v => Number(v) > 0);
+    const hasAnyKpi = hasKpiEngagementMetrics(kpi);
     wrap.style.display = hasAnyKpi ? '' : 'none';
     if (!hasAnyKpi) { destroyDonuts(); return; }
+
     renderOneDonut('views',    totals.views,    kpi.views);
     renderOneDonut('likes',    totals.likes,    kpi.likes);
     renderOneDonut('comments', totals.comments, kpi.comments);
     renderOneDonut('shares',   totals.shares,   kpi.shares);
   }
+
 
   async function getCampaignContentTarget(campaignId) {
     if (!campaignId) return null;
@@ -538,7 +558,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return count;
   }
 
-  // ===== DRAFTS HELPERS (pakai controller draft terpisah) =====
+  // ===== DRAFTS HELPERS =====
   async function fetchDraftPage({ campaign_id, status = '', slot = '', page = 1, per_page = 50 }) {
     const qs = new URLSearchParams({
       campaign_id: String(campaign_id),
@@ -553,7 +573,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return r.json();
   }
 
-  // countDrafts: bisa filter status & slot
   async function countDrafts(campaignId, { status = '', slot = '' } = {}) {
     let total = 0;
     let page = 1;
@@ -600,21 +619,24 @@ export async function render(target, path, query = {}, labelOverride = null) {
     list.innerHTML = `
       <li class="list-group-item d-flex justify-content-between align-items-center">
         <div>
-          <div class="fw-semibold">Jumlah KOL Join</div>
-          <div class="small text-muted">total pendaftar/terdaftar</div>
+          <div class="fw-semibold"> ⁠KOL locked</div>
+          <div class="small text-muted">Total KOL sudah daftar</div>
         </div>
         <span class="badge bg-dark">${fmt(kolTotal)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
-        <div><div class="fw-semibold">KOL Sudah Beli</div><div class="small text-muted">invoice terunggah</div></div>
+        <div><div class="fw-semibold">⁠Done purchased</div>
+        <div class="small text-muted">⁠Total KOL sudah beli product</div></div>
         <span class="badge bg-primary">${fmt(buyCount)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
-        <div><div class="fw-semibold">KOL Sudah Rating</div><div class="small text-muted">bukti rating terunggah</div></div>
+        <div><div class="fw-semibold">⁠Done Rating & Review
+        </div><div class="small text-muted">Total KOL sudah upload bukti rating & review</div></div>
         <span class="badge bg-success">${fmt(rateCount)}</span>
       </li>
       <li class="list-group-item d-flex justify-content-between align-items-center">
-        <div><div class="fw-semibold">KOL Dapat Resi</div><div class="small text-muted">courier & tracking ada</div></div>
+        <div><div class="fw-semibold">Product Sent</div>
+        <div class="small text-muted">Total KOL sudah dapat resi</div></div>
         <span class="badge bg-warning text-dark">${fmt(shipCount)}</span>
       </li>
     `;
@@ -672,19 +694,18 @@ export async function render(target, path, query = {}, labelOverride = null) {
       if (lst) lst.innerHTML = `<li class="list-group-item text-muted">Menghitung…</li>`;
     }
 
-    const targetPromise = getCampaignContentTarget(campaignId).catch(() => null);
-
+    // ===== Engagement totals + posted contents (jumlah link_1..5 terisi)
     let page = 1;
     const perPage = 100;
     let lastPage = 1;
-
     const agg = { views: 0, likes: 0, comments: 0, shares: 0 };
-    let totalPostedContents = 0;
 
     const subLinksMap = new Map();
     const buyerSet  = new Set();
     const ratingSet = new Set();
     const shipSet   = new Set();
+
+    let postedContents = 0; // <--- posted = jumlah link terisi (1..5)
 
     const kolKeyOf = (s) => String(s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id);
 
@@ -699,10 +720,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
         agg.comments += safe(Number(s.comments_1)) + safe(Number(s.comments_2));
         agg.shares   += safe(Number(s.shares_1))   + safe(Number(s.shares_2));
 
-        totalPostedContents += countSubmissionPosts(s);
-
         const id = s.id;
-        const pres = {}; for (let i = 1; i <= 5; i++) pres[i] = isFilled(s[`link_${i}`]);
+        const pres = {};
+        for (let i = 1; i <= 5; i++) {
+          const filled = isFilled(s[`link_${i}`]);
+          pres[i] = filled;
+          if (filled) postedContents += 1;
+        }
         subLinksMap.set(id, pres);
 
         const key = kolKeyOf(s);
@@ -727,12 +751,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#es-comments').textContent = fmt(agg.comments);
     $('#es-shares').textContent = fmt(agg.shares);
 
-    const targetVal = await targetPromise;
-    if (elTarget) elTarget.textContent = targetVal != null ? fmt(targetVal) : '-';
-    if (elMade)   elMade.textContent   = fmt(totalPostedContents);
-    renderContentDonut(totalPostedContents, targetVal ?? 0);
-
-    // ===== Waiting Draft = (#KOL * perKol) - (jumlah draft yang sudah dibuat untuk slot 1..perKol)
+    // ===== KOL count & target per KOL
     let kolCount = 0;
     try {
       const regs = await influencerService.getAll({ page: 1, per_page: 1, campaign_id: campaignId });
@@ -740,12 +759,27 @@ export async function render(target, path, query = {}, labelOverride = null) {
     } catch { kolCount = 0; }
     const perKol = await getCampaignContentPerKol(campaignId);
 
+    // ===== Target konten (fallback KOL*perKol jika kosong)
+    const kpiTargetVal = await getCampaignContentTarget(campaignId);
+    const fallbackTarget = Number(kolCount) * Number(perKol || 1);
+    const contentTarget = Number.isFinite(kpiTargetVal) ? Number(kpiTargetVal) : fallbackTarget;
+    if (elTarget) elTarget.textContent = fmt(contentTarget);
+
+    // ===== Total draft dibuat (slot 1..perKol, semua status)
     let totalDraftsCreated = 0;
     for (let slot = 1; slot <= perKol; slot++) {
-      totalDraftsCreated += await countDrafts(campaignId, { slot }); // semua status
+      totalDraftsCreated += await countDrafts(campaignId, { slot });
     }
-    const waitingDraftTotal = Math.max(0, (Number(kolCount) * Number(perKol)) - Number(totalDraftsCreated));
+
+    // ===== Posted (card) = jumlah link terisi
+    if (elMade) elMade.textContent = fmt(postedContents);
+
+    // ===== Waiting Draft = Target - Posted  (contoh 100 - 2 = 98)
+    const waitingDraftTotal = Math.max(0, Number(contentTarget) - Number(postedContents));
     if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
+
+    // ===== Donut Progress: posted vs target
+    renderContentDonut(postedContents, contentTarget);
 
     // ===== Waiting for Approval = pending
     const draftPendingCount = await countDrafts(campaignId, { status: 'pending' });
@@ -755,7 +789,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const draftRejectedCount = await countDrafts(campaignId, { status: 'rejected' });
     if (elRevision) elRevision.textContent = fmt(draftRejectedCount);
 
-    // ===== Ready to Post = approved tapi slot BELUM dipost
+    // ===== Ready to Post = approved tapi slot BELUM ada link
     const approvedDrafts = await fetchApprovedDraftsForReadyToPost(campaignId);
     let readyToPost = 0;
     for (const row of approvedDrafts) {
@@ -768,8 +802,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }
     if (elReady) elReady.textContent = fmt(readyToPost);
 
+    // ===== KOL Stats
     renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);
-
   }
 
   await loadCampaignEngagement(currentCampaignId);

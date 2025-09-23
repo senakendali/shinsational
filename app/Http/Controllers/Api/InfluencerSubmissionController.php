@@ -1445,32 +1445,56 @@ protected function oembedAuthor(?string $url): ?array
      * PATCH /api/influencer-submissions/{id}/shipment
      * Body: shipping_courier (required), shipping_tracking_number (required)
      */
-    public function shipmentsUpdate(Request $request, $id)
+   public function shipmentsUpdate(Request $request, $id)
     {
         $submission = InfluencerSubmission::findOrFail($id);
+
+        // normalizer kecil utk terima label lama/beragam format
+        $normalizeStatus = function (?string $val): ?string {
+            if ($val === null) return null;
+            $s = strtolower(trim($val));
+            $s = str_replace([' ', '-'], '_', $s);
+            if (in_array($s, ['on_the_way','product_on_the_way','on_the_way'])) {
+                return 'on_the_way';
+            }
+            if (in_array($s, ['received','product_receive','product_received'])) {
+                return 'received';
+            }
+            return null; // tak dikenal -> null (anggap kosongan)
+        };
 
         $data = $request->validate([
             'shipping_courier'         => ['required','string','max:100'],
             'shipping_tracking_number' => ['required','string','max:100'],
+            // status opsional, tidak mandatory
+            'shipment_status'          => ['nullable','string', 'in:on_the_way,received'],
         ]);
 
-        // keep acquisition_method if already set; do not force override
+        // Simpan required fields
         $submission->shipping_courier         = $data['shipping_courier'];
         $submission->shipping_tracking_number = $data['shipping_tracking_number'];
+
+        // Kalau dikirim, simpan; kalau tidak, biarkan apa adanya (nullable allowed)
+        if ($request->has('shipment_status')) {
+            $submission->shipment_status = $normalizeStatus($request->input('shipment_status'));
+        }
+
         $submission->save();
 
         return response()->json([
             'message' => 'Shipment updated.',
             'data' => [
-                'id'                        => $submission->id,
-                'campaign_id'               => $submission->campaign_id,
-                'tiktok_user_id'            => $submission->tiktok_user_id,
-                'shipping_courier'          => $submission->shipping_courier,
-                'shipping_tracking_number'  => $submission->shipping_tracking_number,
-                'updated_at'                => $submission->updated_at,
+                'id'                       => $submission->id,
+                'campaign_id'              => $submission->campaign_id,
+                'tiktok_user_id'           => $submission->tiktok_user_id,
+                'shipping_courier'         => $submission->shipping_courier,
+                'shipping_tracking_number' => $submission->shipping_tracking_number,
+                'shipment_status'          => $submission->shipment_status, // <- include di response
+                'updated_at'               => $submission->updated_at,
             ],
         ]);
     }
+
 
 
 

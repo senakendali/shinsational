@@ -106,7 +106,6 @@ class InfluencerSubmissionDraftController extends Controller
             ->when($v['q'] ?? null, function ($qq) use ($v) {
                 $term = '%'.trim($v['q']).'%';
                 $qq->where(function ($w) use ($term) {
-                    // cari di beberapa kandidat kolom (yg umum)
                     $w->orWhere('r.tiktok_username', 'like', $term)
                     ->orWhere('r.username', 'like', $term)
                     ->orWhere('r.full_name', 'like', $term)
@@ -128,6 +127,21 @@ class InfluencerSubmissionDraftController extends Controller
             // id registration (boleh null)
             'r.id as registration_id',
         ];
+
+        // reviewer notes (baru) + fallback
+        if (Schema::hasColumn('influencer_submission_drafts', 'reviewer_note_1')) {
+            $selects[] = 'd.reviewer_note_1';
+        } elseif (Schema::hasColumn('influencer_submission_drafts', 'reviewer_note')) {
+            $selects[] = DB::raw('d.reviewer_note as reviewer_note_1');
+        } else {
+            $selects[] = DB::raw('NULL as reviewer_note_1');
+        }
+
+        if (Schema::hasColumn('influencer_submission_drafts', 'reviewer_note_2')) {
+            $selects[] = 'd.reviewer_note_2';
+        } else {
+            $selects[] = DB::raw('NULL as reviewer_note_2');
+        }
 
         // username
         if (Schema::hasColumn('influencer_registrations', 'tiktok_username')) {
@@ -157,7 +171,6 @@ class InfluencerSubmissionDraftController extends Controller
         $selects[] = Schema::hasColumn('influencer_registrations','phone')
             ? DB::raw('r.phone as influencer_phone') : DB::raw('NULL as influencer_phone');
 
-        // address bisa di banyak kolom; pilih salah satu yg ada
         $selects[] = $coalesce('influencer_registrations',
             ['address','full_address','shipping_address','alamat','address_line_1'],
             'influencer_address'
@@ -175,25 +188,28 @@ class InfluencerSubmissionDraftController extends Controller
 
         $transform = function ($row) use ($statusText) {
             return [
-                'id'            => $row->id,
-                'slot'          => (int) $row->slot,
-                'url'           => $row->url,
-                'channel'       => $row->channel,
-                'status'        => $row->status,
-                'status_text'   => $statusText($row->status),
-                'submitted_at'  => $row->submitted_at,
-                'reviewed_at'   => $row->reviewed_at,
-                'reviewed_by'   => $row->reviewed_by,
-                'reviewer_note' => $row->reviewer_note,
-                'revision'      => (int) $row->revision,
-                'is_latest'     => (bool) $row->is_latest,
-                'updated_at'    => $row->updated_at,
-                'submission'    => [
+                'id'              => $row->id,
+                'slot'            => (int) $row->slot,
+                'url'             => $row->url,
+                'channel'         => $row->channel,
+                'status'          => $row->status,
+                'status_text'     => $statusText($row->status),
+                'submitted_at'    => $row->submitted_at,
+                'reviewed_at'     => $row->reviewed_at,
+                'reviewed_by'     => $row->reviewed_by,
+                // NEW: dual notes + BC field
+                'reviewer_note_1' => $row->reviewer_note_1 ?? $row->reviewer_note,
+                'reviewer_note_2' => $row->reviewer_note_2,
+                'reviewer_note'   => $row->reviewer_note, // tetap kirim utk klien lama
+                'revision'        => (int) $row->revision,
+                'is_latest'       => (bool) $row->is_latest,
+                'updated_at'      => $row->updated_at,
+                'submission'      => [
                     'id'             => $row->submission_id,
                     'tiktok_user_id' => $row->tiktok_user_id,
                     'campaign_id'    => (int) $row->campaign_id,
                 ],
-                'influencer'    => [
+                'influencer'      => [
                     'registration_id'  => $row->registration_id,
                     'tiktok_username'  => $row->tiktok_username,
                     'tiktok_full_name' => $row->tiktok_full_name,
@@ -215,6 +231,7 @@ class InfluencerSubmissionDraftController extends Controller
         $rows = $q->get()->map($transform);
         return response()->json(['data' => $rows]);
     }
+
 
 
 
@@ -269,17 +286,58 @@ class InfluencerSubmissionDraftController extends Controller
     {
         $draft = InfluencerSubmissionDraft::findOrFail($id);
 
+        // Terima field baru + fallback lama
         $validated = $req->validate([
-            'status'        => ['required', Rule::in(['pending', 'approved', 'rejected'])],
-            'reviewer_note' => ['nullable', 'string'],
+            'status'            => ['required', Rule::in(['pending', 'approved', 'rejected'])],
+            'reviewer_note'     => ['nullable', 'string'], // legacy (optional)
+            'reviewer_note_1'   => ['nullable', 'string'],
+            'reviewer_note_2'   => ['nullable', 'string'],
         ]);
 
-        $draft->fill([
-            'status'        => $validated['status'],
-            'reviewer_note' => $validated['reviewer_note'] ?? null,
-            'reviewed_at'   => now(),
-            'reviewed_by'   => optional($req->user())->id,
-        ])->save();
+        // Deteksi mana yang dikirim (agar tidak menimpa tanpa sengaja)
+        $hasNote1   = $req->has('reviewer_note_1'); // true jika key ada, meski ''
+        $hasNote2   = $req->has('reviewer_note_2');
+        $hasLegacy  = $req->has('reviewer_note');
+
+        // Normalisasi nilai ('' -> null, trim spasi)
+        $note1 = $hasNote1 ? trim((string)$req->input('reviewer_note_1')) : null;
+        $note2 = $hasNote2 ? trim((string)$req->input('reviewer_note_2')) : null;
+
+        if (!$hasNote1 && $hasLegacy) {
+            // fallback: legacy ditaruh ke note_1 jika note_1 tidak dikirim
+            $note1 = trim((string)$req->input('reviewer_note'));
+        }
+
+        if ($hasNote1 && $note1 === '') $note1 = null;
+        if ($hasNote2 && $note2 === '') $note2 = null;
+        if (!$hasNote1 && !$hasNote2 && $hasLegacy && $note1 === '') $note1 = null;
+
+        $payload = [
+            'status'      => $validated['status'],
+            'reviewed_at' => now(),
+            'reviewed_by' => optional($req->user())->id,
+        ];
+
+        // Hanya set kolom note yang memang dikirim (atau via fallback),
+        // supaya nilai lama tidak tertimpa ketika field tak dikirim.
+        if ($hasNote1 || $hasLegacy) {
+            $payload['reviewer_note_1'] = $note1;
+        }
+        if ($hasNote2) {
+            $payload['reviewer_note_2'] = $note2;
+        }
+
+        // Sinkronkan kolom legacy jika ada di schema (untuk kompat lama)
+        try {
+            if (Schema::hasColumn('influencer_submission_drafts', 'reviewer_note')
+                && ($hasNote1 || $hasNote2 || $hasLegacy)) {
+                $payload['reviewer_note'] = $note1 ?? $note2 ?? null;
+            }
+        } catch (\Throwable $e) {
+            // abaikan jika cek schema gagal (mis. saat testing)
+        }
+
+        $draft->fill($payload)->save();
 
         return response()->json($draft->fresh(), 200);
     }
