@@ -1,9 +1,9 @@
 // /js/pages/kol/index.js
 export function render(target, params, query = {}, labelOverride = null) {
-  const v = window.BUILD_VERSION || Date.now();
-  console.log("[kol/index render] v=", v);
+    const v = window.BUILD_VERSION || Date.now();
+    console.log("[kol/index render] v=", v);
 
-  target.innerHTML = `
+    target.innerHTML = `
     <!-- Hero Section -->
     <section class="min-vh-100 py-5 py-lg-0 d-flex align-items-center bg-black"
              style="background-image: url('/images/hero-bg.png?v=${v}'); background-size: cover; background-position: center;">
@@ -11,11 +11,11 @@ export function render(target, params, query = {}, labelOverride = null) {
         <div class="row justify-content-center">
           <div class="col-lg-8 col-md-8">
             <div class="text-center">
-              <h1 class="display-1 fw-bold text-light text-uppercase">
+              <h1 class="display-1 fw-bold  text-uppercase">
                 <span>Welcome</span>
                 <span>Creator</span>
               </h1>
-              <p class="text-light">
+              <p class="">
                 Connect your TikTok account to start tracking your post performance<br/>
                 and monitor views, likes, and comments in real time.
               </p>
@@ -126,46 +126,48 @@ export function render(target, params, query = {}, labelOverride = null) {
     </section>
   `;
 
-  // Import komponen TANPA await (biar router nggak perlu async)
-  Promise.all([
-    import(`/js/components/headerKol.js?v=${v}`),
-    import(`/js/components/footerKol.js?v=${v}`),
-  ])
-    .then(([headerMod, footerMod]) => {
-      const { renderHeaderKol } = headerMod;
-      const { renderFooterKol } = footerMod;
+    // Import komponen TANPA await (biar router nggak perlu async)
+    Promise.all([
+        import(`/js/components/headerKol.js?v=${v}`),
+        import(`/js/components/footerKol.js?v=${v}`),
+    ])
+        .then(([headerMod, footerMod]) => {
+            const { renderHeaderKol } = headerMod;
+            const { renderFooterKol } = footerMod;
 
-      renderHeaderKol("header");
-      renderFooterKol();
+            renderHeaderKol("header");
+            renderFooterKol();
 
-      // === Build TikTok connect URL dengan campaign passthrough ===
-      const u = new URL(location.href);
-      const cId   = u.searchParams.get('campaign_id');
-      const cSlug = u.searchParams.get('campaign');
+            // === Build TikTok connect URL dengan campaign passthrough ===
+            const u = new URL(location.href);
+            const cId = u.searchParams.get("campaign_id");
+            const cSlug = u.searchParams.get("campaign");
 
-      const qs = new URLSearchParams();
-      if (cId)   qs.set('campaign_id', cId);
-      if (cSlug) qs.set('campaign', cSlug);
+            const qs = new URLSearchParams();
+            if (cId) qs.set("campaign_id", cId);
+            if (cSlug) qs.set("campaign", cSlug);
 
-      // NB: callback sekarang akan redirect ke /registration?connected=tiktok&...
-      //     Jadi tidak perlu "redirect" param di sini kecuali backend dipakai untuk override.
-      const connectUrl = `/auth/tiktok/redirect${qs.toString() ? '?' + qs.toString() : ''}`;
+            // NB: callback sekarang akan redirect ke /registration?connected=tiktok&...
+            //     Jadi tidak perlu "redirect" param di sini kecuali backend dipakai untuk override.
+            const connectUrl = `/auth/tiktok/redirect${
+                qs.toString() ? "?" + qs.toString() : ""
+            }`;
 
-      const btn = document.getElementById('connectTiktokBtn');
-      if (btn) {
-        // set href untuk accessibility (right-click, long-press)
-        btn.setAttribute('href', connectUrl);
-        // dan force full reload (jaga-jaga router SPA)
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          // optional: debounce supaya nggak double
-          btn.classList.add('disabled');
-          btn.setAttribute('aria-disabled', 'true');
-          window.location.assign(connectUrl);
+            const btn = document.getElementById("connectTiktokBtn");
+            if (btn) {
+                // set href untuk accessibility (right-click, long-press)
+                btn.setAttribute("href", connectUrl);
+                // dan force full reload (jaga-jaga router SPA)
+                btn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    // optional: debounce supaya nggak double
+                    btn.classList.add("disabled");
+                    btn.setAttribute("aria-disabled", "true");
+                    window.location.assign(connectUrl);
+                });
+            }
+        })
+        .catch((err) => {
+            console.error("[Import components failed]", err);
         });
-      }
-    })
-    .catch((err) => {
-      console.error("[Import components failed]", err);
-    });
 }

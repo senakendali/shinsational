@@ -13,7 +13,7 @@ export function renderFooterKol(targetId = "footer") {
             }
         }
     </style>
-        <footer class="text-light py-4" style="background:#000;">
+        <footer class="py-4 border-top shadow-lg" style="background:#fff;">
             <div class="container ${isProfilePage ? "footer-profile" : ""}">
                 <div class="row">
                     <!-- Logo + About -->
