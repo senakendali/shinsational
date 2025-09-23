@@ -1,10 +1,20 @@
 export function renderFooterKol(targetId = "footer") {
     const container = document.getElementById(targetId);
+
     if (!container) return;
 
+    const isProfilePage = window.location.pathname.includes("/my-profile");
+
     container.innerHTML = `
+    <style>
+     @media (min-width: 992px) {
+        .footer-profile{
+            margin-left: 350px;
+            }
+        }
+    </style>
         <footer class="text-light py-4" style="background:#000;">
-            <div class="container">
+            <div class="container ${isProfilePage ? "footer-profile" : ""}">
                 <div class="row">
                     <!-- Logo + About -->
                     <div class="col-md-12 mb-3">
