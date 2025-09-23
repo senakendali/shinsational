@@ -23,7 +23,7 @@ export function render(target, params, query = {}, labelOverride = null) {
     <div class="container-fluid px-0" style="margin-top:${HEADER_H}px;">
       <div class="d-flex flex-column flex-lg-row" style="min-height: calc(100vh - ${HEADER_H}px);">
         <!-- Sidebar - Fixed on desktop, normal on mobile -->
-        <aside class="bg-white border-end sidebar-fixed ">
+        <aside class="bg-light border-end sidebar-fixed ">
           <div class="d-flex pt-4 flex-column h-100">
             <!-- Profile -->
             <div class="text-center p-4 border-bottom">

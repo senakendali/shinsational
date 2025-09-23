@@ -98,8 +98,8 @@ class InfluencerSubmissionController extends Controller
 
         // refresh
         $resp = Http::asForm()->post(self::TIKTOK_TOKEN_URL, [
-            'client_key'    => $this->tiktokClientKey(),
-            'client_secret' => $this->tiktokClientSecret(),
+            'client_key'    => config('services.tiktok.client_key'),
+            'client_secret' => config('services.tiktok.client_secret'),
             'grant_type'    => 'refresh_token',
             'refresh_token' => $refresh,
         ]);
