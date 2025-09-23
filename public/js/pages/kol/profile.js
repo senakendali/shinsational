@@ -4,45 +4,59 @@ export function render(target, params, query = {}, labelOverride = null) {
     const HEADER_H = 127;
 
     target.innerHTML = `
+    <style>
+      @media (min-width: 992px) {
+        .sidebar-fixed {
+          position: fixed;
+          height: calc(100vh - ${HEADER_H}px) !important;
+          width: 300px;
+        }
+        .main-content-offset {
+          margin-left: 300px;
+          width: calc(100% - 300px);
+        }
+      }
+    </style>
     <div class="container-fluid px-0" style="margin-top:${HEADER_H}px;">
-      <div class="d-flex flex-column flex-md-row" style="min-height: calc(100vh - ${HEADER_H}px);">
-
-        <!-- Sidebar -->
-        <aside class="bg-light border-end d-flex flex-column" style="flex:0 0 300px; max-width:100%;">
-          <!-- Profile -->
-          <div class="text-center p-4 border-bottom">
-            <div class="pb-3 position-relative" style="height:100px;">
-              <i id="profileAvatarIcon" class="bi bi-person-circle" style="font-size:100px; line-height:100px;"></i>
-              <img id="profileAvatarImg" src="" alt="Avatar"
-                   class="d-none rounded-circle mx-auto position-absolute top-50 start-50 translate-middle"
-                   style="width:100px; height:100px; object-fit:cover; border:3px solid #fff; box-shadow:0 4px 12px rgba(0,0,0,.12);" />
+      <div class="d-flex flex-column flex-lg-row" style="min-height: calc(100vh - ${HEADER_H}px);">
+        <!-- Sidebar - Fixed on desktop, normal on mobile -->
+        <aside class="bg-light border-end sidebar-fixed pt-4 ">
+          <div class="d-flex flex-column h-100">
+            <!-- Profile -->
+            <div class="text-center p-4 border-bottom">
+              <div class="pb-3 position-relative" style="height:100px;">
+                <i id="profileAvatarIcon" class="bi bi-person-circle" style="font-size:100px; line-height:100px;"></i>
+                <img id="profileAvatarImg" src="" alt="Avatar"
+                     class="d-none rounded-circle mx-auto position-absolute top-50 start-50 translate-middle"
+                     style="width:100px; height:100px; object-fit:cover; border:3px solid #fff; box-shadow:0 4px 12px rgba(0,0,0,.12);" />
+              </div>
+              <div class="pt-3">
+                <h5 id="profileName" class="fw-semibold">Creator</h5>
+                <p id="profileHandle" class="text-muted small mb-0"></p>
+              </div>
             </div>
-            <div class="pt-3">
-              <h5 id="profileName" class="fw-semibold">Creator</h5>
-              <p id="profileHandle" class="text-muted small mb-0"></p>
-            </div>
-          </div>
 
-          <!-- Campaigns -->
-          <div class="flex-grow-1 p-3 overflow-auto">
-            <h6 class="text-uppercase text-muted small fw-bold mb-3">CAMPAIGNS</h6>
-            <div id="campaignList" class="d-grid gap-1">
-              <div class="text-muted small">Loading campaigns…</div>
+            <!-- Campaigns -->
+            <div class="flex-grow-1 p-3 overflow-auto">
+              <h6 class="text-uppercase text-muted small fw-bold mb-3">CAMPAIGNS</h6>
+              <div id="campaignList" class="d-grid gap-1">
+                <div class="text-muted small">Loading campaigns…</div>
+              </div>
             </div>
-          </div>
 
-          <!-- Logout -->
-          <div class="mt-auto p-3 border-top">
-            <button id="logoutBtn" class="btn btn-danger w-100 d-flex align-items-center justify-content-center gap-2">
-              <i class="bi bi-box-arrow-right"></i>
-              <span>Logout</span>
-            </button>
+            <!-- Logout -->
+            <div class="mt-auto p-3 border-top">
+              <button id="logoutBtn" class="btn btn-danger w-100 d-flex align-items-center justify-content-center gap-2">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Logout</span>
+              </button>
+            </div>
           </div>
         </aside>
 
-        <!-- Main Content -->
-        <main class="flex-grow-1 bg-white d-flex flex-column">
-          <div class="p-4 flex-grow-1">
+        <!-- Main Content - Add margin only on desktop -->
+        <main class="flex-grow-1 bg-white main-content-offset">
+          <div class="p-4 flex-grow-1 overflow-y-auto">
             <h4 class="mb-4" id="mainCampaignTitle">My Campaign</h4>
 
             <!-- Notice existing -->
