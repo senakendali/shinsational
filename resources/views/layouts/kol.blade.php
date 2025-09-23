@@ -14,7 +14,7 @@
 
 
 </head>
-<body class="bg-light">
+<body>
     <div id="header"></div>
     <main id="app"></main>
     <div id="footer"></div>

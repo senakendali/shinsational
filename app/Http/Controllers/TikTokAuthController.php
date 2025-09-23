@@ -20,9 +20,9 @@ use App\Services\LinkTiktokService;
 class TikTokAuthController extends Controller
 {
     // ==== Pakai env/config kalau bisa. Constants ini hanya fallback. ====
-    private const CLIENT_KEY    = 'sbawru1jwiig13smtm';                       // ganti ke env('TIKTOK_CLIENT_KEY')
+    /*private const CLIENT_KEY    = 'sbawru1jwiig13smtm';                       // ganti ke env('TIKTOK_CLIENT_KEY')
     private const CLIENT_SECRET = 'm7IRftc8Lpu6CUFmgzezQxWO8HJYyKf3';         // ganti ke env('TIKTOK_CLIENT_SECRET')
-    private const REDIRECT_URI  = 'https://dreamxbtladvocacy.com/auth/tiktok/callback';
+    private const REDIRECT_URI  = 'https://dreamxbtladvocacy.com/auth/tiktok/callback';*/
 
     private const AUTH_URL     = 'https://www.tiktok.com/v2/auth/authorize/';
     private const TOKEN_URL    = 'https://open.tiktokapis.com/v2/oauth/token/';
@@ -64,10 +64,10 @@ class TikTokAuthController extends Controller
         ], now()->addMinutes(10));
 
         $params = [
-            'client_key'    => self::CLIENT_KEY,
+            'client_key'    => config('services.tiktok.client_key'),
             'response_type' => 'code',
             'scope'         => self::SCOPES,
-            'redirect_uri'  => self::REDIRECT_URI,
+            'redirect_uri'  => config('services.tiktok.redirect_uri'),
             'state'         => $state,
         ];
 
@@ -109,16 +109,16 @@ class TikTokAuthController extends Controller
 
         // --- 1) Tukar code -> token ---
         $tokenResp = Http::asForm()->post(self::TOKEN_URL, [
-            'client_key'    => self::CLIENT_KEY,
-            'client_secret' => self::CLIENT_SECRET,
+            'client_key'    => config('services.tiktok.client_key'),
+            'client_secret' => config('services.tiktok.client_secret'),
             'code'          => $code,
             'grant_type'    => 'authorization_code',
-            'redirect_uri'  => self::REDIRECT_URI,
+            'redirect_uri'  => config('services.tiktok.redirect_uri'),
         ]);
 
         if (!$tokenResp->ok()) {
             Log::error('tiktok_token_error', [
-                'sent_redirect' => self::REDIRECT_URI,
+                'sent_redirect' => config('services.tiktok.redirect_uri'),
                 'status'        => $tokenResp->status(),
                 'body'          => $tokenResp->json(),
             ]);

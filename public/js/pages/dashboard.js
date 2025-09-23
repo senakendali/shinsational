@@ -143,7 +143,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-draft">0</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-hourglass-split"></i> ⁠Waiting feedback</div>
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-hourglass-split"></i> Waiting feedback</div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-approval">0</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
@@ -765,21 +765,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const contentTarget = Number.isFinite(kpiTargetVal) ? Number(kpiTargetVal) : fallbackTarget;
     if (elTarget) elTarget.textContent = fmt(contentTarget);
 
-    // ===== Total draft dibuat (slot 1..perKol, semua status)
-    let totalDraftsCreated = 0;
-    for (let slot = 1; slot <= perKol; slot++) {
-      totalDraftsCreated += await countDrafts(campaignId, { slot });
-    }
-
     // ===== Posted (card) = jumlah link terisi
     if (elMade) elMade.textContent = fmt(postedContents);
-
-    // ===== Waiting Draft = Target - Posted  (contoh 100 - 2 = 98)
-    const waitingDraftTotal = Math.max(0, Number(contentTarget) - Number(postedContents));
-    if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
-
-    // ===== Donut Progress: posted vs target
-    renderContentDonut(postedContents, contentTarget);
 
     // ===== Waiting for Approval = pending
     const draftPendingCount = await countDrafts(campaignId, { status: 'pending' });
@@ -801,6 +788,17 @@ export async function render(target, path, query = {}, labelOverride = null) {
       if (!posted) readyToPost += 1;
     }
     if (elReady) elReady.textContent = fmt(readyToPost);
+
+    // ===== Waiting Draft (rumus baru)
+    // waiting_draft = KPI_target - (posted + pending + rejected + ready_to_post)
+    const waitingDraftTotal = Math.max(
+      0,
+      Number(contentTarget) - (Number(postedContents) + Number(draftPendingCount) + Number(draftRejectedCount) + Number(readyToPost))
+    );
+    if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
+
+    // ===== Donut Progress: posted vs target
+    renderContentDonut(postedContents, contentTarget);
 
     // ===== KOL Stats
     renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);

@@ -6,22 +6,25 @@ export function render(target, params, query = {}, labelOverride = null) {
     target.innerHTML = `
     <style>
       @media (min-width: 992px) {
+        :root { --sidebar-gap: 20px; } /* jarak dari kiri & header */
+
         .sidebar-fixed {
           position: fixed;
-          height: calc(100vh - ${HEADER_H}px) !important;
+          top: calc(${HEADER_H}px);     /* jarak dari header */
           width: 300px;
+          height: calc(100vh - ${HEADER_H}px) !important; /* tinggi terhitung */
         }
         .main-content-offset {
-          margin-left: 300px;
-          width: calc(100% - 300px);
+          margin-left: calc(300px);     /* geser konten utama */
+          width: calc(100% - (300px + var(--sidebar-gap)));  /* hindari overlap */
         }
       }
     </style>
     <div class="container-fluid px-0" style="margin-top:${HEADER_H}px;">
       <div class="d-flex flex-column flex-lg-row" style="min-height: calc(100vh - ${HEADER_H}px);">
         <!-- Sidebar - Fixed on desktop, normal on mobile -->
-        <aside class="bg-light border-end sidebar-fixed ">
-          <div class="d-flex pt-4 flex-column h-100 bg-white">
+        <aside class="bg-white border-end sidebar-fixed ">
+          <div class="d-flex pt-4 flex-column h-100">
             <!-- Profile -->
             <div class="text-center p-4 border-bottom">
               <div class="pb-3 position-relative" style="height:100px;">
@@ -55,7 +58,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         </aside>
 
         <!-- Main Content - Add margin only on desktop -->
-        <main class="flex-grow-1 bg-light main-content-offset">
+        <main class="flex-grow-1 bg-profile main-content-offset">
           <div class="p-4 flex-grow-1 overflow-y-auto">
             <h4 class="mb-4" id="mainCampaignTitle">My Campaign</h4>
 
@@ -66,7 +69,7 @@ export function render(target, params, query = {}, labelOverride = null) {
             </div>
 
             <!-- ===== Data Kontak ===== -->
-            <div class="card mb-4">
+            <div class="card mb-3">
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                   <h6 class="mb-0">Data Kontak</h6>
@@ -92,7 +95,7 @@ export function render(target, params, query = {}, labelOverride = null) {
             </div>
 
             <!-- ===== Draft Konten (Approval) ===== -->
-            <div class="card mb-4" id="draftSection">
+            <div class="card mb-3" id="draftSection">
               <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                   <div>
@@ -122,188 +125,191 @@ export function render(target, params, query = {}, labelOverride = null) {
               </div>
             </div>
 
-            <form id="submissionForm" class="needs-validation" novalidate>
-              <div class="row g-3">
+            <div class="card">
+                <div class="card-body">
+                    <form id="submissionForm" class="needs-validation" novalidate>
+                        <div class="row g-3">
+                            <!-- BARIS 1 -->
+                            <div class="col-12">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-4">
+                                <label for="link-1" class="form-label text-muted">Link Postingan 1</label>
+                                <input type="url" class="form-control" id="link-1" placeholder="https://www.tiktok.com/...">
+                                <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="post_date_1" class="form-label text-muted">Tanggal Postingan 1</label>
+                                <input type="date" class="form-control" id="post_date_1">
+                                <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="screenshot_1" class="form-label text-muted">Screenshot Postingan 1</label>
+                                <input type="file" class="form-control" id="screenshot_1" accept="image/*">
+                                <a id="screenshot_1_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                                </div>
+                            </div>
+                            </div>
 
-                <!-- BARIS 1 -->
-                <div class="col-12">
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
-                      <label for="link-1" class="form-label text-muted">Link Postingan 1</label>
-                      <input type="url" class="form-control" id="link-1" placeholder="https://www.tiktok.com/...">
-                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="post_date_1" class="form-label text-muted">Tanggal Postingan 1</label>
-                      <input type="date" class="form-control" id="post_date_1">
-                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="screenshot_1" class="form-label text-muted">Screenshot Postingan 1</label>
-                      <input type="file" class="form-control" id="screenshot_1" accept="image/*">
-                      <a id="screenshot_1_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
-                    </div>
-                  </div>
-                </div>
+                            <!-- BARIS 2 -->
+                            <div class="col-12">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-4">
+                                <label for="link-2" class="form-label text-muted">Link Postingan 2</label>
+                                <input type="url" class="form-control" id="link-2" placeholder="https://www.tiktok.com/...">
+                                <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2</label>
+                                <input type="date" class="form-control" id="post_date_2">
+                                <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2</label>
+                                <input type="file" class="form-control" id="screenshot_2" accept="image/*">
+                                <a id="screenshot_2_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                                </div>
+                            </div>
+                            </div>
 
-                <!-- BARIS 2 -->
-                <div class="col-12">
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
-                      <label for="link-2" class="form-label text-muted">Link Postingan 2</label>
-                      <input type="url" class="form-control" id="link-2" placeholder="https://www.tiktok.com/...">
-                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="post_date_2" class="form-label text-muted">Tanggal Postingan 2</label>
-                      <input type="date" class="form-control" id="post_date_2">
-                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="screenshot_2" class="form-label text-muted">Screenshot Postingan 2</label>
-                      <input type="file" class="form-control" id="screenshot_2" accept="image/*">
-                      <a id="screenshot_2_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
-                    </div>
-                  </div>
-                </div>
+                            <!-- BARIS 3 (hidden by default) -->
+                            <div id="row-slot-3" class="col-12 d-none">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-4">
+                                <label for="link-3" class="form-label text-muted">Link Postingan 3</label>
+                                <input type="url" class="form-control" id="link-3" placeholder="https://www.tiktok.com/...">
+                                <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="post_date_3" class="form-label text-muted">Tanggal Postingan 3</label>
+                                <input type="date" class="form-control" id="post_date_3">
+                                <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="screenshot_3" class="form-label text-muted">Screenshot Postingan 3</label>
+                                <input type="file" class="form-control" id="screenshot_3" accept="image/*">
+                                <a id="screenshot_3_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                                </div>
+                            </div>
+                            </div>
 
-                <!-- BARIS 3 (hidden by default) -->
-                <div id="row-slot-3" class="col-12 d-none">
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
-                      <label for="link-3" class="form-label text-muted">Link Postingan 3</label>
-                      <input type="url" class="form-control" id="link-3" placeholder="https://www.tiktok.com/...">
-                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="post_date_3" class="form-label text-muted">Tanggal Postingan 3</label>
-                      <input type="date" class="form-control" id="post_date_3">
-                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="screenshot_3" class="form-label text-muted">Screenshot Postingan 3</label>
-                      <input type="file" class="form-control" id="screenshot_3" accept="image/*">
-                      <a id="screenshot_3_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
-                    </div>
-                  </div>
-                </div>
+                            <!-- BARIS 4 (hidden by default) -->
+                            <div id="row-slot-4" class="col-12 d-none">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-4">
+                                <label for="link-4" class="form-label text-muted">Link Postingan 4</label>
+                                <input type="url" class="form-control" id="link-4" placeholder="https://www.tiktok.com/...">
+                                <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="post_date_4" class="form-label text-muted">Tanggal Postingan 4</label>
+                                <input type="date" class="form-control" id="post_date_4">
+                                <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="screenshot_4" class="form-label text-muted">Screenshot Postingan 4</label>
+                                <input type="file" class="form-control" id="screenshot_4" accept="image/*">
+                                <a id="screenshot_4_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                                </div>
+                            </div>
+                            </div>
 
-                <!-- BARIS 4 (hidden by default) -->
-                <div id="row-slot-4" class="col-12 d-none">
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
-                      <label for="link-4" class="form-label text-muted">Link Postingan 4</label>
-                      <input type="url" class="form-control" id="link-4" placeholder="https://www.tiktok.com/...">
-                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="post_date_4" class="form-label text-muted">Tanggal Postingan 4</label>
-                      <input type="date" class="form-control" id="post_date_4">
-                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="screenshot_4" class="form-label text-muted">Screenshot Postingan 4</label>
-                      <input type="file" class="form-control" id="screenshot_4" accept="image/*">
-                      <a id="screenshot_4_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
-                    </div>
-                  </div>
-                </div>
+                            <!-- BARIS 5 (hidden by default) -->
+                            <div id="row-slot-5" class="col-12 d-none">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-4">
+                                <label for="link-5" class="form-label text-muted">Link Postingan 5</label>
+                                <input type="url" class="form-control" id="link-5" placeholder="https://www.tiktok.com/...">
+                                <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="post_date_5" class="form-label text-muted">Tanggal Postingan 5</label>
+                                <input type="date" class="form-control" id="post_date_5">
+                                <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
+                                </div>
+                                <div class="col-md-4">
+                                <label for="screenshot_5" class="form-label text-muted">Screenshot Postingan 5</label>
+                                <input type="file" class="form-control" id="screenshot_5" accept="image/*">
+                                <a id="screenshot_5_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
+                                </div>
+                            </div>
+                            </div>
 
-                <!-- BARIS 5 (hidden by default) -->
-                <div id="row-slot-5" class="col-12 d-none">
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-4">
-                      <label for="link-5" class="form-label text-muted">Link Postingan 5</label>
-                      <input type="url" class="form-control" id="link-5" placeholder="https://www.tiktok.com/...">
-                      <div class="invalid-feedback">Jika diisi, harus URL yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="post_date_5" class="form-label text-muted">Tanggal Postingan 5</label>
-                      <input type="date" class="form-control" id="post_date_5">
-                      <div class="invalid-feedback">Jika diisi, pilih tanggal yang valid.</div>
-                    </div>
-                    <div class="col-md-4">
-                      <label for="screenshot_5" class="form-label text-muted">Screenshot Postingan 5</label>
-                      <input type="file" class="form-control" id="screenshot_5" accept="image/*">
-                      <a id="screenshot_5_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat Gambar</a>
-                    </div>
-                  </div>
-                </div>
+                            <!-- Add more button -->
+                            <div class="col-12 d-flex align-items-center gap-3 d-none">
+                            <button type="button" id="addMoreBtn" class="btn btn-outline-dark btn-sm">
+                                + Tambah Postingan
+                            </button>
+                            <span class="small text-muted" id="postQuotaHint"></span>
+                            </div>
 
-                <!-- Add more button -->
-                <div class="col-12 d-flex align-items-center gap-3 d-none">
-                  <button type="button" id="addMoreBtn" class="btn btn-outline-dark btn-sm">
-                    + Tambah Postingan
-                  </button>
-                  <span class="small text-muted" id="postQuotaHint"></span>
-                </div>
+                            <!-- CARA MENDAPATKAN PRODUK -->
+                            <div class="col-md-6">
+                            <label for="acquisition_method" class="form-label text-muted">Cara Mendapatkan Produk</label>
+                            <select id="acquisition_method" class="form-select">
+                                <option value="">-- Pilih --</option>
+                                <option value="buy">Beli sendiri</option>
+                                <option value="sent_by_brand">Dikirim oleh Brand</option>
+                            </select>
+                            </div>
 
-                <!-- CARA MENDAPATKAN PRODUK -->
-                <div class="col-md-6">
-                  <label for="acquisition_method" class="form-label text-muted">Cara Mendapatkan Produk</label>
-                  <select id="acquisition_method" class="form-select">
-                    <option value="">-- Pilih --</option>
-                    <option value="buy">Beli sendiri</option>
-                    <option value="sent_by_brand">Dikirim oleh Brand</option>
-                  </select>
-                </div>
+                            <!-- FIELD: BELI -->
+                            <div id="purchaseFields" class="col-12 d-none">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-6">
+                                <label for="purchase_platform" class="form-label text-muted">Beli di mana</label>
+                                <select id="purchase_platform" class="form-select">
+                                    <option value="">-- Pilih --</option>
+                                    <option value="tiktokshop">TikTok Shop</option>
+                                    <option value="shopee">Shopee</option>
+                                </select>
+                                </div>
+                                <div class="col-md-6">
+                                <label for="purchase_price" class="form-label text-muted">Harga Beli</label>
+                                <input type="number" min="0" step="0.01" class="form-control" id="purchase_price" placeholder="0">
+                                </div>
+                            </div>
+                            </div>
 
-                <!-- FIELD: BELI -->
-                <div id="purchaseFields" class="col-12 d-none">
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-6">
-                      <label for="purchase_platform" class="form-label text-muted">Beli di mana</label>
-                      <select id="purchase_platform" class="form-select">
-                        <option value="">-- Pilih --</option>
-                        <option value="tiktokshop">TikTok Shop</option>
-                        <option value="shopee">Shopee</option>
-                      </select>
-                    </div>
-                    <div class="col-md-6">
-                      <label for="purchase_price" class="form-label text-muted">Harga Beli</label>
-                      <input type="number" min="0" step="0.01" class="form-control" id="purchase_price" placeholder="0">
-                    </div>
-                  </div>
-                </div>
+                            <!-- FIELD: DIKIRIM BRAND (VIEW-ONLY) -->
+                            <div id="shippingFields" class="col-12 d-none">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-md-6">
+                                <label class="form-label text-muted">Nama Ekspedisi</label>
+                                <input type="text" class="form-control" id="shipping_courier" placeholder="Diisi oleh admin" disabled>
+                                </div>
+                                <div class="col-md-6">
+                                <label class="form-label text-muted">Nomor Resi</label>
+                                <input type="text" class="form-control" id="shipping_tracking_number" placeholder="Diisi oleh admin" disabled>
+                                </div>
+                            </div>
+                            <div class="text-muted small mt-1">Ekspedisi & Nomor Resi akan diisi oleh admin.</div>
+                            </div>
 
-                <!-- FIELD: DIKIRIM BRAND (VIEW-ONLY) -->
-                <div id="shippingFields" class="col-12 d-none">
-                  <div class="row g-3 align-items-end">
-                    <div class="col-md-6">
-                      <label class="form-label text-muted">Nama Ekspedisi</label>
-                      <input type="text" class="form-control" id="shipping_courier" placeholder="Diisi oleh admin" disabled>
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label text-muted">Nomor Resi</label>
-                      <input type="text" class="form-control" id="shipping_tracking_number" placeholder="Diisi oleh admin" disabled>
-                    </div>
-                  </div>
-                  <div class="text-muted small mt-1">Ekspedisi & Nomor Resi akan diisi oleh admin.</div>
-                </div>
+                            <!-- Invoice & Bukti Review -->
+                            <div class="col-md-6">
+                            <label for="invoice_file" class="form-label text-muted">Upload Invoice Pembelian</label>
+                            <input type="file" class="form-control" id="invoice_file" accept="application/pdf,image/*">
+                            
+                            <a id="invoice_file_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat File</a>
+                            </div>
 
-                <!-- Invoice & Bukti Review -->
-                <div class="col-md-6">
-                  <label for="invoice_file" class="form-label text-muted">Upload Invoice Pembelian</label>
-                  <input type="file" class="form-control" id="invoice_file" accept="application/pdf,image/*">
-                  <small class="text-muted">PDF/JPG/PNG, opsional</small>
-                  <a id="invoice_file_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat File</a>
-                </div>
+                            <div class="col-md-6">
+                            <label for="review_proof_file" class="form-label text-muted">Upload Bukti Review/Rate</label>
+                            <input type="file" class="form-control" id="review_proof_file" accept="application/pdf,image/*">
+                            
+                            <a id="review_proof_file_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat File</a>
+                            </div>
 
-                <div class="col-md-6">
-                  <label for="review_proof_file" class="form-label text-muted">Upload Bukti Review/Rate</label>
-                  <input type="file" class="form-control" id="review_proof_file" accept="application/pdf,image/*">
-                  <small class="text-muted">PDF/JPG/PNG, opsional</small>
-                  <a id="review_proof_file_view" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-secondary btn-sm mt-2 d-none">Lihat File</a>
+                            <!-- Actions -->
+                            <div class="col-12 pt-2 d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary d-none" id="cancelEditBtn">Batal</button>
+                            <button type="button" class="btn btn-outline-dark d-none" id="editBtn">Edit</button>
+                            <button type="submit" class="btn btn-dark px-4" id="submitBtn">Kirim</button>
+                            </div>
+                        </div>
+                    </form>
                 </div>
-
-                <!-- Actions -->
-                <div class="col-12 pt-2 d-flex justify-content-end gap-2">
-                  <button type="button" class="btn btn-outline-secondary d-none" id="cancelEditBtn">Batal</button>
-                  <button type="button" class="btn btn-outline-dark d-none" id="editBtn">Edit</button>
-                  <button type="submit" class="btn btn-dark px-4" id="submitBtn">Kirim</button>
-                </div>
-              </div>
-            </form>
+            </div>
           </div>
         </main>
       </div>
@@ -335,7 +341,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                 const { showToast } = toastMod;
 
                 renderHeaderKol("header");
-                renderFooterKol();
+                //renderFooterKol();
 
                 // ===== Helpers
 
@@ -370,6 +376,17 @@ export function render(target, params, query = {}, labelOverride = null) {
                         d.getTime() - d.getTimezoneOffset() * 60000
                     );
                     return k.toISOString().slice(0, 10);
+                };
+
+                // Gabungkan catatan reviewer dari field-field baru dengan fallback lama
+                const combineReviewerNotes = (obj = {}) => {
+                    const pick = (v) => (typeof v === "string" ? v.trim() : "");
+                    const parts = [
+                        pick(obj.reviewer_note_1),
+                        pick(obj.reviewer_note_2),
+                        pick(obj.note),          // fallback sangat lama
+                    ].filter(Boolean);
+                    return parts.join(" , ");
                 };
 
                 // CSRF helpers
@@ -687,22 +704,22 @@ export function render(target, params, query = {}, labelOverride = null) {
                         const row = document.createElement("div");
                         row.className = "col-12 draft-row";
                         row.innerHTML = `
-            <div class="row g-2 align-items-center">
-              <div class="col-md-6">
-                <label class="form-label text-muted">Draft ${i} (URL)</label>
-                <input type="url" class="form-control draft-url" id="draft_url_${i}" placeholder="https://...">
-                <div class="invalid-feedback">Masukkan URL draft yang valid.</div>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label text-muted d-block">Status & Catatan Admin</label>
-                <div class="d-flex align-items-center gap-2">
-                  <span id="draft_status_badge_${i}" class="badge bg-secondary">-</span>
-                  <small id="draft_status_time_${i}" class="text-muted"></small>
-                </div>
-                <div id="draft_admin_note_${i}" class="small text-muted mt-1">-</div>
-              </div>
-            </div>
-          `;
+                                        <div class="row g-2 align-items-center">
+                                        <div class="col-md-6">
+                                            <label class="form-label text-muted">Draft ${i} (URL)</label>
+                                            <input type="url" class="form-control draft-url" id="draft_url_${i}" placeholder="https://...">
+                                            <div class="invalid-feedback">Masukkan URL draft yang valid.</div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label text-muted d-block">Status & Catatan Admin</label>
+                                            <div class="d-flex align-items-center gap-2">
+                                            <span id="draft_status_badge_${i}" class="badge bg-secondary">-</span>
+                                            <small id="draft_status_time_${i}" class="text-muted"></small>
+                                            </div>
+                                            <div id="draft_admin_note_${i}" class="small text-muted mt-1">-</div>
+                                        </div>
+                                        </div>
+                                    `;
                         wrap.appendChild(row);
                     }
                     currentDraftRowCount = c;
@@ -804,7 +821,8 @@ export function render(target, params, query = {}, labelOverride = null) {
                         rec?.updated_at ||
                         rec?.created_at ||
                         null;
-                    const reviewerNote = rec?.draft_reviewer_note || "";
+                    const reviewerNote =
+                        combineReviewerNotes(rec) || rec?.draft_reviewer_note || "";
                     if (status || reviewerNote || ts) {
                         showDraftStatus({
                             status: status || "pending",
@@ -876,8 +894,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                                     latest.updated_at ||
                                     latest.submitted_at ||
                                     latest.created_at,
-                                reviewer_note:
-                                    latest.reviewer_note || latest.note || "",
+                                reviewer_note: combineReviewerNotes(latest),
                             });
                         } else {
                             draftStatusWrap?.classList.add("d-none");
@@ -919,8 +936,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                             if (d) {
                                 showRowDraftStatus(i, {
                                     status: d.status || d.draft_status || "-",
-                                    reviewer_note:
-                                        d.reviewer_note || d.note || "",
+                                    reviewer_note: combineReviewerNotes(d),
                                     updated_at:
                                         d.updated_at ||
                                         d.submitted_at ||
@@ -1698,6 +1714,7 @@ export function render(target, params, query = {}, labelOverride = null) {
                             listEl
                                 .querySelectorAll(".campaign-item")
                                 .forEach((b) => b.classList.remove("active"));
+                            btn.addEventListener;
                             btn.classList.add("active");
                             selectedCampaignId =
                                 btn.getAttribute("data-campaign-id");

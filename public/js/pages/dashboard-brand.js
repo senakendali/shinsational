@@ -67,7 +67,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return keys.some(k => Number.isFinite(Number(kpi?.[k])));
   }
 
-
   // layout
   target.innerHTML = `
     <div id="brand-dashboard-root">
@@ -498,7 +497,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     renderOneDonut('shares',   totals.shares,   kpi.shares);
   }
 
-
   function renderChart(views, likes, comments, shares) {
     const canvas = $('#engagementChart');
     const ctx = canvas.getContext('2d');
@@ -689,7 +687,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     $('#kpi-donuts').style.display = '';
   }
 
-
   async function ensureCampaignKpi(campaignId) {
     if (!campaignId) return null;
     if (campaignKpiMap.has(String(campaignId))) return campaignKpiMap.get(String(campaignId));
@@ -826,7 +823,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const ratingSet = new Set();
     const shipSet   = new Set();
 
-    // NEW: untuk ready-to-post
+    // untuk ready-to-post
     const subLinksMap = new Map();
 
     const kolKeyOf = (s) => String(
@@ -895,15 +892,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     // ==== POSTED (card) = jumlah link terisi
     if (elMade) elMade.textContent = fmt(totalPostedContents);
 
-    // ==== Waiting Draft = Target - Posted
-    const waitingDraftTotal = Math.max(0, Number(contentTarget) - Number(totalPostedContents));
-    if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
-
-    // ==== Donut progress: posted vs target
-    renderContentDonut(totalPostedContents, contentTarget);
-
     // ==== Waiting feedback (pending) & On Revision (rejected)
-    const draftPendingCount = await countDrafts(campaignId, { status: 'pending' });
+    const draftPendingCount  = await countDrafts(campaignId, { status: 'pending' });
     if (elWaitApproval) elWaitApproval.textContent = fmt(draftPendingCount);
 
     const draftRejectedCount = await countDrafts(campaignId, { status: 'rejected' });
@@ -921,6 +911,22 @@ export async function render(target, path, query = {}, labelOverride = null) {
       if (!posted) readyToPost += 1;
     }
     if (elReady) elReady.textContent = fmt(readyToPost);
+
+    // ==== Waiting Draft (RUMUS BARU)
+    // waiting_draft = KPI_target - (posted + pending + rejected + ready_to_post)
+    const waitingDraftTotal = Math.max(
+      0,
+      Number(contentTarget) - (
+        Number(totalPostedContents) +
+        Number(draftPendingCount) +
+        Number(draftRejectedCount) +
+        Number(readyToPost)
+      )
+    );
+    if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
+
+    // ==== Donut progress: posted vs target (tetap posted vs target)
+    renderContentDonut(totalPostedContents, contentTarget);
 
     // ===== JUMLAH KOL JOIN (render KOL summary)
     renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);
