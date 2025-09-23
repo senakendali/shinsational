@@ -20,8 +20,8 @@ export function render(target, params, query = {}, labelOverride = null) {
     <div class="container-fluid px-0" style="margin-top:${HEADER_H}px;">
       <div class="d-flex flex-column flex-lg-row" style="min-height: calc(100vh - ${HEADER_H}px);">
         <!-- Sidebar - Fixed on desktop, normal on mobile -->
-        <aside class="bg-light border-end sidebar-fixed pt-4 ">
-          <div class="d-flex flex-column h-100">
+        <aside class="bg-light border-end sidebar-fixed ">
+          <div class="d-flex pt-4 flex-column h-100 bg-white">
             <!-- Profile -->
             <div class="text-center p-4 border-bottom">
               <div class="pb-3 position-relative" style="height:100px;">
@@ -55,7 +55,7 @@ export function render(target, params, query = {}, labelOverride = null) {
         </aside>
 
         <!-- Main Content - Add margin only on desktop -->
-        <main class="flex-grow-1 bg-white main-content-offset">
+        <main class="flex-grow-1 bg-light main-content-offset">
           <div class="p-4 flex-grow-1 overflow-y-auto">
             <h4 class="mb-4" id="mainCampaignTitle">My Campaign</h4>
 
@@ -820,8 +820,10 @@ export function render(target, params, query = {}, labelOverride = null) {
                 function updateSlotLocksFromMap(bySlotMap) {
                     const next = new Set();
                     bySlotMap.forEach((d, slot) => {
-                        const s = String(d.status || d.draft_status || '').toLowerCase();
-                        if (s && s !== 'approved') next.add(slot); // lock hanya kalau BUKAN approved
+                        const s = String(
+                            d.status || d.draft_status || ""
+                        ).toLowerCase();
+                        if (s && s !== "approved") next.add(slot); // lock hanya kalau BUKAN approved
                     });
                     draftLockBySlot = next;
                     enforceSlotLocks();
@@ -1242,28 +1244,47 @@ export function render(target, params, query = {}, labelOverride = null) {
                         // locked = true kalau slot BELUM approved (ada di Set)
                         const locked = draftLockBySlot.has(i);
 
-                        const linkEl       = document.getElementById('link-' + i);
-                        const dateEl       = document.getElementById('post_date_' + i);
-                        const screenshotEl = document.getElementById('screenshot_' + i);
+                        const linkEl = document.getElementById("link-" + i);
+                        const dateEl = document.getElementById(
+                            "post_date_" + i
+                        );
+                        const screenshotEl = document.getElementById(
+                            "screenshot_" + i
+                        );
 
                         // --- per-slot controls: enable kalau approved, lock kalau belum
                         if (linkEl) {
                             linkEl.disabled = !!locked;
-                            linkEl.classList.toggle('is-draft-locked', !!locked);
-                            if (locked) linkEl.title = 'Terkunci: draft untuk slot ini belum disetujui';
-                            else linkEl.removeAttribute('title');
+                            linkEl.classList.toggle(
+                                "is-draft-locked",
+                                !!locked
+                            );
+                            if (locked)
+                                linkEl.title =
+                                    "Terkunci: draft untuk slot ini belum disetujui";
+                            else linkEl.removeAttribute("title");
                         }
                         if (dateEl) {
                             dateEl.disabled = !!locked;
-                            dateEl.classList.toggle('is-draft-locked', !!locked);
-                            if (locked) dateEl.title = 'Terkunci: draft untuk slot ini belum disetujui';
-                            else dateEl.removeAttribute('title');
+                            dateEl.classList.toggle(
+                                "is-draft-locked",
+                                !!locked
+                            );
+                            if (locked)
+                                dateEl.title =
+                                    "Terkunci: draft untuk slot ini belum disetujui";
+                            else dateEl.removeAttribute("title");
                         }
                         if (screenshotEl) {
                             screenshotEl.disabled = !!locked;
-                            screenshotEl.classList.toggle('is-draft-locked', !!locked);
-                            if (locked) screenshotEl.title = 'Terkunci: draft untuk slot ini belum disetujui';
-                            else screenshotEl.removeAttribute('title');
+                            screenshotEl.classList.toggle(
+                                "is-draft-locked",
+                                !!locked
+                            );
+                            if (locked)
+                                screenshotEl.title =
+                                    "Terkunci: draft untuk slot ini belum disetujui";
+                            else screenshotEl.removeAttribute("title");
                         }
                     }
 
@@ -1283,7 +1304,11 @@ export function render(target, params, query = {}, labelOverride = null) {
                     }
 
                     // Non-slot: selalu kebuka
-                    ["acquisition_method", "purchase_platform", "purchase_price"].forEach((id) => {
+                    [
+                        "acquisition_method",
+                        "purchase_platform",
+                        "purchase_price",
+                    ].forEach((id) => {
                         const el = $("#" + id);
                         if (el) {
                             el.disabled = false;
