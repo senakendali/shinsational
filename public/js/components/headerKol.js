@@ -10,7 +10,7 @@ export function renderHeaderKol(targetId = "header") {
         <div class="container-fluid h-100">
           <div class="w-100 d-flex justify-content-between align-items-center">
             <a class="navbar-brand app-link p-2" href="/">
-              <img src="/images/logo-white.png?v=${v}" alt="Logo" class="img-fluid" style="max-height: 120px;">
+              <img src="/images/app-logo.png?v=${v}" alt="Logo" class="img-fluid" style="max-height: 120px;">
             </a>
             <div class="d-lg-none">
               <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#kolNavbar">
