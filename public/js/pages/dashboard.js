@@ -78,7 +78,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     <div id="admin-dashboard-root">
       <div id="__breadcrumb_mount"></div>
 
-      <div class="row g-3 mb-2" id="kpi-cards">
+      <div class="row g-3 mb-2 d-none" id="kpi-cards">
         <div class="col-md-3"><div class="dashboard-card h-100 brand"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-building fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">BRANDS</h6><div class="fs-3 fw-bold" id="kpi-brands">-</div></div></div></div></div>
         <div class="col-md-3"><div class="dashboard-card h-100 campaign"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-megaphone fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">CAMPAIGNS</h6><div class="fs-3 fw-bold" id="kpi-campaigns">-</div></div></div></div></div>
         <div class="col-md-3"><div class="dashboard-card h-100 registration"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-people fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">KOL</h6><div class="fs-3 fw-bold" id="kpi-kols">-</div></div></div></div></div>
