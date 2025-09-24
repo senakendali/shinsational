@@ -44,8 +44,11 @@ class InfluencerSubmission extends Model
         'gmv',
 
         // Metrik baru
-        'views_1','likes_1','comments_1','shares_1',
-        'views_2','likes_2','comments_2','shares_2',
+        'views_1','likes_1','comments_1','shares_1', 'saves_1' ,
+        'views_2','likes_2','comments_2','shares_2', 'saves_2',
+        'views_3','likes_3','comments_3','shares_3', 'saves_3',
+        'views_4','likes_4','comments_4','shares_4', 'saves_4',
+        'views_5','likes_5','comments_5','shares_5', 'saves_5',
         'last_metrics_synced_at',
 
         // ★ Field baru (acquisition & shipping)
@@ -77,10 +80,28 @@ class InfluencerSubmission extends Model
         'likes_1' => 'integer',
         'comments_1' => 'integer',
         'shares_1' => 'integer',
+        'saves_1' => 'integer',
         'views_2' => 'integer',
         'likes_2' => 'integer',
         'comments_2' => 'integer',
         'shares_2' => 'integer',
+        'saves_2' => 'integer',
+        'views_3' => 'integer',
+        'likes_3' => 'integer',
+        'comments_3' => 'integer',
+        'shares_3' => 'integer',
+        'saves_3' => 'integer',
+        'views_4' => 'integer',
+        'likes_4' => 'integer',
+        'comments_4' => 'integer',
+        'shares_4' => 'integer',
+        'saves_4' => 'integer',
+        'views_5' => 'integer',
+        'likes_5' => 'integer',
+        'comments_5' => 'integer',
+        'shares_5' => 'integer',
+        'saves_5' => 'integer',
+
         'last_metrics_synced_at' => 'datetime',
 
         // ★ Cast baru

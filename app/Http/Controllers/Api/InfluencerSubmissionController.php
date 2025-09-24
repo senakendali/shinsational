@@ -1143,22 +1143,19 @@ protected function oembedAuthor(?string $url): ?array
             'product_sold'    => ['nullable','integer','min:0'],
             'gmv'             => ['nullable','numeric','min:0'],
 
-            // Metrik baru (opsional, masih slot 1–2)
-            'views_1'         => ['nullable','integer','min:0'],
-            'likes_1'         => ['nullable','integer','min:0'],
-            'comments_1'      => ['nullable','integer','min:0'],
-            'shares_1'        => ['nullable','integer','min:0'],
-            'views_2'         => ['nullable','integer','min:0'],
-            'likes_2'         => ['nullable','integer','min:0'],
-            'comments_2'      => ['nullable','integer','min:0'],
-            'shares_2'        => ['nullable','integer','min:0'],
-
             // ★ acquisition & shipping
             'acquisition_method'       => ['nullable', Rule::in(['buy','sent_by_brand'])],
             'purchase_price'           => ['nullable','numeric','min:0'],
             'shipping_courier'         => ['nullable','string','max:100'],
             'shipping_tracking_number' => ['nullable','string','max:100'],
         ];
+
+        // Tambahkan rules metrik untuk slot 1..5 (views/likes/comments/shares/saves)
+        foreach (range(1,5) as $i) {
+            foreach (['views','likes','comments','shares','saves'] as $m) {
+                $rules["{$m}_{$i}"] = ['nullable','integer','min:0'];
+            }
+        }
 
         $messages = [
             'tiktok_user_id.required' => 'ID TikTok wajib diisi.',
@@ -1176,10 +1173,12 @@ protected function oembedAuthor(?string $url): ?array
         $v->sometimes('invoice_file', 'required', function ($input) use ($existing) {
             return ($input->acquisition_method === 'buy') && !($existing && $existing->invoice_file_path);
         });
-        // SENT_BY_BRAND ⇒ wajib shipping fields
-        /*$v->sometimes(['shipping_courier','shipping_tracking_number'], 'required', function ($input) {
+        // SENT_BY_BRAND ⇒ kalau mau diwajibkan, buka komentar di bawah
+        /*
+        $v->sometimes(['shipping_courier','shipping_tracking_number'], 'required', function ($input) {
             return ($input->acquisition_method === 'sent_by_brand');
-        });*/
+        });
+        */
 
         $validated = $v->validate();
 
@@ -1279,19 +1278,18 @@ protected function oembedAuthor(?string $url): ?array
         if ($invPath) $submission->invoice_file_path      = $invPath;
         if ($revPath) $submission->review_proof_file_path = $revPath;
 
-        // Metrik (slot 1–2)
-        $metricKeys = [
-            'views_1','likes_1','comments_1','shares_1',
-            'views_2','likes_2','comments_2','shares_2',
-        ];
-        $hasMetricPayload = false;
-        foreach ($metricKeys as $m) {
-            if (array_key_exists($m, $validated)) {
-                $submission->$m = $validated[$m];
-                $hasMetricPayload = true;
+        // ===== Metrik slot 1..5 (views/likes/comments/shares/saves)
+        $metricsTouched = false;
+        foreach (range(1,5) as $i) {
+            foreach (['views','likes','comments','shares','saves'] as $m) {
+                $key = "{$m}_{$i}";
+                if (array_key_exists($key, $validated)) {
+                    $submission->$key = (int) $validated[$key];
+                    $metricsTouched = true;
+                }
             }
         }
-        if ($hasMetricPayload) {
+        if ($metricsTouched) {
             $submission->last_metrics_synced_at = now();
         }
 
@@ -1346,22 +1344,19 @@ protected function oembedAuthor(?string $url): ?array
             'product_sold'      => ['sometimes','nullable','integer','min:0'],
             'gmv'               => ['sometimes','nullable','numeric','min:0'],
 
-            // Metrik (slot 1–2)
-            'views_1'           => ['sometimes','nullable','integer','min:0'],
-            'likes_1'           => ['sometimes','nullable','integer','min:0'],
-            'comments_1'        => ['sometimes','nullable','integer','min:0'],
-            'shares_1'          => ['sometimes','nullable','integer','min:0'],
-            'views_2'           => ['sometimes','nullable','integer','min:0'],
-            'likes_2'           => ['sometimes','nullable','integer','min:0'],
-            'comments_2'        => ['sometimes','nullable','integer','min:0'],
-            'shares_2'          => ['sometimes','nullable','integer','min:0'],
-
             // ★ acquisition & shipping
             'acquisition_method'       => ['sometimes','nullable', Rule::in(['buy','sent_by_brand'])],
             'purchase_price'           => ['sometimes','nullable','numeric','min:0'],
             'shipping_courier'         => ['sometimes','nullable','string','max:100'],
             'shipping_tracking_number' => ['sometimes','nullable','string','max:100'],
         ];
+
+        // Tambahkan rules metrik untuk slot 1..5
+        foreach (range(1,5) as $i) {
+            foreach (['views','likes','comments','shares','saves'] as $m) {
+                $rules["{$m}_{$i}"] = ['sometimes','nullable','integer','min:0'];
+            }
+        }
 
         $v = Validator::make($request->all(), $rules);
 
@@ -1411,7 +1406,7 @@ protected function oembedAuthor(?string $url): ?array
             }
         }
 
-        // Assign simple fields (termasuk slot 3–5 kalau ada di payload)
+        // Assign simple text/date fields (link/post_date 1..5, ids, pembelian & shipping dasar, KPI lama)
         foreach ([
             'tiktok_user_id','campaign_id',
             'link_1','post_date_1',
@@ -1419,11 +1414,9 @@ protected function oembedAuthor(?string $url): ?array
             'link_3','post_date_3',
             'link_4','post_date_4',
             'link_5','post_date_5',
-            'purchase_platform',
+            'purchase_platform','purchase_price',
             'yellow_cart','product_sold','gmv',
-            'views_1','likes_1','comments_1','shares_1',
-            'views_2','likes_2','comments_2','shares_2',
-            'acquisition_method','purchase_price',
+            'acquisition_method',
             'shipping_courier','shipping_tracking_number',
         ] as $field) {
             if (array_key_exists($field, $validated)) {
@@ -1442,11 +1435,17 @@ protected function oembedAuthor(?string $url): ?array
             }
         }
 
-        // Update timestamp metrik bila ada metrik yang dikirim
-        $metricTouched = collect([
-            'views_1','likes_1','comments_1','shares_1',
-            'views_2','likes_2','comments_2','shares_2',
-        ])->some(fn($k) => array_key_exists($k, $validated));
+        // ===== Metrik slot 1..5 (views/likes/comments/shares/saves)
+        $metricTouched = false;
+        foreach (range(1,5) as $i) {
+            foreach (['views','likes','comments','shares','saves'] as $m) {
+                $k = "{$m}_{$i}";
+                if (array_key_exists($k, $validated)) {
+                    $submission->$k = (int) $validated[$k];
+                    $metricTouched = true;
+                }
+            }
+        }
         if ($metricTouched) {
             $submission->last_metrics_synced_at = now();
         }
