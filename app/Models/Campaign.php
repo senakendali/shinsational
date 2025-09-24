@@ -69,12 +69,31 @@ class Campaign extends Model
         return $q->where('is_active', true);
     }
 
-    // Filter per brand
-    public function scopeOfBrand($q, $brandId)
+    
+
+    // app/Models/Campaign.php
+    public function scopeOfBrand($q, $brand)
     {
-        if (!$brandId) return $q;
-        return $q->where('brand_id', $brandId);
+        if (is_null($brand) || $brand === '' || (is_array($brand) && empty($brand))) {
+            return $q;
+        }
+
+        $ids = collect($brand)
+            ->flatten()
+            ->filter(fn($v) => $v !== null && $v !== '')
+            ->map(fn($v) => (int) $v)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return $q;
+        }
+
+        return $ids->count() === 1
+            ? $q->where('brand_id', $ids->first())
+            : $q->whereIn('brand_id', $ids->all());
     }
+
 
     // Campaign yang sedang berjalan pada sebuah tanggal (default: hari ini)
     public function scopeOngoingAt($q, $date = null)
@@ -109,6 +128,8 @@ class Campaign extends Model
     {
         return $this->hasMany(InfluencerRegistration::class);
     }
+
+    
 
     
 

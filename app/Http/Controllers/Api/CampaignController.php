@@ -9,18 +9,71 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Auth;
 
 class CampaignController extends Controller
 {
-    public function index(Request $request)
+   
+   public function index(Request $request)
     {
+        // Ambil user dari guard web (session)
+        $authUser = $request->user('web') ?? auth('web')->user();
+
+        // brand yang diminta di request (support brand_id & brand_ids[])
+        $requestedBrandIds = collect((array) $request->input('brand_ids', []))
+            ->when($request->filled('brand_id'), fn ($c) => $c->prepend((int) $request->input('brand_id')))
+            ->filter(fn ($v) => $v !== null && $v !== '')
+            ->map(fn ($v) => (int) $v)
+            ->unique()
+            ->values();
+
+        // brand yang dimiliki user (pivot + fallback legacy brand_id)
+        $assignedBrandIds = collect();
+        if ($authUser) {
+            if (method_exists($authUser, 'brands')) {
+                $assignedBrandIds = $authUser->brands()->pluck('brands.id');
+            }
+            if ($assignedBrandIds->isEmpty() && !empty($authUser->brand_id)) {
+                $assignedBrandIds = collect([(int) $authUser->brand_id]);
+            }
+            $assignedBrandIds = $assignedBrandIds->map(fn ($v) => (int) $v)->unique()->values();
+        }
+
+        // tentukan filter efektif
+        $forceEmpty = false;
+        if ($assignedBrandIds->isNotEmpty()) {
+            // batasi ke brand milik user; kalau request ada, lakukan intersect
+            $effectiveBrandIds = $requestedBrandIds->isNotEmpty()
+                ? $requestedBrandIds->intersect($assignedBrandIds)->values()
+                : $assignedBrandIds;
+
+            // minta brand di luar hak → paksa kosong
+            if ($requestedBrandIds->isNotEmpty() && $effectiveBrandIds->isEmpty()) {
+                $forceEmpty = true;
+            }
+        } else {
+            // user tanpa brand (mis. admin) → pakai filter request apa adanya
+            $effectiveBrandIds = $requestedBrandIds;
+        }
+
         $query = Campaign::with('brand')
-            ->ofBrand($request->brand_id)
             ->search($request->search)
             ->status($request->status);
 
+        // terapkan filter brand
+        if ($forceEmpty) {
+            $query->whereRaw('1=0');
+        } else {
+            // scope sekarang bisa terima array/single/null
+            $query->ofBrand($effectiveBrandIds->all());
+        }
+
+        // filter boolean is_active
         if ($request->filled('is_active')) {
-            $query->where('is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
+            $query->where(
+                'is_active',
+                filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN)
+            );
         }
 
         // filter campaign yang sedang berjalan pada tanggal tertentu
@@ -30,6 +83,7 @@ class CampaignController extends Controller
 
         return response()->json($query->latest()->paginate(10));
     }
+
 
     public function show(Campaign $campaign)
     {
