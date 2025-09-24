@@ -102,7 +102,7 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // ✅ Route GET bernama "login" untuk redirect middleware Authenticate
 //    Arahkan ke halaman SPA admin login
-Route::get('/admin/login', [AppController::class, 'admin'])->name('login');
+Route::get('/admin/login', [AppController::class, 'loginAdmin'])->name('login');
 
 /** -----------------------------------------------------------------
  *  TikTok OAuth
