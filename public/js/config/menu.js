@@ -26,7 +26,8 @@ export const ownerMenu = [
       { label: "KOL", path: "/admin/kol", icon: "bi-people", can: "kol.viewAny" },
       { label: "Content Approval", path: "/admin/drafts", icon: "bi-list-check", can: "draft.viewAny" },
       { label: "Manage Shipments", path: "/admin/manage-shipments", icon: "bi-list-check", can: "shipment.viewAny" },
-      { label: "Submission", path: "/admin/submissions", icon: "bi-list-check", can: "submission.viewAny" },
+      { label: "Submission Management", path: "/admin/submission-management", icon: "bi-list-check", can: "submissionManagement.viewAny" },
+      { label: "Submission Monitoring", path: "/admin/submissions", icon: "bi-list-check", can: "submission.viewAny" },
     ],
   },
 
