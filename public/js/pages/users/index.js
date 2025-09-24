@@ -50,15 +50,45 @@ export async function render(target, path, query = {}, labelOverride = null) {
   let searchTimeout = null;
 
   function fmtDate(s) {
-    if (!s) return '—';
+    if (!s) return '-';
     try { return new Date(s).toLocaleString('id-ID'); } catch { return s; }
+  }
+
+  function renderBrandBadges(user) {
+    let names = [];
+    if (Array.isArray(user?.brands) && user.brands.length) {
+      names = user.brands.map(b => b?.name).filter(Boolean);
+    } else if (user?.brand?.name) {
+      names = [user.brand.name];
+    }
+    if (!names.length) return '-';
+
+    const MAX_BADGES = 3;
+    const shown = names.slice(0, MAX_BADGES);
+    const extra = names.length - shown.length;
+
+    const badges = shown
+      .map(n => `<span class="badge bg-light text-dark me-1 mb-1">${n}</span>`)
+      .join('');
+
+    if (extra > 0) {
+      const rest = names.slice(MAX_BADGES).join(', ');
+      return `
+        <div class="d-flex flex-wrap align-items-center">
+          ${badges}
+          <span class="badge bg-secondary mb-1" title="${rest}">+${extra}</span>
+        </div>
+      `;
+    }
+
+    return `<div class="d-flex flex-wrap align-items-center">${badges}</div>`;
   }
 
   async function loadUsers(keyword = '', page = 1) {
     showLoader();
     try {
-      // include roles+permissions; BE akan kirim roles[*].permissions_count dan user.permissions_count
-      const res = await userService.getAll({ q: keyword, page, per_page: 20, include: 'roles,permissions' });
+      const include = 'roles,permissions,brands,brand';
+      const res = await userService.getAll({ q: keyword, page, per_page: 20, include });
 
       const items = Array.isArray(res) ? res : (res.data || []);
       const perPage = res?.per_page ?? items.length;
@@ -66,27 +96,29 @@ export async function render(target, path, query = {}, labelOverride = null) {
       const rows = items.map((user, i) => {
         const n = (page - 1) * (perPage || 0) + i + 1;
 
-        // single role name
-        const roleName = user.roles?.[0]?.name || '—';
+        const roleName = user.roles?.[0]?.name || '-';
 
-        // count permission dari role + direct (legacy)
         const rolePermCount = user.roles?.[0]?.permissions_count
-          ?? (user.roles?.[0]?.permissions?.length ?? 0) // fallback kalau kamu ikut kirim roles.permissions
+          ?? (user.roles?.[0]?.permissions?.length ?? 0)
           ?? 0;
         const directPermCount = user.permissions_count ?? (user.permissions?.length ?? 0) ?? 0;
         const totalPerms = rolePermCount + directPermCount;
 
         const emailHtml = user.email ? `<div class="text-muted">${user.email}</div>` : '';
+        const brandHtml = renderBrandBadges(user);
 
         return `
           <tr>
             <td>${n}</td>
             <td>
-              <div class="fw-semibold">${user.name || '—'}</div>
+              <div class="fw-semibold">${user.name || '-'}</div>
               ${emailHtml}
             </td>
             <td style="width:200px">
               <span class="badge bg-light text-dark">${roleName}</span>
+            </td>
+            <td style="width:260px">
+              ${brandHtml}
             </td>
             <td style="width:160px">
               ${totalPerms} permission
@@ -106,17 +138,18 @@ export async function render(target, path, query = {}, labelOverride = null) {
           </tr>
         `;
       }).join('') || `
-        <tr><td colspan="6" class="text-center text-muted">Tidak ada data</td></tr>
+        <tr><td colspan="7" class="text-center text-muted">Tidak ada data</td></tr>
       `;
 
       $('#user-list').innerHTML = `
         <table class="table table-bordered bg-white">
           <thead class="table-light">
-            <tr><th colspan="6" class="text-uppercase">Users</th></tr>
+            <tr><th colspan="7" class="text-uppercase">Users</th></tr>
             <tr>
               <th style="width:72px">#</th>
               <th>Nama / Email</th>
               <th style="width:200px">Role</th>
+              <th style="width:260px">Brands</th>
               <th style="width:160px">Permissions</th>
               <th style="width:180px">Dibuat</th>
               <th style="width:220px">Aksi</th>
@@ -124,7 +157,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
           </thead>
           <tbody>${rows}</tbody>
         </table>
-      `;
+      `; // <- FIX: tutup template string yang benar, nggak ada '' lagi
 
       // Pagination
       const pagination = $('#pagination');

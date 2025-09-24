@@ -33,17 +33,25 @@ class UserController extends Controller
     {
         $q        = trim((string) $request->input('q', ''));
         $perPage  = (int) $request->input('per_page', 15);
-        $include  = (string) $request->input('include', '');
         $role     = (string) $request->input('role', '');
         $perm     = (string) $request->input('permission', '');
         $guard    = (string) $request->input('guard', 'web');
+
+        // Parse include: roles,permissions,brand,brands,brand_ids, all, *
+        $includeRaw = (string) $request->input('include', '');
+        $inc = collect(explode(',', $includeRaw))
+            ->map(fn($s) => strtolower(trim($s)))
+            ->filter(fn($s) => $s !== '')
+            ->unique()
+            ->values();
+        $includeAll = $inc->contains('all') || $inc->contains('*');
 
         $query = User::query();
 
         if ($q !== '') {
             $query->where(function ($x) use ($q) {
                 $x->where('name', 'like', "%{$q}%")
-                  ->orWhere('email', 'like', "%{$q}%");
+                ->orWhere('email', 'like', "%{$q}%");
             });
         }
 
@@ -54,29 +62,71 @@ class UserController extends Controller
             $query->permission($perm, $guard);
         }
 
-        // hitung direct permissions (kalau masih ada legacy direct perms)
+        // hitung direct permissions (legacy direct perms)
         $query->withCount(['permissions']);
 
         // include roles (plus count permissions di tiap role)
-        if (str_contains($include, 'roles')) {
+        if ($includeAll || $inc->contains('roles')) {
             $query->with(['roles' => function ($r) {
-                $r->select('id','name','guard_name')->withCount('permissions');
+                $r->select('id', 'name', 'guard_name')
+                ->withCount('permissions');
                 // atau kalau mau lengkap:
                 // $r->with('permissions:id,name,guard_name');
             }]);
         }
 
-        if (str_contains($include, 'permissions')) {
+        if ($includeAll || $inc->contains('permissions')) {
             $query->with(['permissions:id,name,guard_name']);
+        }
+
+        // NEW: legacy single brand
+        if ($includeAll || $inc->contains('brand')) {
+            $query->with(['brand:id,name']);
+        }
+
+        // NEW: many-to-many brands
+        if ($includeAll || $inc->contains('brands')) {
+            $query->with(['brands' => function ($b) {
+                $b->select('brands.id', 'brands.name');
+            }]);
         }
 
         $query->orderBy('name');
 
+        // PerPage=0 => non-paginated list
         if ($perPage === 0) {
-            return response()->json($query->get());
+            $users = $query->get();
+
+            // Optional: append brand_ids jika diminta eksplisit
+            if ($inc->contains('brand_ids')) {
+                $users->each(function ($u) {
+                    $ids = $u->relationLoaded('brands')
+                        ? $u->brands->pluck('id')
+                        : $u->brands()->pluck('brands.id');
+                    $u->setAttribute('brand_ids', $ids->map(fn($v)=>(int)$v)->values());
+                });
+            }
+
+            return response()->json($users);
         }
-        return response()->json($query->paginate($perPage));
+
+        // Paginated
+        $paginator = $query->paginate($perPage);
+
+        // Optional: append brand_ids pada setiap item jika diminta
+        if ($inc->contains('brand_ids')) {
+            $paginator->getCollection()->transform(function ($u) {
+                $ids = $u->relationLoaded('brands')
+                    ? $u->brands->pluck('id')
+                    : $u->brands()->pluck('brands.id');
+                $u->setAttribute('brand_ids', $ids->map(fn($v)=>(int)$v)->values());
+                return $u;
+            });
+        }
+
+        return response()->json($paginator);
     }
+
 
     /**
      * POST /api/users
