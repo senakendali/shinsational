@@ -24,40 +24,13 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
   // helpers
   const $ = (s) => document.querySelector(s);
-  const initials = (name = '') => {
-    const parts = String(name).trim().split(/\s+/).slice(0,2);
-    return parts.map(p => p[0]?.toUpperCase() || '').join('') || 'U';
-  };
-  const avatarFallbackSvg = (name) => {
-    const ini = initials(name);
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="160" height="160">
-        <rect width="100%" height="100%" fill="#e9ecef"/>
-        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
-              font-family="system-ui, -apple-system, Segoe UI, Roboto, Arial"
-              font-size="56" fill="#6c757d">${ini}</text>
-      </svg>`;
-    return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
-  };
-
-  // PATCH: resolver avatar yang robust (avatar_url > avatar_path > nested.user.*)
-  function resolveAvatarUrl(meObj) {
-    const direct =
-      meObj?.avatar_url ||
-      (meObj?.avatar_path ? (`/files?p=${encodeURIComponent(meObj.avatar_path)}`) : null);
-
-    const nested =
-      meObj?.user?.avatar_url ||
-      (meObj?.user?.avatar_path ? (`/files?p=${encodeURIComponent(meObj.user.avatar_path)}`) : null);
-
-    return direct || nested || null;
-  }
 
   target.innerHTML = '';
   showLoader();
   renderHeader('header');
   renderBreadcrumb(target, '/admin/profile', labelOverride || title);
 
+  // ===== Markup
   target.innerHTML += `
     <div class="row g-3">
       <!-- Profile info -->
@@ -103,105 +76,101 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         </form>
       </div>
 
-      <!-- Avatar -->
+      <!-- Roles & Permissions (replace avatar) -->
       <div class="col-lg-4">
         <div class="bg-white p-4 rounded shadow-sm h-100">
-          <h5 class="mb-3">Foto Profil</h5>
-          <div class="d-flex flex-column align-items-center text-center">
-            <img id="avatarPreview" src="" alt="Avatar" class="rounded-circle border"
-                 style="width:160px;height:160px;object-fit:cover;background:#f8f9fa">
-            <input type="file" id="avatarInput" class="d-none" accept="image/*">
-            <div class="d-flex gap-2 mt-3">
-              <button type="button" id="changeAvatarBtn" class="btn btn-outline-secondary">
-                <i class="bi bi-image"></i> Ganti Foto
-              </button>
-              <button type="button" id="uploadAvatarBtn" class="btn btn-primary" disabled>
-                <i class="bi bi-upload"></i> Upload
-              </button>
-            </div>
-            <div class="text-muted small mt-2">Format: JPG/PNG. Maks ~2MB.</div>
+          <h5 class="mb-3">Roles & Permissions</h5>
+
+          <div class="mb-2">
+            <div class="text-muted small mb-1">Roles:</div>
+            <div id="roleBadges" class="d-flex flex-wrap gap-1"></div>
           </div>
+
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="text-muted small">Permissions:</div>
+            <span id="permCount" class="badge bg-light text-dark">0</span>
+          </div>
+
+          <input id="permSearch" class="form-control mb-2" placeholder="Cari permission…">
+          <div id="permList" class="border rounded p-2" style="max-height: 320px; overflow: auto">
+            <div class="text-muted small">Memuat…</div>
+          </div>
+         
         </div>
       </div>
     </div>
   `;
 
+  // ===== State
   let me = null;
-  let pendingAvatarFile = null;
+  let abilities = []; // array of strings
+  let roles = [];     // array of strings
 
-  // init data
+  function renderRoleBadges(list = []) {
+    const wrap = $('#roleBadges');
+    if (!wrap) return;
+    if (!list.length) {
+      wrap.innerHTML = `<span class="badge bg-light text-dark">—</span>`;
+      return;
+    }
+    wrap.innerHTML = list.map(n => `<span class="badge bg-light text-dark">${n}</span>`).join('');
+  }
+
+  function renderPermList(filter = '') {
+    const wrap = $('#permList');
+    const countEl = $('#permCount');
+    const q = String(filter).trim().toLowerCase();
+
+    const filtered = abilities
+      .filter(p => !q || p.toLowerCase().includes(q))
+      .sort((a, b) => a.localeCompare(b));
+
+    countEl.textContent = String(filtered.length);
+
+    if (!filtered.length) {
+      wrap.innerHTML = `<div class="text-muted small">Tidak ada permission${q ? ' yang cocok' : ''}.</div>`;
+      return;
+    }
+
+    wrap.innerHTML = filtered.map(name => `
+      <div class="form-check disabled">
+        <input class="form-check-input" type="checkbox" disabled checked>
+        <label class="form-check-label">${name}</label>
+      </div>
+    `).join('');
+  }
+
+  // ===== Init data
   try {
-    me = await meService.get();
-    const name  = me?.name || me?.user?.name || '';
-    const email = me?.email || me?.user?.email || '';
+    me = await meService.get(); // endpoint /api/me (roles, role, abilities sudah ada)
+    const name  = me?.name || '';
+    const email = me?.email || '';
 
+    // fill profile fields
     const fill = (id, val) => { const el = $('#'+id); if (el) el.value = val ?? ''; };
     fill('name', name);
     fill('email', email);
 
-    // PATCH: pakai resolver
-    const avatarUrl = resolveAvatarUrl(me);
-    const avatarEl = $('#avatarPreview');
-    if (avatarUrl) {
-      avatarEl.src = `${avatarUrl}${avatarUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
-    } else {
-      avatarEl.src = avatarFallbackSvg(name || email);
-    }
+    // roles & abilities from /api/me
+    roles = Array.isArray(me.roles) && me.roles.length
+      ? me.roles
+      : (me.role ? [me.role] : []);
+
+    abilities = Array.isArray(me.abilities) ? me.abilities : [];
+
+    renderRoleBadges(roles);
+    renderPermList('');
   } catch (e) {
-    const avatarEl = $('#avatarPreview');
-    avatarEl.src = avatarFallbackSvg('User');
+    renderRoleBadges([]);
+    abilities = [];
+    renderPermList('');
   } finally {
     hideLoader();
   }
 
-  // Avatar handlers
-  $('#changeAvatarBtn')?.addEventListener('click', () => {
-    $('#avatarInput')?.click();
-  });
-
-  $('#avatarInput')?.addEventListener('change', (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    pendingAvatarFile = file;
-    const url = URL.createObjectURL(file);
-    $('#avatarPreview').src = url;
-    $('#uploadAvatarBtn').disabled = false;
-  });
-
-  $('#uploadAvatarBtn')?.addEventListener('click', async () => {
-    if (!pendingAvatarFile) return;
-    const btn = $('#uploadAvatarBtn');
-    btn.disabled = true;
-    showLoader();
-    try {
-      const fd = new FormData();
-      fd.set('avatar', pendingAvatarFile);
-      const resp = await meService.updateAvatar(fd);
-
-      // PATCH: ambil url baru (avatar_url > avatar_path)
-      const newUrl =
-        resp?.avatar_url ||
-        resp?.data?.avatar_url ||
-        (resp?.data?.avatar_path ? `/files?p=${encodeURIComponent(resp.data.avatar_path)}` : null);
-
-      if (newUrl) {
-        $('#avatarPreview').src = `${newUrl}${newUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
-      }
-
-      // refresh navbar (nama/foto)
-      try {
-        window.__ME = await meService.get(); // refresh cache
-        const { renderNavbar } = await import(`../../components/navbar.js?v=${v}`);
-        await renderNavbar('#navbar-menu');
-      } catch {}
-      showToast('Foto profil berhasil diperbarui');
-      pendingAvatarFile = null;
-    } catch (err) {
-      showToast(err?.message || 'Gagal mengunggah foto.', 'error');
-    } finally {
-      hideLoader();
-      btn.disabled = !pendingAvatarFile;
-    }
+  // ===== Events
+  $('#permSearch')?.addEventListener('input', (e) => {
+    renderPermList(e.target.value);
   });
 
   // Profile submit
@@ -222,13 +191,8 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
       const resp = await meService.updateProfile(payload);
 
-      // refresh cache & navbar
+      // refresh header/nav cache kalau ada
       window.__ME = resp?.data || await meService.get();
-      try {
-        const { renderNavbar } = await import(`../../components/navbar.js?v=${v}`);
-        await renderNavbar('#navbar-menu');
-      } catch {}
-
       showToast('Profil berhasil diperbarui');
     } catch (err) {
       if (err?.errors) showValidationErrors(err.errors);

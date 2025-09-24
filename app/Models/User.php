@@ -78,4 +78,19 @@ class User extends Authenticatable
     {
         return $this->belongsTo(Brand::class);
     }
+
+    public function brands()
+    {
+        return $this->belongsToMany(\App\Models\Brand::class, 'brand_user')
+            ->withTimestamps()
+            ->withPivot(['assigned_by', 'assigned_at']);
+    }
+
+    public function getBrandIdsAttribute(): array
+    {
+        static $cache = null;
+        if ($cache !== null) return $cache;
+        $cache = $this->brands()->pluck('brands.id')->map(fn($id) => (int) $id)->all();
+        return $cache;
+    }
 }

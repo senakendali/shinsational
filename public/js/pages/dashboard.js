@@ -78,7 +78,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     <div id="admin-dashboard-root">
       <div id="__breadcrumb_mount"></div>
 
-      <div class="row g-3 mb-2" id="kpi-cards">
+      <div class="row g-3 mb-2 d-none" id="kpi-cards">
         <div class="col-md-3"><div class="dashboard-card h-100 brand"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-building fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">BRANDS</h6><div class="fs-3 fw-bold" id="kpi-brands">-</div></div></div></div></div>
         <div class="col-md-3"><div class="dashboard-card h-100 campaign"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-megaphone fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">CAMPAIGNS</h6><div class="fs-3 fw-bold" id="kpi-campaigns">-</div></div></div></div></div>
         <div class="col-md-3"><div class="dashboard-card h-100 registration"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-people fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">KOL</h6><div class="fs-3 fw-bold" id="kpi-kols">-</div></div></div></div></div>
@@ -143,7 +143,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-draft">0</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
-                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-hourglass-split"></i> ⁠Waiting feedback</div>
+                    <div class="small text-muted text-uppercase fs-12 fw-semibold"><i class="bi bi-hourglass-split"></i> Waiting feedback</div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-waiting-approval">0</div>
                   </div>
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
@@ -765,21 +765,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const contentTarget = Number.isFinite(kpiTargetVal) ? Number(kpiTargetVal) : fallbackTarget;
     if (elTarget) elTarget.textContent = fmt(contentTarget);
 
-    // ===== Total draft dibuat (slot 1..perKol, semua status)
-    let totalDraftsCreated = 0;
-    for (let slot = 1; slot <= perKol; slot++) {
-      totalDraftsCreated += await countDrafts(campaignId, { slot });
-    }
-
     // ===== Posted (card) = jumlah link terisi
     if (elMade) elMade.textContent = fmt(postedContents);
-
-    // ===== Waiting Draft = Target - Posted  (contoh 100 - 2 = 98)
-    const waitingDraftTotal = Math.max(0, Number(contentTarget) - Number(postedContents));
-    if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
-
-    // ===== Donut Progress: posted vs target
-    renderContentDonut(postedContents, contentTarget);
 
     // ===== Waiting for Approval = pending
     const draftPendingCount = await countDrafts(campaignId, { status: 'pending' });
@@ -801,6 +788,17 @@ export async function render(target, path, query = {}, labelOverride = null) {
       if (!posted) readyToPost += 1;
     }
     if (elReady) elReady.textContent = fmt(readyToPost);
+
+    // ===== Waiting Draft (rumus baru)
+    // waiting_draft = KPI_target - (posted + pending + rejected + ready_to_post)
+    const waitingDraftTotal = Math.max(
+      0,
+      Number(contentTarget) - (Number(postedContents) + Number(draftPendingCount) + Number(draftRejectedCount) + Number(readyToPost))
+    );
+    if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
+
+    // ===== Donut Progress: posted vs target
+    renderContentDonut(postedContents, contentTarget);
 
     // ===== KOL Stats
     renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);

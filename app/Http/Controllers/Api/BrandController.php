@@ -13,25 +13,73 @@ class BrandController extends Controller
 {
     public function index(Request $request)
     {
-        $search = $request->input('search');
+        $authUser = $request->user(); // sudah lewat middleware web+auth
+        $search   = (string) $request->input('search', '');
+        $perPage  = (int) $request->input('per_page', 10);
 
-        $query = Brand::query();
+        // --- Filter brand dari request (support brand_id & brand_ids[]) ---
+        $requestedBrandIds = collect((array) $request->input('brand_ids', []))
+            ->when($request->filled('brand_id'), fn ($c) => $c->prepend((int) $request->input('brand_id')))
+            ->filter(fn ($v) => $v !== null && $v !== '')
+            ->map(fn ($v) => (int) $v)
+            ->unique()
+            ->values();
 
-        if ($search) {
+        // --- Brand yang dimiliki user (pivot + fallback legacy users.brand_id) ---
+        $assignedBrandIds = collect();
+        if ($authUser) {
+            if (method_exists($authUser, 'brands')) {
+                $assignedBrandIds = $authUser->brands()->pluck('brands.id');
+            }
+            if ($assignedBrandIds->isEmpty() && !empty($authUser->brand_id)) {
+                $assignedBrandIds = collect([(int) $authUser->brand_id]);
+            }
+            $assignedBrandIds = $assignedBrandIds->map(fn ($v) => (int) $v)->unique()->values();
+        }
+
+        // --- Tentukan filter efektif ---
+        $forceEmpty = false;
+        if ($assignedBrandIds->isNotEmpty()) {
+            // User dibatasi ke brand miliknya; kalau request ada → intersect
+            $effectiveBrandIds = $requestedBrandIds->isNotEmpty()
+                ? $requestedBrandIds->intersect($assignedBrandIds)->values()
+                : $assignedBrandIds;
+
+            if ($requestedBrandIds->isNotEmpty() && $effectiveBrandIds->isEmpty()) {
+                // minta brand di luar hak → kosongkan hasil
+                $forceEmpty = true;
+            }
+        } else {
+            // Admin/tanpa assignment → pakai filter request apa adanya
+            $effectiveBrandIds = $requestedBrandIds;
+        }
+
+        // --- Query utama ---
+        $query = \App\Models\Brand::query();
+
+        if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('slug', 'like', "%{$search}%")
-                  ->orWhere('website_url', 'like', "%{$search}%");
+                ->orWhere('slug', 'like', "%{$search}%")
+                ->orWhere('website_url', 'like', "%{$search}%");
             });
         }
 
-        // Optional: filter status
         if ($request->filled('is_active')) {
             $query->where('is_active', filter_var($request->input('is_active'), FILTER_VALIDATE_BOOLEAN));
         }
 
-        return response()->json($query->latest()->paginate(10));
+        // Terapkan pembatasan brand
+        if ($forceEmpty) {
+            $query->whereRaw('1=0');
+        } elseif ($effectiveBrandIds->isNotEmpty()) {
+            $query->whereIn('id', $effectiveBrandIds->all());
+        }
+        // Kalau user admin (tanpa assignment) dan tidak ada filter → tidak dibatasi.
+
+        return response()->json($query->latest()->paginate($perPage));
     }
+
 
     public function show($id)
     {

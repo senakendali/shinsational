@@ -61,13 +61,30 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       </div>
 
       <div class="row g-3">
-        <!-- Single Role Select -->
+        <!-- Role + Brands (same column width) -->
         <div class="col-md-6">
           <label for="roleSelect" class="form-label">Role</label>
           <select id="roleSelect" class="form-select">
             <option value="">— Pilih role —</option>
           </select>
           <div class="invalid-feedback d-block" id="error-role"></div>
+
+          <!-- Brand selector tepat di bawah Role -->
+          <div class="mt-3 d-none" id="brandSelectWrap">
+            <label for="brandSelect" class="form-label">
+              Brands <span class="text-danger">*</span>
+              <span id="brandSelectedCount" class="badge bg-light text-dark ms-1 align-middle d-none"></span>
+            </label>
+            <select id="brandSelect" class="form-select" multiple size="8" aria-describedby="brandHelp">
+              <!-- options injected -->
+            </select>
+            <div class="invalid-feedback d-block" id="error-brand"></div>
+            <div id="brandHelp" class="text-muted small mt-1">
+              Wajib diisi jika role adalah <strong>Brand / Brand Admin / Brand Super Admin / Brand Owner</strong>.
+              Kamu bisa memilih lebih dari satu brand (Ctrl/Cmd + klik atau drag).
+            </div>
+            <div id="brandChips" class="mt-2 d-flex flex-wrap gap-2"></div>
+          </div>
         </div>
 
         <!-- Permissions (READ-ONLY dari role) -->
@@ -80,18 +97,6 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
           <div class="text-muted small mt-2">
             Permission user mengikuti role. Pengaturan permission langsung di user tidak tersedia di sini.
           </div>
-        </div>
-      </div>
-
-      <!-- Brand selector (wajib jika role = Brand) -->
-      <div class="row g-3 mt-1">
-        <div class="col-md-6 d-none" id="brandSelectWrap">
-          <label for="brandSelect" class="form-label">Brand <span class="text-danger">*</span></label>
-          <select id="brandSelect" class="form-select">
-            <option value="">— Pilih brand —</option>
-          </select>
-          <div class="invalid-feedback d-block" id="error-brand"></div>
-          <div class="text-muted small mt-1">Wajib diisi jika role pengguna adalah <strong>Brand</strong>.</div>
         </div>
       </div>
 
@@ -116,17 +121,22 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
   });
 
   // ===== State
-  let allRoles = [];            // [{id, name}]
-  let allBrands = [];           // [{id, name}]
-  let userData = null;          // {roles:[{name}], permissions:[{name}], brand_id?, brand?}
-  let rolePerms = [];           // permissions dari role terpilih [{id?, name}]
+  let allRoles = [];              // [{id, name}]
+  let allBrands = [];             // [{id, name}]
+  let userData = null;            // {roles:[{name}], permissions:[{name}], brand_ids?:[], brands?:[]}
+  let rolePerms = [];             // permissions [{id?, name}]
+  let selectedBrandIds = new Set();
 
-  function isBrandRoleName(name) {
-    return String(name || '').toLowerCase() === 'brand';
+  // Role keluarga Brand
+  const BRANDISH_NAMES = ['brand','brand admin','brand super admin','brand owner'];
+
+  function isBrandishRoleName(name) {
+    const n = String(name || '').toLowerCase();
+    return BRANDISH_NAMES.includes(n);
   }
-  function roleIdIsBrand(rid) {
+  function roleIdIsBrandish(rid) {
     const r = allRoles.find(x => String(x.id) === String(rid));
-    return r ? isBrandRoleName(r.name) : false;
+    return r ? isBrandishRoleName(r.name) : false;
   }
   function toggleBrandSelect(show) {
     const wrap = $('#brandSelectWrap');
@@ -137,7 +147,6 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     const wrap = $('#rolePermList');
     const q = filter.trim().toLowerCase();
 
-    // permissions dari role (utama)
     const roleList = rolePerms
       .filter(p => !q || p.name.toLowerCase().includes(q))
       .map(p => `<div class="form-check disabled">
@@ -145,7 +154,6 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         <label class="form-check-label">${p.name}</label>
       </div>`).join('');
 
-    // kalau ada legacy "direct permissions" di user (di luar role), tampilkan sekadar info
     const directExtras = (userData?.permissions || [])
       .filter(up => !rolePerms.some(rp => rp.name === up.name))
       .filter(p => !q || p.name.toLowerCase().includes(q));
@@ -178,12 +186,43 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     }
   }
 
+  function setBrandSelectedState(ids = []) {
+    selectedBrandIds = new Set(ids.map(String));
+    // chips
+    const chips = $('#brandChips');
+    const list = allBrands.filter(b => selectedBrandIds.has(String(b.id)));
+    chips.innerHTML = list.map(b => `
+      <span class="badge rounded-pill bg-secondary">
+        ${b.name}
+        <button type="button" class="btn-close btn-close-white btn-sm ms-1" data-remove-brand="${b.id}" aria-label="Remove"></button>
+      </span>
+    `).join('') || '';
+    // count
+    const count = $('#brandSelectedCount');
+    if (selectedBrandIds.size) {
+      count.textContent = `${selectedBrandIds.size} selected`;
+      count.classList.remove('d-none');
+    } else {
+      count.textContent = '';
+      count.classList.add('d-none');
+    }
+  }
+
+  function syncMultiSelectFromState() {
+    const sel = $('#brandSelect');
+    if (!sel) return;
+    $$('#brandSelect option').forEach(opt => {
+      opt.selected = selectedBrandIds.has(String(opt.value));
+    });
+  }
+
   // ===== Init
   try {
     const [roleRes, userRes, brandRes] = await Promise.all([
-      roleService.getAll({ per_page: 500 }),                             // daftar role
-      isEdit ? userService.get(params.id, { include: 'roles,permissions,brand' }) : Promise.resolve(null),
-      brandService.getAll({ per_page: 500, status: '' }),                // daftar brand
+      roleService.getAll({ per_page: 500 }),
+      // include brands (array) + fallback brand tunggal
+      isEdit ? userService.get(params.id, { include: 'roles,permissions,brands,brand' }) : Promise.resolve(null),
+      brandService.getAll({ per_page: 500, status: '' }),
     ]);
 
     allRoles = (roleRes?.data || roleRes || []).map(r => ({ id: r.id ?? r.name, name: r.name }));
@@ -191,30 +230,34 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
 
     // Prefill fields
     if (userRes) {
+      const brandIdsFromArray = Array.isArray(userRes.brands)
+        ? userRes.brands.map(b => String(b.id))
+        : [];
+      const singleFallback = userRes.brand?.id ?? userRes.brand_id ?? userRes.brandId ?? null;
+
       userData = {
         id: userRes.id,
         name: userRes.name || '',
         email: userRes.email || '',
         roles: (userRes.roles || []).map(r => ({ name: r.name })),
         permissions: (userRes.permissions || []).map(p => ({ name: p.name })),
-        brand_id: userRes.brand_id ?? userRes.brandId ?? userRes.brand?.id ?? null,
+        brand_ids: brandIdsFromArray.length ? brandIdsFromArray : (singleFallback ? [String(singleFallback)] : []),
       };
       const fill = (id, val) => { const el = $('#'+id); if (el) el.value = val ?? ''; };
       fill('name', userData.name);
       fill('email', userData.email);
     }
 
-    // Render Role select
+    // Role select
     const roleSelect = $('#roleSelect');
     roleSelect.innerHTML = `<option value="">— Pilih role —</option>` +
       allRoles.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
 
-    // Render Brand select
+    // Brand select
     const brandSelect = $('#brandSelect');
-    brandSelect.innerHTML = `<option value="">— Pilih brand —</option>` +
-      allBrands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+    brandSelect.innerHTML = allBrands.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
 
-    // Prefill selected role & permissions kalau edit
+    // Prefill selected role & permissions
     if (userData?.roles?.length) {
       const currentName = userData.roles[0].name;
       const current = allRoles.find(r => r.name === currentName);
@@ -222,13 +265,14 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
         roleSelect.value = String(current.id);
         await fetchRolePermsByRoleId(current.id);
 
-        // Tampilkan brand selector jika role saat ini adalah Brand
-        const showBrand = isBrandRoleName(current.name);
+        // Toggle brand selector jika keluarga Brand
+        const showBrand = isBrandishRoleName(current.name);
         toggleBrandSelect(showBrand);
 
-        // Prefill brand kalau ada
-        if (showBrand && userData.brand_id) {
-          brandSelect.value = String(userData.brand_id);
+        // Prefill multi brand kalau ada
+        if (showBrand && userData.brand_ids?.length) {
+          setBrandSelectedState(userData.brand_ids);
+          syncMultiSelectFromState();
         }
       }
     } else {
@@ -245,10 +289,31 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     roleSelect?.addEventListener('change', async (e) => {
       const chosenId = e.target.value ? Number(e.target.value) : null;
       await fetchRolePermsByRoleId(chosenId);
-      toggleBrandSelect(roleIdIsBrand(chosenId));
-      // clear brand error saat toggle
+      const showBrand = roleIdIsBrandish(chosenId);
+      toggleBrandSelect(showBrand);
+      if (!showBrand) {
+        setBrandSelectedState([]);
+        syncMultiSelectFromState();
+      }
       const errEl = $('#error-brand'); if (errEl) errEl.textContent = '';
     });
+
+    // Interaksi multi-select brand
+    brandSelect?.addEventListener('change', () => {
+      const ids = Array.from(brandSelect.selectedOptions).map(o => String(o.value));
+      setBrandSelectedState(ids);
+    });
+
+    // Remove chip
+    $('#brandChips')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-remove-brand]');
+      if (!btn) return;
+      const id = String(btn.getAttribute('data-remove-brand'));
+      selectedBrandIds.delete(id);
+      setBrandSelectedState(Array.from(selectedBrandIds));
+      syncMultiSelectFromState();
+    });
+
   } catch {
     $('#rolePermList').innerHTML = `<div class="text-danger small">Gagal memuat data.</div>`;
   } finally {
@@ -266,14 +331,13 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
     const pass  = ($('#password')?.value || '').trim();
     const pass2 = ($('#password_confirmation')?.value || '').trim();
     const roleId = ($('#roleSelect')?.value || '').trim();
-    const brandId = ($('#brandSelect')?.value || '').trim();
 
     if (name) fd.set('name', name);
     if (email) fd.set('email', email);
     if (pass) fd.set('password', pass);
     if (pass2) fd.set('password_confirmation', pass2);
 
-    // single role → kirim nama (bukan id), biar kompatibel resolver by name
+    // single role → kirim nama (bukan id), kompatibel resolver by name
     let chosenRoleName = null;
     if (roleId) {
       const r = (allRoles.find(x => String(x.id) === String(roleId)));
@@ -283,16 +347,19 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
       }
     }
 
-    // Validasi brand kalau role = Brand
-    if (chosenRoleName && isBrandRoleName(chosenRoleName)) {
-      if (!brandId) {
+    // Validasi brand kalau role keluarga Brand
+    const isBrandish = !!(chosenRoleName && isBrandishRoleName(chosenRoleName));
+    if (isBrandish) {
+      const ids = Array.from(selectedBrandIds);
+      if (!ids.length) {
         const el = document.getElementById('error-brand');
-        if (el) el.textContent = 'Brand wajib dipilih untuk role Brand.';
-        showToast('Pilih brand untuk user Brand.', 'error');
-        return; // stop submit
+        if (el) el.textContent = 'Minimal pilih 1 brand untuk role keluarga Brand.';
+        showToast('Pilih minimal 1 brand.', 'error');
+        return;
       }
-      // kirim brand_id (nanti disesuaikan dengan migration di backend)
-      fd.set('brand_id', brandId);
+      // Backward-compat: kirim brand_id pertama + brand_ids[]
+      fd.set('brand_id', ids[0]); // fallback optional
+      ids.forEach(id => fd.append('brand_ids[]', id));
     }
 
     const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -316,10 +383,10 @@ export async function render(target, params = {}, query = {}, labelOverride = nu
           const el = document.getElementById('error-role');
           el.textContent = Array.isArray(err.errors.role) ? err.errors.role[0] : String(err.errors.role);
         }
-        if (err.errors.brand || err.errors.brand_id) {
+        const brandMsg = err.errors.brand_ids || err.errors['brand_ids.0'] || err.errors.brand_id || err.errors.brand;
+        if (brandMsg) {
           const el = document.getElementById('error-brand');
-          const msg = err.errors.brand_id ?? err.errors.brand;
-          el.textContent = Array.isArray(msg) ? msg[0] : String(msg);
+          el.textContent = Array.isArray(brandMsg) ? brandMsg[0] : String(brandMsg);
         }
       }
       showToast(err?.message || 'Gagal menyimpan user.', 'error');

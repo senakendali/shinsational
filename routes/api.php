@@ -13,10 +13,15 @@ use App\Http\Controllers\InfluencerSubmissionDraftController;
 
 
 // Brand
-Route::apiResource('brands', BrandController::class);
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::apiResource('brands', BrandController::class);
+});
 
 // Campaign
-Route::apiResource('campaigns', CampaignController::class);
+Route::middleware(['web', 'auth'])->group(function () {
+    Route::apiResource('campaigns', CampaignController::class);
+});
+
 
 // Client
 Route::get('/clients', [ClientController::class, 'index']);
