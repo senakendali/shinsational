@@ -15,9 +15,7 @@
 
 </head>
 <body>
-    <div id="header" class="app-header"></div>
-    <main id="app" class="main container-fluid" style="margin-top: 140px"></main>
-    <div id="footer"></div>
+    <main id="app" ></main>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>

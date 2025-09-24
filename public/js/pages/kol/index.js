@@ -5,17 +5,17 @@ export function render(target, params, query = {}, labelOverride = null) {
 
     target.innerHTML = `
     <!-- Hero Section -->
-    <section class="min-vh-100 py-5 py-lg-0 d-flex align-items-center bg-black"
+    <section class="min-vh-100 py-5 py-lg-0 d-flex align-items-center"
              style="background-image: url('/images/hero-bg.png?v=${v}'); background-size: cover; background-position: center;">
       <div class="container">
         <div class="row justify-content-center">
           <div class="col-lg-8 col-md-8">
             <div class="text-center">
-              <h1 class="display-1 fw-bold  text-uppercase">
+              <h1 class="display-1 fw-bold text-uppercase">
                 <span>Welcome</span>
                 <span>Creator</span>
               </h1>
-              <p class="">
+              <p >
                 Connect your TikTok account to start tracking your post performance<br/>
                 and monitor views, likes, and comments in real time.
               </p>

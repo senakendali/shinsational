@@ -1,8 +1,22 @@
 // /js/components/header.js
+let headerInitialized = false;
+
 export async function renderHeader(targetId = "header") {
+    if (
+        headerInitialized &&
+        document.getElementById(targetId)?.hasChildNodes()
+    ) {
+        return;
+    }
+
+    console.log("Initializing header...");
     const v = window.BUILD_VERSION || Date.now();
     const container = document.getElementById(targetId);
-    if (!container) return;
+
+    if (!container) {
+        console.error("Header container not found");
+        return;
+    }
 
     container.innerHTML = `
     <div class="shrinkable-navbar app-header fixed-top">
@@ -36,7 +50,7 @@ export async function renderHeader(targetId = "header") {
       <!-- Bar Navigasi (diisi navbar.js) -->
     </div>
   `;
-
+    headerInitialized = true;
     // SPA link handler (opsional, kalau kamu pakai app-link di project)
     container.querySelectorAll(".app-link").forEach((a) => {
         a.addEventListener("click", (e) => {
