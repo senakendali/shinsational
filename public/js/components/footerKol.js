@@ -1,20 +1,13 @@
 export function renderFooterKol(targetId = "footer") {
     const container = document.getElementById(targetId);
 
-    if (!container) return;
-
     const isProfilePage = window.location.pathname.includes("/my-profile");
+    if (!container || isProfilePage) return;
 
     container.innerHTML = `
-    <style>
-     @media (min-width: 992px) {
-        .footer-profile{
-            margin-left: 350px;
-            }
-        }
-    </style>
+   
         <footer class="py-4 border-top shadow-lg" style="background:#fff;">
-            <div class="container ${isProfilePage ? "footer-profile" : ""}">
+            <div class="container ">
                 <div class="row">
                     <!-- Logo + About -->
                     <div class="col-md-12 mb-3">
@@ -52,8 +45,8 @@ export function renderFooterKol(targetId = "footer") {
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-center small">
                     <span>© ${new Date().getFullYear()} Beauty Tech Lab by Group M. All rights reserved.</span>
                     <div class="mt-2 mt-md-0">
-                        <a href="/terms-and-conditions" class="text-light text-decoration-none app-link me-3">Terms of Service</a>
-                        <a href="/privacy-policy" class="text-light text-decoration-none app-link">Privacy Policy</a>
+                        <a href="/terms-and-conditions" class="text-dark text-decoration-none app-link me-3">Terms of Service</a>
+                        <a href="/privacy-policy" class="text-dark text-decoration-none app-link">Privacy Policy</a>
                     </div>
                 </div>
             </div>
