@@ -130,8 +130,13 @@ export const routes = [
 
   // ===== Submission =====
   {
+    path: "/admin/submission-management",
+    label: "Submission Management",
+    component: () => import("../pages/submission/submission-management.js?v=" + BUILD_ID),
+  },
+  {
     path: "/admin/submissions",
-    label: "Submission",
+    label: "Submission Monitoring",
     component: () => import("../pages/submission/index.js?v=" + BUILD_ID),
   },
   {
