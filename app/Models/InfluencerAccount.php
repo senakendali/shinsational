@@ -11,6 +11,7 @@ class InfluencerAccount extends Model
         'tiktok_username',
         'full_name',
         'avatar_url',
+        'followers_count',
         'token_type',
         'access_token',
         'refresh_token',
@@ -25,7 +26,7 @@ class InfluencerAccount extends Model
         'last_refreshed_at' => 'datetime',
         'revoked_at'        => 'datetime',
         'scopes'            => 'array',
-
+        'followers_count' => 'integer',
         // Laravel 10+: terenkripsi otomatis. Kalau <10, lihat catatan di bawah.
         'access_token'      => 'encrypted',
         'refresh_token'     => 'encrypted',

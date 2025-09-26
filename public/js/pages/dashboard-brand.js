@@ -170,12 +170,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
           <canvas id="engagementChart" class="mt-3" height="120"></canvas>
 
-          <!-- Engagement summary -->
-          <div class="row mt-3 gx-3 gy-2" id="eng-summary">
-            <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Views</div><div class="fs-5" id="es-views">-</div></div></div></div>
-            <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Likes</div><div class="fs-5" id="es-likes">-</div></div></div></div>
-            <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Comments</div><div class="fs-5" id="es-comments">-</div></div></div></div>
-            <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Shares</div><div class="fs-5" id="es-shares">-</div></div></div></div>
+          <!-- Engagement summary (5 kolom) -->
+          <div class="row mt-3 gx-3 gy-2 row-cols-2 row-cols-md-5" id="eng-summary">
+            <div class="col"><div class="card h-100"><div class="card-body py-2"><div class="text-muted small">Views</div><div class="fs-5" id="es-views">-</div></div></div></div>
+            <div class="col"><div class="card h-100"><div class="card-body py-2"><div class="text-muted small">Likes</div><div class="fs-5" id="es-likes">-</div></div></div></div>
+            <div class="col"><div class="card h-100"><div class="card-body py-2"><div class="text-muted small">Comments</div><div class="fs-5" id="es-comments">-</div></div></div></div>
+            <div class="col"><div class="card h-100"><div class="card-body py-2"><div class="text-muted small">Shares</div><div class="fs-5" id="es-shares">-</div></div></div></div>
+            <div class="col"><div class="card h-100"><div class="card-body py-2"><div class="text-muted small">Saves</div><div class="fs-5" id="es-saves">-</div></div></div></div>
           </div>
 
           <!-- KPI targets (views/likes/comments/shares) -->
@@ -497,22 +498,24 @@ export async function render(target, path, query = {}, labelOverride = null) {
     renderOneDonut('shares',   totals.shares,   kpi.shares);
   }
 
-  function renderChart(views, likes, comments, shares) {
+  // === CHART: now includes SAVES
+  function renderChart(views, likes, comments, shares, saves) {
     const canvas = $('#engagementChart');
     const ctx = canvas.getContext('2d');
     destroyChartIfExists('engagementChart');
     new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: ['Views', 'Likes', 'Comments', 'Shares'],
+        labels: ['Views', 'Likes', 'Comments', 'Shares', 'Saves'],
         datasets: [{
           label: 'Total',
-          data: [views, likes, comments, shares],
+          data: [views, likes, comments, shares, saves],
           backgroundColor: [
             'rgba(194, 239, 12, 0.6)',
             'rgba(13, 110, 253, 0.6)',
             'rgba(131, 53, 220, 0.6)',
             'rgba(255, 159, 64, 0.6)',
+            'rgba(75, 192, 192, 0.6)', // Saves
           ],
           borderWidth: 1,
           barThickness: 80,
@@ -563,7 +566,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   $('#kpi-brand-name').textContent = myBrand.name || '(Tanpa nama)';
   $('#kpi-brand-id').textContent = `ID: ${myBrand.id}`;
 
-  // ===== KPI global utk brand (UPDATED: POST = jumlah link_1..5 terisi)
+  // ===== KPI global utk brand (POST = jumlah link_1..5 terisi)
   try {
     const cs = await campaignService.getAll({ page: 1, per_page: 100, brand_id: myBrand.id, include: 'brand' });
     const campaigns = cs?.data || [];
@@ -757,7 +760,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   }
 
   // sinkronisasi totals & kpi untuk donuts
-  let lastTotals = { views:0, likes:0, comments:0, shares:0 };
+  let lastTotals = { views:0, likes:0, comments:0, shares:0, saves:0 }; // <-- includes saves
   let lastKpi = null;
 
   async function loadCampaignEngagement(campaignId) {
@@ -777,13 +780,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const elReady        = $('#kpi-posts-ready');
 
     if (!campaignId) {
-      lastTotals = { views:0, likes:0, comments:0, shares:0 };
+      lastTotals = { views:0, likes:0, comments:0, shares:0, saves:0 };
       renderKpiDonuts(lastTotals, lastKpi || {});
-      renderChart(0,0,0,0);
+      renderChart(0,0,0,0,0);
       $('#es-views').textContent = '-';
       $('#es-likes').textContent = '-';
       $('#es-comments').textContent = '-';
       $('#es-shares').textContent = '-';
+      $('#es-saves').textContent = '-';
 
       if (rowWrap) rowWrap.classList.add('d-none');
       destroyChartIfExists('donut-content');
@@ -816,7 +820,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const perPage = 100;
     let lastPage = 1;
 
-    const agg = { views: 0, likes: 0, comments: 0, shares: 0 };
+    const agg = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 }; // <-- includes saves
     let totalPostedContents = 0;
 
     const buyerSet  = new Set();
@@ -842,6 +846,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         agg.likes    += safe(Number(s.likes_1))    + safe(Number(s.likes_2));
         agg.comments += safe(Number(s.comments_1)) + safe(Number(s.comments_2));
         agg.shares   += safe(Number(s.shares_1))   + safe(Number(s.shares_2));
+        agg.saves    += safe(Number(s.saves_1))    + safe(Number(s.saves_2)); // <-- NEW
 
         // posted = jumlah link_1..5 terisi + simpan peta per slot
         const pres = {};
@@ -869,11 +874,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
     lastTotals = agg;
     renderKpiDonuts(lastTotals, lastKpi || {});
-    renderChart(agg.views, agg.likes, agg.comments, agg.shares);
-    $('#es-views').textContent = fmt(agg.views);
-    $('#es-likes').textContent = fmt(agg.likes);
+    renderChart(agg.views, agg.likes, agg.comments, agg.shares, agg.saves);
+    $('#es-views').textContent    = fmt(agg.views);
+    $('#es-likes').textContent    = fmt(agg.likes);
     $('#es-comments').textContent = fmt(agg.comments);
-    $('#es-shares').textContent = fmt(agg.shares);
+    $('#es-shares').textContent   = fmt(agg.shares);
+    $('#es-saves').textContent    = fmt(agg.saves);
 
     // ==== Target, KOL count, per KOL (fallback target)
     const kpiTargetVal = await targetPromise;
