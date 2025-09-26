@@ -14,6 +14,7 @@ class InfluencerRegistration extends Model
         'phone',
         'email',
         'address',
+        'followers_count',
         'birth_date',
         'gender',
         'profile_pic_url',

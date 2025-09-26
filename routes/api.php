@@ -55,6 +55,10 @@ Route::get('/project-terms/{id}/download-invoice', [InvoiceController::class, 'd
 Route::post('/influencer-registrations', [InfluencerRegistrationController::class, 'store']);
 Route::post('/influencer-registrations/{id}', [InfluencerRegistrationController::class, 'update']);
 Route::patch('/influencer-registrations/{id}', [InfluencerRegistrationController::class, 'update']);
+Route::put('/influencer-registrations/{id}', [InfluencerRegistrationController::class, 'update']);
+Route::get('/influencer-registrations/{id}', [InfluencerRegistrationController::class, 'show']);
+Route::delete('/influencer-registrations/{id}', [InfluencerRegistrationController::class, 'destroy']);
+
 
 
 // List registrations (dengan filter & include relasi campaign)

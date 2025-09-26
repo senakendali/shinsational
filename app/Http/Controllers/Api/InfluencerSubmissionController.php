@@ -913,6 +913,13 @@ protected function oembedAuthor(?string $url): ?array
                 \DB::raw('influencer_submissions.updated_at as submission_updated_at'),
             ])
             ->addSelect([
+                // id registrasi terbaru utk (campaign_id, tiktok_user_id) ini
+                'registration_id' => \App\Models\InfluencerRegistration::select('id')
+                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
+                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
+                    ->latest()   // atau orderByDesc('id')
+                    ->limit(1),
+
                 // identitas dasar (registrations)
                 'full_name' => \App\Models\InfluencerRegistration::select('full_name')
                     ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
@@ -935,13 +942,13 @@ protected function oembedAuthor(?string $url): ?array
                         (SELECT ia.avatar_url
                         FROM influencer_accounts ia
                         WHERE ia.tiktok_user_id = influencer_submissions.tiktok_user_id
-                    ORDER BY ia.last_refreshed_at DESC, ia.id DESC
+                        ORDER BY ia.last_refreshed_at DESC, ia.id DESC
                         LIMIT 1),
                         (SELECT ir.profile_pic_url
                         FROM influencer_registrations ir
                         WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id
-                            AND ir.campaign_id    = influencer_submissions.campaign_id
-                    ORDER BY ir.id DESC
+                        AND ir.campaign_id    = influencer_submissions.campaign_id
+                        ORDER BY ir.id DESC
                         LIMIT 1)
                     ) AS profile_pic_url
                 "),
@@ -977,20 +984,28 @@ protected function oembedAuthor(?string $url): ?array
                             FROM influencer_registrations ir
                             WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id
                             AND ir.campaign_id    = influencer_submissions.campaign_id
-                        ORDER BY ir.id DESC
+                            ORDER BY ir.id DESC
                             LIMIT 1
                         ),
                         CURDATE()
                     ) AS age
                 "),
 
-                // === NEW: followers_count dari influencer_accounts (rekaman terbaru)
+                // === UPDATED: followers_count PRIORITAS dari influencer_accounts, FALLBACK ke registrations ===
                 \DB::raw("
-                    (SELECT ia.followers_count
-                    FROM influencer_accounts ia
-                    WHERE ia.tiktok_user_id = influencer_submissions.tiktok_user_id
-                ORDER BY ia.last_refreshed_at DESC, ia.id DESC
-                    LIMIT 1) AS followers_count
+                    COALESCE(
+                        (SELECT ia.followers_count
+                        FROM influencer_accounts ia
+                        WHERE ia.tiktok_user_id = influencer_submissions.tiktok_user_id
+                        ORDER BY ia.last_refreshed_at DESC, ia.id DESC
+                        LIMIT 1),
+                        (SELECT ir.followers_count
+                        FROM influencer_registrations ir
+                        WHERE ir.tiktok_user_id = influencer_submissions.tiktok_user_id
+                        AND ir.campaign_id    = influencer_submissions.campaign_id
+                        ORDER BY ir.id DESC
+                        LIMIT 1)
+                    ) AS followers_count
                 "),
             ])
             ->with(['campaign:id,name,slug,brand_id', 'campaign.brand:id,name']);
@@ -1011,6 +1026,7 @@ protected function oembedAuthor(?string $url): ?array
         }
         return response()->json($q->paginate($perPage));
     }
+
 
 
 

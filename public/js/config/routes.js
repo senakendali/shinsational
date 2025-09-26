@@ -145,6 +145,16 @@ export const routes = [
     component: () => import("../pages/submission/form.js?v=" + BUILD_ID),
   },
   {
+    path: "/admin/kols/create",
+    label: "Add KOL",
+    component: () => import("../pages/submission/kol-form.js?v=" + BUILD_ID),
+  },
+  {
+    path: "/admin/kols/:id/edit",
+    label: "Add KOL",
+    component: () => import("../pages/submission/kol-form.js?v=" + BUILD_ID),
+  },
+  {
     path: "/admin/submissions/:id/edit",
     label: "Edit Campaign",
     component: () => import("../pages/submission/form.js?v=" + BUILD_ID),
