@@ -9,7 +9,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Log; // <-- NEW
 
 class InfluencerAccountController extends Controller
 {
@@ -111,7 +111,6 @@ class InfluencerAccountController extends Controller
                      ?: config('tiktok.client_secret')
                      ?: env('TIKTOK_CLIENT_SECRET');
 
-        // Fallback opsional
         if (!$clientKey || !$clientSecret) {
             if (class_exists(\App\Http\Controllers\TikTokAuthController::class)) {
                 $clientKey    = $clientKey    ?: @\App\Http\Controllers\TikTokAuthController::CLIENT_KEY;
@@ -152,7 +151,7 @@ class InfluencerAccountController extends Controller
             'skipped'           => 0,
             'failed'            => 0,
             'revoked_marked'    => 0,
-            'followers_updated' => 0,
+            'followers_updated' => 0, // <-- NEW
         ];
 
         $errors = [];
@@ -228,7 +227,7 @@ class InfluencerAccountController extends Controller
 
                     $summary['refreshed']++;
 
-                    // === Update followers jika scope tersedia (silent kalau tidak)
+                    // === NEW: coba update followers (silent if no scope)
                     $updated = $this->updateFollowersWithAccessToken($acc, $access);
                     if ($updated !== null) { $summary['followers_updated']++; }
 
@@ -265,7 +264,6 @@ class InfluencerAccountController extends Controller
                      ?: config('tiktok.client_secret')
                      ?: env('TIKTOK_CLIENT_SECRET');
 
-        // Fallback opsional
         if (!$clientKey || !$clientSecret) {
             if (class_exists(\App\Http\Controllers\TikTokAuthController::class)) {
                 $clientKey    = $clientKey    ?: @\App\Http\Controllers\TikTokAuthController::CLIENT_KEY;
@@ -346,7 +344,7 @@ class InfluencerAccountController extends Controller
         if ($account->revoked_at) $account->revoked_at = null;
         $account->save();
 
-        // Update followers jika scope tersedia (silent kalau tidak)
+        // === NEW: coba update followers (silent if no scope)
         $this->updateFollowersWithAccessToken($account, $access);
 
         return response()->json([
@@ -359,39 +357,12 @@ class InfluencerAccountController extends Controller
     // Helpers
     // ======================
 
-    /** Normalisasi scopes (array/string) -> array lowercase unik */
-    private function normalizeScopes($raw): array
-    {
-        if (is_array($raw)) {
-            return array_values(array_unique(array_map(fn($s) => strtolower((string)$s), $raw)));
-        }
-        $str = trim((string)$raw);
-        if ($str === '') return [];
-        $parts = preg_split('/[\s,]+/', strtolower($str), -1, PREG_SPLIT_NO_EMPTY);
-        return array_values(array_unique($parts));
-    }
-
-    /** Cek apakah account punya scope tertentu (case-insensitive) */
-    private function hasScope(InfluencerAccount $acc, string $scope): bool
-    {
-        $scopes = $this->normalizeScopes($acc->scopes ?? []);
-        return in_array(strtolower($scope), $scopes, true);
-    }
-
     /**
      * Coba ambil follower_count via TikTok Open API user.info dan update akun.
      * Mengembalikan int followers baru jika berhasil, atau null jika gagal / tak ada scope.
-     *
-     * NOTE: butuh scope OAuth 'user.info.stats'.
      */
     private function updateFollowersWithAccessToken(InfluencerAccount $acc, string $accessToken): ?int
     {
-        // Guard: token harus punya scope user.info.stats
-        if (!$this->hasScope($acc, 'user.info.stats')) {
-            Log::info('skip_followers_no_scope', ['acc_id' => $acc->id, 'user_id' => $acc->tiktok_user_id]);
-            return null;
-        }
-
         try {
             $resp = Http::withToken($accessToken)
                 ->acceptJson()
@@ -402,6 +373,7 @@ class InfluencerAccountController extends Controller
                 ]);
 
             if (!$resp->ok()) {
+                // Jangan ganggu alur—log ringan, lalu skip
                 Log::info('tiktok_userinfo_skip', [
                     'acc_id' => $acc->id,
                     'status' => $resp->status(),

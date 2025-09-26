@@ -13,10 +13,6 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Cookie;
 use App\Services\LinkTiktokService;
 
-
-
-
-
 class TikTokAuthController extends Controller
 {
     // ==== Pakai env/config kalau bisa. Constants ini hanya fallback. ====
@@ -27,8 +23,8 @@ class TikTokAuthController extends Controller
     private const AUTH_URL     = 'https://www.tiktok.com/v2/auth/authorize/';
     private const TOKEN_URL    = 'https://open.tiktokapis.com/v2/oauth/token/';
     private const USERINFO_URL = 'https://open.tiktokapis.com/v2/user/info/';
-    // ⬇️ tambah user.info.profile agar bisa ambil username & avatar_url
-    private const SCOPES       = 'user.info.basic,user.info.profile,video.list';
+    // ⬇️ tambah user.info.stats agar bisa ambil follower_count
+    private const SCOPES       = 'user.info.basic,user.info.profile,user.info.stats,video.list';
 
     /**
      * GET /auth/tiktok/redirect
@@ -82,7 +78,6 @@ class TikTokAuthController extends Controller
         return redirect()->away($url);
     }
 
-
     /**
      * GET /auth/tiktok/callback
      */
@@ -133,25 +128,26 @@ class TikTokAuthController extends Controller
         $refreshToken = $tokenData['refresh_token'] ?? null;
         $expiresIn    = $tokenData['expires_in']    ?? null;   // seconds
         $tokenType    = $tokenData['token_type']    ?? 'Bearer';
-        $granted      = preg_split('/[\s,]+/', trim($tokenData['scope'] ?? '')) ?: [];
+        // bisa string atau array — normalize ke array
+        $granted      = preg_split('/[\s,]+/', trim((string)($tokenData['scope'] ?? ''))) ?: [];
 
         if (!$accessToken) {
             return response()->json(['error' => 'No access_token from TikTok'], 500);
         }
 
-        // (opsional) cek scope
+        // (opsional) cek scope minimal
         $need    = ['user.info.basic','user.info.profile','video.list'];
         $missing = array_diff($need, $granted);
         if ($missing) {
             Log::warning('tiktok_missing_scopes', compact('granted','missing'));
-            // lanjut; username/avatar bisa kosong bila scope kurang
         }
 
         // --- 2) Profil user ---
+        // minta follower_count; kalau scope user.info.stats belum ada, TikTok bisa ignore kolom tsb.
         $userResp = Http::withToken($accessToken)
             ->acceptJson()
             ->get(self::USERINFO_URL, [
-                'fields' => 'open_id,username,display_name,avatar_url',
+                'fields' => 'open_id,username,display_name,avatar_url,follower_count',
             ]);
 
         if (!$userResp->ok()) {
@@ -161,23 +157,25 @@ class TikTokAuthController extends Controller
             return response()->json(['error' => $msg, 'details' => $body], 500);
         }
 
-        $user     = data_get($userResp->json(), 'data.user', []);
-        $openId   = $user['open_id']      ?? null;
-        $username = $user['username']     ?? null;
-        $display  = $user['display_name'] ?? null;
-        $avatar   = $user['avatar_url']   ?? null;
+        $user      = data_get($userResp->json(), 'data.user', []);
+        $openId    = $user['open_id']        ?? null;
+        $username  = $user['username']       ?? null;
+        $display   = $user['display_name']   ?? null;
+        $avatar    = $user['avatar_url']     ?? null;
+        $followers = $user['follower_count'] ?? null; // mungkin null kalau scope belum ada
 
         if (!$openId) {
             return response()->json(['error' => 'Missing open_id'], 400);
         }
 
-        // --- 3) Simpan/Update akun terpusat ---
+        // --- 3) Simpan/Update akun terpusat (ikutkan followers_count bila tersedia) ---
         InfluencerAccount::updateOrCreate(
             ['tiktok_user_id' => $openId],
             [
                 'tiktok_username'    => $username,
                 'full_name'          => $display,
                 'avatar_url'         => $avatar,
+                'followers_count'    => is_numeric($followers) ? (int)$followers : null,
                 'token_type'         => $tokenType,
                 'access_token'       => $accessToken,   // terenkripsi via casts (Laravel 10+)
                 'refresh_token'      => $refreshToken,  // terenkripsi via casts
@@ -232,6 +230,7 @@ class TikTokAuthController extends Controller
         Log::info('tiktok_callback_ok', [
             'open_id'  => $openId,
             'username' => $username,
+            'followers'=> $followers,
             'redirect' => $redirectUrl,
         ]);
 
@@ -248,7 +247,6 @@ class TikTokAuthController extends Controller
                 'Lax'              // same-site
             );
     }
-
 
     public function reset(Request $request)
     {
@@ -288,8 +286,4 @@ class TikTokAuthController extends Controller
             ? redirect($url)->withCookie($forget)
             : redirect($url);
     }
-
-
-
-
 }
