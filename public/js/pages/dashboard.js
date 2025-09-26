@@ -41,6 +41,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const $$ = (sel) => Array.from(target.querySelectorAll(sel));
   const fmt  = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '0');
   const safe = (x, d=0) => (x ?? d);
+  const toNum = (x) => { const n = Number(x); return Number.isFinite(n) ? n : 0; }; // ⬅️ robust numeric
 
   const parseMaybeJSON = (val) => {
     if (!val) return null;
@@ -56,7 +57,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return keys.some(k => Number.isFinite(Number(kpi?.[k])));
   }
 
-  let lastTotals = { views: 0, likes: 0, comments: 0, shares: 0 };
+  let lastTotals = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 }; // ⬅️ add saves
   let lastKpi = null;
 
   function getCsrfToken() {
@@ -82,7 +83,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         <div class="col-md-3"><div class="dashboard-card h-100 brand"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-building fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">BRANDS</h6><div class="fs-3 fw-bold" id="kpi-brands">-</div></div></div></div></div>
         <div class="col-md-3"><div class="dashboard-card h-100 campaign"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-megaphone fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">CAMPAIGNS</h6><div class="fs-3 fw-bold" id="kpi-campaigns">-</div></div></div></div></div>
         <div class="col-md-3"><div class="dashboard-card h-100 registration"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-people fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">KOL</h6><div class="fs-3 fw-bold" id="kpi-kols">-</div></div></div></div></div>
-        <div class="col-md-3"><div class="dashboard-card h-100 content"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-file-earmark-text fs-1"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">POST</h6><div class="fs-3 fw-bold" id="kpi-posts">-</div></div></div></div></div>
+        <div class="col-md-3"><div class="dashboard-card h-100 content"><div class="card-body d-flex align-items-center gap-3"><div class="flex-shrink-0"><i class="bi bi-file-earmark-text"></i></div><div class="flex-grow-1 text-end w-100"><h6 class="card-title mb-1">POST</h6><div class="fs-3 fw-bold" id="kpi-posts">-</div></div></div></div></div>
       </div>
 
       <div class="d-flex flex-column flex-lg-row gap-4 mb-5 pt-2">
@@ -107,12 +108,29 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
           <canvas id="engagementChart" class="mt-3" height="120"></canvas>
 
-          <div class="row mt-3 gx-3 gy-2" id="eng-summary">
-            <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Views</div><div class="fs-5" id="es-views">-</div></div></div></div>
-            <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Likes</div><div class="fs-5" id="es-likes">-</div></div></div></div>
-            <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Comments</div><div class="fs-5" id="es-comments">-</div></div></div></div>
-            <div class="col-6 col-md-3"><div class="card"><div class="card-body py-2"><div class="text-muted small">Shares</div><div class="fs-5" id="es-shares">-</div></div></div></div>
+         
+          <div class="row mt-3 gx-3 gy-2 row-cols-2 row-cols-md-5" id="eng-summary">
+            <div class="col"><div class="card h-100"><div class="card-body py-2">
+              <div class="text-muted small">Views</div><div class="fs-5" id="es-views">-</div>
+            </div></div></div>
+
+            <div class="col"><div class="card h-100"><div class="card-body py-2">
+              <div class="text-muted small">Likes</div><div class="fs-5" id="es-likes">-</div>
+            </div></div></div>
+
+            <div class="col"><div class="card h-100"><div class="card-body py-2">
+              <div class="text-muted small">Comments</div><div class="fs-5" id="es-comments">-</div>
+            </div></div></div>
+
+            <div class="col"><div class="card h-100"><div class="card-body py-2">
+              <div class="text-muted small">Shares</div><div class="fs-5" id="es-shares">-</div>
+            </div></div></div>
+
+            <div class="col"><div class="card h-100"><div class="card-body py-2">
+              <div class="text-muted small">Saves</div><div class="fs-5" id="es-saves">-</div>
+            </div></div></div>
           </div>
+
 
           <div class="mt-3" id="kpi-section">
             <div class="row gx-3 gy-2 d-none" id="kpi-targets">
@@ -354,7 +372,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return x.toLocaleString('id-ID');
   };
 
-  const renderChart = (views, likes, comments, shares) => {
+  // ⬇️ Tambah 'Saves' di chart
+  const renderChart = (views, likes, comments, shares, saves) => {
     if (window.__ADMIN_DASHBOARD_CHART__?.destroy) {
       try { window.__ADMIN_DASHBOARD_CHART__.destroy(); } catch {}
       window.__ADMIN_DASHBOARD_CHART__ = null;
@@ -364,18 +383,19 @@ export async function render(target, path, query = {}, labelOverride = null) {
     window.__ADMIN_DASHBOARD_CHART__ = new window.Chart(chartCtx, {
       type: 'bar',
       data: {
-        labels: ['Views', 'Likes', 'Comments', 'Shares'],
+        labels: ['Views', 'Likes', 'Comments', 'Shares', 'Saves'],
         datasets: [{
           label: 'Total',
-          data: [views, likes, comments, shares],
+          data: [views, likes, comments, shares, saves],
           backgroundColor: [
             'rgba(194, 239, 12, 0.6)',
             'rgba(13, 110, 253, 0.6)',
             'rgba(131, 53, 220, 0.6)',
             'rgba(255, 159, 64, 0.6)',
+            'rgba(25, 135, 84, 0.6)',
           ],
           borderWidth: 1,
-          barThickness: 80,
+          barThickness: 72,
         }]
       },
       options: {
@@ -393,17 +413,15 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const show = hasKpiEngagementMetrics(kpi);
 
     if (!show) {
-      // Sembunyikan semua UI KPI engagement
       row.classList.add('d-none');
       ['kt-views','kt-likes','kt-comments','kt-shares'].forEach(id => {
         const el = $('#'+id); if (el) el.textContent = '-';
       });
       $('#kpi-donuts').style.display = 'none';
-      destroyDonuts(); // pastikan chart donut di-dispose
+      destroyDonuts();
       return;
     }
 
-    // Tampilkan & isi target ketika KPI diisi (0 pun dianggap diisi)
     const v = (x) => Number.isFinite(Number(x)) ? fmt(Number(x)) : '-';
     $('#kt-views').textContent    = v(kpi.views);
     $('#kt-likes').textContent    = v(kpi.likes);
@@ -655,7 +673,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       if (target.dataset.dashInstance !== INSTANCE_KEY) return;
       lastKpi = kpi || null;
       applyKpiTargets(lastKpi);
-      const totalsSafe = lastTotals || { views: 0, likes: 0, comments: 0, shares: 0 };
+      const totalsSafe = lastTotals || { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 };
       renderKpiDonuts(totalsSafe, lastKpi || {});
     });
 
@@ -668,13 +686,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const elReady        = $('#kpi-posts-ready');
 
     if (!campaignId) {
-      lastTotals = { views:0, likes:0, comments:0, shares:0 };
+      lastTotals = { views:0, likes:0, comments:0, shares:0, saves:0 };
       renderKpiDonuts(lastTotals, lastKpi || {});
-      renderChart(0,0,0,0);
+      renderChart(0,0,0,0,0);
       $('#es-views').textContent = '-';
       $('#es-likes').textContent = '-';
       $('#es-comments').textContent = '-';
       $('#es-shares').textContent = '-';
+      $('#es-saves').textContent = '-';
       if (rowWrap) rowWrap.classList.add('d-none');
       destroyChartIfExists('donut-content'); try { contentDonut?.destroy?.(); } catch {}
       contentDonut = null; $('#cap-content') && ($('#cap-content').textContent = '-');
@@ -698,14 +717,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
     let page = 1;
     const perPage = 100;
     let lastPage = 1;
-    const agg = { views: 0, likes: 0, comments: 0, shares: 0 };
+    const agg = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 }; // ⬅️ add saves
 
     const subLinksMap = new Map();
     const buyerSet  = new Set();
     const ratingSet = new Set();
     const shipSet   = new Set();
 
-    let postedContents = 0; // <--- posted = jumlah link terisi (1..5)
+    let postedContents = 0;
 
     const kolKeyOf = (s) => String(s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id);
 
@@ -715,10 +734,14 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       const subs = res?.data || [];
       subs.forEach(s => {
-        agg.views    += safe(Number(s.views_1))    + safe(Number(s.views_2));
-        agg.likes    += safe(Number(s.likes_1))    + safe(Number(s.likes_2));
-        agg.comments += safe(Number(s.comments_1)) + safe(Number(s.comments_2));
-        agg.shares   += safe(Number(s.shares_1))   + safe(Number(s.shares_2));
+        // sum metrics across slots 1..5 (with fallback singular keys)
+        for (let i = 1; i <= 5; i++) {
+          agg.views    += toNum(s[`views_${i}`]    ?? s[`view_${i}`]);
+          agg.likes    += toNum(s[`likes_${i}`]    ?? s[`like_${i}`]);
+          agg.comments += toNum(s[`comments_${i}`] ?? s[`comment_${i}`]);
+          agg.shares   += toNum(s[`shares_${i}`]   ?? s[`share_${i}`]);
+          agg.saves    += toNum(s[`saves_${i}`]    ?? s[`save_${i}`]);
+        }
 
         const id = s.id;
         const pres = {};
@@ -745,11 +768,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
     lastTotals = agg;
     renderKpiDonuts(lastTotals, lastKpi || {});
-    renderChart(agg.views, agg.likes, agg.comments, agg.shares);
+    renderChart(agg.views, agg.likes, agg.comments, agg.shares, agg.saves);
     $('#es-views').textContent = fmt(agg.views);
     $('#es-likes').textContent = fmt(agg.likes);
     $('#es-comments').textContent = fmt(agg.comments);
     $('#es-shares').textContent = fmt(agg.shares);
+    $('#es-saves').textContent = fmt(agg.saves);
 
     // ===== KOL count & target per KOL
     let kolCount = 0;
@@ -789,8 +813,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }
     if (elReady) elReady.textContent = fmt(readyToPost);
 
-    // ===== Waiting Draft (rumus baru)
-    // waiting_draft = KPI_target - (posted + pending + rejected + ready_to_post)
+    // ===== Waiting Draft
     const waitingDraftTotal = Math.max(
       0,
       Number(contentTarget) - (Number(postedContents) + Number(draftPendingCount) + Number(draftRejectedCount) + Number(readyToPost))

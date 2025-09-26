@@ -132,6 +132,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
   const fmtDate = (s) => (s ? new Date(s).toLocaleDateString("id-ID") : "-");
   const fmtNum = (n) => (n === 0 || n ? Number(n).toLocaleString("id-ID") : "-");
+  const fmtPct = (x) => (x == null || isNaN(x) ? "-" : Math.round(x * 100) + "%");
 
   const kolNameOf = (s) =>
     s.full_name ||
@@ -151,6 +152,23 @@ export async function render(target, path, query = {}, labelOverride = null) {
     s.influencer_avatar_url ||
     s.photo_url ||
     null;
+
+  // NEW: followers helper
+  const followersOf = (s) => {
+    const cand = [
+      s.followers_count,
+      s.tiktok_followers,
+      s.follower_count,
+      s.followers,
+      s.fans,
+      s.fans_count,
+      s.stats_followers,
+      s?.influencer?.followers_count,
+      s?.influencer_account?.followers_count,
+      s?.registration?.followers_count,
+    ];
+    return cand.find((v) => v != null);
+  };
 
   const addressOf = (s) => {
     const pick = (...keys) => keys.map((k) => s?.[k]).find((v) => v && String(v).trim() !== "");
@@ -307,7 +325,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       }
 
       // ====== table build
-      const SLOT_COLS = 9; // Link, Date, Screenshot, Invoice, Review, Views, Likes, Comments, Shares
+      const SLOT_COLS = 12; // Link, Date, Screenshot, Invoice, Review, Views, Likes, Comments, Shares, Saves, Total Engagement, ER
       const maxSlots = Math.max(1, Number(requiredSlots) || 1); // ikut content_quota
       const minWidthPx = maxSlots * SLOT_COLS * 120;
 
@@ -345,6 +363,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
         "Likes",
         "Comments",
         "Shares",
+        "Saves",
+        "Total Engagement",
+        "ER",
       ];
       const theadSub = [];
       for (let i = 1; i <= maxSlots; i++) {
@@ -361,6 +382,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         const displayName = kolNameOf(s);
         const addr = addressOf(s);
         const avatarUrl = kolAvatarOf(s);
+        const followers = followersOf(s);
 
         const isSentByBrand = s.acquisition_method === "sent_by_brand";
         const hasResi = !!(s.shipping_tracking_number || s.shipping_courier);
@@ -398,6 +420,16 @@ export async function render(target, path, query = {}, labelOverride = null) {
           const likes = metric(s, slot, "likes") ?? metric(s, slot, "like");
           const comments = metric(s, slot, "comments") ?? metric(s, slot, "comment");
           const shares = metric(s, slot, "shares") ?? metric(s, slot, "share");
+          const saves  = metric(s, slot, "saves")  ?? metric(s, slot, "save");
+
+          const likesN    = Number(likes)    || 0;
+          const commentsN = Number(comments) || 0;
+          const sharesN   = Number(shares)   || 0;
+          const savesN    = Number(saves)    || 0;
+          const totalEng  = likesN + commentsN + sharesN + savesN;
+
+          const viewsN = Number(views) || 0;
+          const er = viewsN > 0 ? (totalEng / viewsN) : null;
 
           const evenBg = slot % 2 === 0 ? "bg-light" : "";
 
@@ -410,7 +442,10 @@ export async function render(target, path, query = {}, labelOverride = null) {
             `<td class="text-center ${evenBg}">${views != null ? fmtNum(views) : "-"}</td>`,
             `<td class="text-center ${evenBg}">${likes != null ? fmtNum(likes) : "-"}</td>`,
             `<td class="text-center ${evenBg}">${comments != null ? fmtNum(comments) : "-"}</td>`,
-            `<td class="text-center ${evenBg}">${shares != null ? fmtNum(shares) : "-"}</td>`
+            `<td class="text-center ${evenBg}">${shares != null ? fmtNum(shares) : "-"}</td>`,
+            `<td class="text-center ${evenBg}">${saves != null ? fmtNum(saves) : "-"}</td>`,
+            `<td class="text-center ${evenBg}">${fmtNum(totalEng)}</td>`,
+            `<td class="text-center ${evenBg}">${fmtPct(er)}</td>`
           );
         }
 
@@ -430,6 +465,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
                 </div>
               </div>
             </td>
+
+            <!-- NEW: Followers -->
+            <td class="text-end border-bottom pb-2" style="min-width:120px">${followers != null ? fmtNum(followers) : "-"}</td>
 
             ${slotCells.join("")}
 
@@ -470,7 +508,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
             margin-bottom: 0;
             border-collapse: separate;
             border-spacing: 0;
-            min-width: calc(var(--sticky-left-w) + var(--sticky-right-w) + ${maxSlots * SLOT_COLS * 120}px);
+            /* +120px untuk kolom Followers baru */
+            min-width: calc(var(--sticky-left-w) + 120px + var(--sticky-right-w) + ${maxSlots * SLOT_COLS * 120}px);
           }
           thead th {
             position: sticky;
@@ -480,19 +519,16 @@ export async function render(target, path, query = {}, labelOverride = null) {
             background: #fff;
           }
 
-
-
           /* Hanya baris thead kedua yang pakai border-bottom untuk semua kolom */
           .submissions-table thead tr:first-child th {
             border-bottom: none !important;
             box-shadow: none !important;
           }
           .submissions-table thead tr:nth-child(2) th {
-           border-top: 2px solid #dee2e6 !important;
+            border-top: 2px solid #dee2e6 !important;
             border-bottom: 2px solid #dee2e6 !important;
           }
 
-          
           .borderHeader { border-bottom: 2px solid #dee2e6 !important; }
 
           .sticky-col {
@@ -507,6 +543,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
           tbody td { vertical-align: middle; white-space: nowrap; }
           .bg-light { background-color: #F7F7F7 !important; }
+
+          /* numerik rata kanan */
+          td.text-end { text-align: right !important; }
         </style>
 
         <div class="submissions-wrapper">
@@ -515,11 +554,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
               <thead class="table-light">
                 <tr>
                   <th class="text-center sticky-col sticky-left">KOL Name</th>
+                  <th class="text-center" style="min-width:120px"></th>
                   ${theadTopGroups.join("")}
                   <th class="text-center sticky-col sticky-right">Actions</th>
                 </tr>
                 <tr>
                   <th class="sticky-col sticky-left"></th>
+                  <th class="borderHeader" style="min-width:120px">Followers</th>
                   ${theadSub.join("")}
                   <th class="sticky-col sticky-right"></th>
                 </tr>
@@ -571,6 +612,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const header = [
       "Campaign",
       "KOL Name",
+      "Followers",         // NEW
       "Avatar URL",
       "TikTok User ID",
       "Address",
@@ -583,6 +625,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
       "Likes",
       "Comments",
       "Shares",
+      "Saves",
+      "Total Engagement",
+      "ER",
     ];
     rows.push(header);
 
@@ -590,6 +635,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
     for (const s of lastFiltered) {
       const name = kolNameOf(s);
+      const followers = followersOf(s); // NEW
       const avatar = kolAvatarOf(s) || "";
       const openId = s.tiktok_user_id || "";
       const addr = addressOf(s);
@@ -621,11 +667,21 @@ export async function render(target, path, query = {}, labelOverride = null) {
         const likes = metric(s, slot, "likes") ?? metric(s, slot, "like");
         const comments = metric(s, slot, "comments") ?? metric(s, slot, "comment");
         const shares = metric(s, slot, "shares") ?? metric(s, slot, "share");
+        const saves  = metric(s, slot, "saves")  ?? metric(s, slot, "save");
 
-        // push per-slot supaya struktur konsisten
+        const likesN    = Number(likes)    || 0;
+        const commentsN = Number(comments) || 0;
+        const sharesN   = Number(shares)   || 0;
+        const savesN    = Number(saves)    || 0;
+        const totalEng  = likesN + commentsN + sharesN + savesN;
+
+        const viewsN = Number(views) || 0;
+        const er = viewsN > 0 ? (totalEng / viewsN) : null;
+
         rows.push([
           campaign,
           name,
+          followers ?? "", // NEW position (after name)
           avatar,
           openId,
           addr,
@@ -638,6 +694,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
           likes ?? "",
           comments ?? "",
           shares ?? "",
+          saves ?? "",
+          totalEng,
+          er == null ? "" : (er * 100).toFixed(2) + "%",
         ]);
       }
     }

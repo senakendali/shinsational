@@ -9,7 +9,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log; // <-- NEW
 
 class InfluencerAccountController extends Controller
 {
@@ -104,6 +103,7 @@ class InfluencerAccountController extends Controller
      */
     public function refreshToken(Request $request)
     {
+        // Ambil kredensial dari config/env (tidak bergantung ke controller lain)
         $clientKey    = config('services.tiktok.client_key')
                      ?: config('tiktok.client_key')
                      ?: env('TIKTOK_CLIENT_KEY');
@@ -111,8 +111,10 @@ class InfluencerAccountController extends Controller
                      ?: config('tiktok.client_secret')
                      ?: env('TIKTOK_CLIENT_SECRET');
 
+        // Fallback opsional: kalau kamu memang punya class TikTokAuthController dengan konstanta
         if (!$clientKey || !$clientSecret) {
             if (class_exists(\App\Http\Controllers\TikTokAuthController::class)) {
+                // gunakan @ silencing kalau konstanta tidak ada
                 $clientKey    = $clientKey    ?: @\App\Http\Controllers\TikTokAuthController::CLIENT_KEY;
                 $clientSecret = $clientSecret ?: @\App\Http\Controllers\TikTokAuthController::CLIENT_SECRET;
             }
@@ -145,13 +147,12 @@ class InfluencerAccountController extends Controller
         }
 
         $summary = [
-            'total'             => InfluencerAccount::count(),
-            'candidates'        => (clone $q)->count(),
-            'refreshed'         => 0,
-            'skipped'           => 0,
-            'failed'            => 0,
-            'revoked_marked'    => 0,
-            'followers_updated' => 0, // <-- NEW
+            'total'          => InfluencerAccount::count(),
+            'candidates'     => (clone $q)->count(),
+            'refreshed'      => 0,
+            'skipped'        => 0,
+            'failed'         => 0,
+            'revoked_marked' => 0,
         ];
 
         $errors = [];
@@ -227,10 +228,6 @@ class InfluencerAccountController extends Controller
 
                     $summary['refreshed']++;
 
-                    // === NEW: coba update followers (silent if no scope)
-                    $updated = $this->updateFollowersWithAccessToken($acc, $access);
-                    if ($updated !== null) { $summary['followers_updated']++; }
-
                 } catch (\Throwable $e) {
                     $summary['failed']++;
                     if (count($errors) < 25) {
@@ -265,6 +262,7 @@ class InfluencerAccountController extends Controller
                      ?: env('TIKTOK_CLIENT_SECRET');
 
         if (!$clientKey || !$clientSecret) {
+            // fallback opsional
             if (class_exists(\App\Http\Controllers\TikTokAuthController::class)) {
                 $clientKey    = $clientKey    ?: @\App\Http\Controllers\TikTokAuthController::CLIENT_KEY;
                 $clientSecret = $clientSecret ?: @\App\Http\Controllers\TikTokAuthController::CLIENT_SECRET;
@@ -344,73 +342,9 @@ class InfluencerAccountController extends Controller
         if ($account->revoked_at) $account->revoked_at = null;
         $account->save();
 
-        // === NEW: coba update followers (silent if no scope)
-        $this->updateFollowersWithAccessToken($account, $access);
-
         return response()->json([
             'message' => 'Token berhasil diperbarui.',
             'data'    => $account->fresh(),
         ]);
-    }
-
-    // ======================
-    // Helpers
-    // ======================
-
-    /**
-     * Coba ambil follower_count via TikTok Open API user.info dan update akun.
-     * Mengembalikan int followers baru jika berhasil, atau null jika gagal / tak ada scope.
-     */
-    private function updateFollowersWithAccessToken(InfluencerAccount $acc, string $accessToken): ?int
-    {
-        try {
-            $resp = Http::withToken($accessToken)
-                ->acceptJson()
-                ->timeout(15)
-                ->get('https://open.tiktokapis.com/v2/user/info/', [
-                    // follower_count butuh scope: user.info.stats
-                    'fields' => 'open_id,username,display_name,avatar_url,follower_count',
-                ]);
-
-            if (!$resp->ok()) {
-                // Jangan ganggu alur—log ringan, lalu skip
-                Log::info('tiktok_userinfo_skip', [
-                    'acc_id' => $acc->id,
-                    'status' => $resp->status(),
-                    'body'   => $resp->json(),
-                ]);
-                return null;
-            }
-
-            $user = data_get($resp->json(), 'data.user', []);
-            $followers = data_get($user, 'follower_count');
-
-            $dirty = false;
-
-            if (is_numeric($followers)) {
-                $acc->followers_count = (int) $followers;
-                $dirty = true;
-            }
-
-            // sekalian sync nama/avatar kalau ada
-            $username = data_get($user, 'username');
-            $display  = data_get($user, 'display_name');
-            $avatar   = data_get($user, 'avatar_url');
-
-            if ($username && $username !== $acc->tiktok_username) { $acc->tiktok_username = $username; $dirty = true; }
-            if ($display  && $display  !== $acc->full_name)       { $acc->full_name       = $display;  $dirty = true; }
-            if ($avatar   && $avatar   !== $acc->avatar_url)       { $acc->avatar_url      = $avatar;   $dirty = true; }
-
-            if ($dirty) { $acc->save(); }
-
-            return is_numeric($followers) ? (int) $followers : null;
-
-        } catch (\Throwable $e) {
-            Log::warning('tiktok_userinfo_error', [
-                'acc_id' => $acc->id,
-                'err'    => $e->getMessage(),
-            ]);
-            return null;
-        }
     }
 }

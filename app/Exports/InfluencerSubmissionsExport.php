@@ -4,17 +4,22 @@ namespace App\Exports;
 
 use App\Models\InfluencerSubmission;
 use App\Models\InfluencerRegistration;
+use App\Models\InfluencerAccount; // <-- NEW
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Storage;
+// use Illuminate\Support\Facades\DB; // (opsional, tak dipakai)
 use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithChunkReading;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use Maatwebsite\Excel\Events\AfterSheet;
+use PhpOffice\PhpSpreadsheet\Style\Border;
 
 class InfluencerSubmissionsExport implements
-    FromQuery, WithMapping, WithHeadings, ShouldAutoSize, WithChunkReading
+    FromQuery, WithMapping, WithHeadings, ShouldAutoSize, WithChunkReading, WithEvents
 {
     /** Batasi jumlah slot konten di export */
     private const MAX_SLOTS = 2;
@@ -30,40 +35,68 @@ class InfluencerSubmissionsExport implements
 
     public function query()
     {
+        $ir = (new InfluencerRegistration())->getTable();
+        $ia = (new InfluencerAccount())->getTable();
+        $is = (new InfluencerSubmission())->getTable();
+
+        // subquery helper: latest registration per (open_id,campaign)
+        $subReg = fn(string $col) =>
+            InfluencerRegistration::select($col)
+                ->whereColumn("$ir.tiktok_user_id", "$is.tiktok_user_id")
+                ->whereColumn("$ir.campaign_id",   "$is.campaign_id")
+                ->latest()->limit(1);
+
+        // subquery followers dari influencer_accounts (berdasar open_id saja)
+        $subFollowers = InfluencerAccount::select('followers_count')
+            ->whereColumn("$ia.tiktok_user_id", "$is.tiktok_user_id")
+            ->orderByDesc("$ia.updated_at")
+            ->orderByDesc("$ia.id")
+            ->limit(1);
+
         $q = InfluencerSubmission::query()
-            ->select('influencer_submissions.*')
+            ->select("$is.*")
             ->addSelect([
-                // identitas dari registration terakhir (per campaign + open_id)
-                'full_name' => InfluencerRegistration::select('full_name')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
-                'tiktok_username' => InfluencerRegistration::select('tiktok_username')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
-                'profile_pic_url' => InfluencerRegistration::select('profile_pic_url')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
-                'address' => InfluencerRegistration::select('address')
-                    ->whereColumn('influencer_registrations.tiktok_user_id', 'influencer_submissions.tiktok_user_id')
-                    ->whereColumn('influencer_registrations.campaign_id', 'influencer_submissions.campaign_id')
-                    ->latest()->limit(1),
+                'full_name'        => $subReg('full_name'),
+                'tiktok_username'  => $subReg('tiktok_username'),
+                'profile_pic_url'  => $subReg('profile_pic_url'),
+                'address'          => $subReg('address'),
+                // NEW: followers dari influencer_accounts
+                'followers_count'  => $subFollowers,
             ])
             ->with(['campaign:id,name'])
-            ->where('campaign_id', $this->campaignId)
-            ->orderBy('id');
+            ->where("$is.campaign_id", $this->campaignId)
+            ->orderBy("$is.id");
 
         if ($this->keyword !== null && $this->keyword !== '') {
             $kw = '%'.mb_strtolower($this->keyword).'%';
-            $q->where(function (Builder $w) use ($kw) {
-                $w->orWhereRaw('LOWER(full_name) LIKE ?', [$kw])
-                  ->orWhereRaw('LOWER(tiktok_username) LIKE ?', [$kw])
-                  ->orWhereRaw('LOWER(tiktok_user_id) LIKE ?', [$kw])
-                  ->orWhereRaw('LOWER(link_1) LIKE ?', [$kw])
-                  ->orWhereRaw('LOWER(link_2) LIKE ?', [$kw])
-                  ->orWhereRaw('LOWER(address) LIKE ?', [$kw]);
+
+            // Jangan pakai alias di WHERE → pakai subquery inlined
+            $q->where(function (Builder $w) use ($kw, $is, $ir) {
+                $fullNameSql = "LOWER(COALESCE((SELECT r.full_name
+                                FROM $ir r
+                                WHERE r.tiktok_user_id = $is.tiktok_user_id
+                                  AND r.campaign_id    = $is.campaign_id
+                                ORDER BY r.id DESC LIMIT 1),'')
+                              )";
+                $usernameSql = "LOWER(COALESCE((SELECT r.tiktok_username
+                                FROM $ir r
+                                WHERE r.tiktok_user_id = $is.tiktok_user_id
+                                  AND r.campaign_id    = $is.campaign_id
+                                ORDER BY r.id DESC LIMIT 1),'')
+                              )";
+                $addressSql = "LOWER(COALESCE((SELECT r.address
+                                FROM $ir r
+                                WHERE r.tiktok_user_id = $is.tiktok_user_id
+                                  AND r.campaign_id    = $is.campaign_id
+                                ORDER BY r.id DESC LIMIT 1),'')
+                              )";
+
+                $w->orWhereRaw("$fullNameSql LIKE ?", [$kw])
+                  ->orWhereRaw("$usernameSql LIKE ?", [$kw])
+                  ->orWhereRaw('LOWER('.$is.'.tiktok_user_id) LIKE ?', [$kw])
+                  ->orWhereRaw('LOWER('.$is.'.link_1) LIKE ?', [$kw])
+                  ->orWhereRaw('LOWER('.$is.'.link_2) LIKE ?', [$kw])
+                  ->orWhereRaw("$addressSql LIKE ?", [$kw]);
             });
         }
 
@@ -72,31 +105,27 @@ class InfluencerSubmissionsExport implements
 
     public function headings(): array
     {
+        // Avatar URL dihapus, Followers ditambahkan setelah KOL Name
         $cols = [
             'Campaign',
             'KOL Name',
-            'Avatar URL',
+            'Followers',
             'TikTok User ID',
             'Address',
-            'Invoice URL',
-            'Review URL',
         ];
 
+        // Kolom per slot
         for ($i = 1; $i <= self::MAX_SLOTS; $i++) {
             $cols[] = "Link {$i}";
             $cols[] = "Post Date {$i}";
-            $cols[] = "Screenshot URL {$i}";
             $cols[] = "Views {$i}";
             $cols[] = "Likes {$i}";
             $cols[] = "Comments {$i}";
             $cols[] = "Shares {$i}";
+            $cols[] = "Saves {$i}";
+            $cols[] = "Total Engagement {$i}";
+            $cols[] = "ER {$i}";
         }
-
-        $cols[] = 'Total Contents';
-        $cols[] = 'Total Views';
-        $cols[] = 'Total Likes';
-        $cols[] = 'Total Comments';
-        $cols[] = 'Total Shares';
 
         return $cols;
     }
@@ -105,52 +134,43 @@ class InfluencerSubmissionsExport implements
     {
         $camp   = $s->campaign->name ?? ('campaign_'.$s->campaign_id);
         $name   = $this->kolNameOf($s);
-        $avatar = $this->kolAvatarOf($s);
         $openId = (string) ($s->tiktok_user_id ?? '');
         $addr   = $this->addressOf($s);
+        $folls  = $this->followersOf($s);
 
-        $invoice = $this->publicUrl($s->invoice_file_url ?? $s->invoice_file_path ?? null);
-        $review  = $this->publicUrl($s->review_proof_file_url ?? $s->review_proof_file_path ?? null);
-
-        $row = [$camp, $name, $avatar ?? '', $openId, $addr, $invoice ?? '', $review ?? ''];
-
-        $totalContents = 0;
-        $totV = 0; $totL = 0; $totC = 0; $totS = 0;
+        $row = [$camp, $name, $folls, $openId, $addr];
 
         for ($slot = 1; $slot <= self::MAX_SLOTS; $slot++) {
             $link   = $s->{"link_{$slot}"} ?? '';
             $pdateR = $s->{"post_date_{$slot}"} ?? null;
             $pdate  = $pdateR ? Carbon::parse($pdateR)->format('d/m/Y') : '';
 
-            $scRaw = $s->{"screenshot_{$slot}_url"} ?? $s->{"screenshot_{$slot}_path"} ?? null;
-            $scUrl = $this->publicUrl($scRaw);
-
             $views    = $this->metric($s, $slot, 'views')    ?? $this->metric($s, $slot, 'view');
             $likes    = $this->metric($s, $slot, 'likes')    ?? $this->metric($s, $slot, 'like');
             $comments = $this->metric($s, $slot, 'comments') ?? $this->metric($s, $slot, 'comment');
             $shares   = $this->metric($s, $slot, 'shares')   ?? $this->metric($s, $slot, 'share');
+            $saves    = $this->metric($s, $slot, 'saves')    ?? $this->metric($s, $slot, 'save');
 
-            if (trim((string) $link) !== '' || $pdate || $scUrl) $totalContents++;
+            $likesN    = (int) ($likes ?? 0);
+            $commentsN = (int) ($comments ?? 0);
+            $sharesN   = (int) ($shares ?? 0);
+            $savesN    = (int) ($saves ?? 0);
+            $totalEng  = $likesN + $commentsN + $sharesN + $savesN;
 
-            $totV += (int) ($views ?? 0);
-            $totL += (int) ($likes ?? 0);
-            $totC += (int) ($comments ?? 0);
-            $totS += (int) ($shares ?? 0);
+            $viewsN = (int) ($views ?? 0);
+            $erRatio = $viewsN > 0 ? ($totalEng / $viewsN) : null;
+            $erPct = $erRatio === null ? '' : (string) (round($erRatio * 100)).'%';
 
             $row[] = $link ?: '';
             $row[] = $pdate ?: '';
-            $row[] = $scUrl ?: '';
             $row[] = $views ?? '';
             $row[] = $likes ?? '';
             $row[] = $comments ?? '';
             $row[] = $shares ?? '';
+            $row[] = $saves ?? '';
+            $row[] = $totalEng;
+            $row[] = $erPct;
         }
-
-        $row[] = $totalContents;
-        $row[] = $totV;
-        $row[] = $totL;
-        $row[] = $totC;
-        $row[] = $totS;
 
         return $row;
     }
@@ -158,6 +178,21 @@ class InfluencerSubmissionsExport implements
     public function chunkSize(): int
     {
         return 500;
+    }
+
+    /** Tambahkan border untuk seluruh tabel */
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $dimension = $event->sheet->calculateWorksheetDimension();
+                $event->sheet->getDelegate()->getStyle($dimension)->getBorders()->getAllBorders()
+                    ->setBorderStyle(Border::BORDER_THIN);
+
+                $event->sheet->getStyle('A1:' . $event->sheet->getHighestColumn() . '1')
+                    ->getFont()->setBold(true);
+            },
+        ];
     }
 
     // ===== helpers =====
@@ -185,10 +220,20 @@ class InfluencerSubmissionsExport implements
         return (string) $name;
     }
 
-    private function kolAvatarOf($s): ?string
+    private function followersOf($s): ?int
     {
-        $raw = $s->profile_pic_url ?? $s->avatar_url ?? null;
-        return $raw ? (string) $raw : null;
+        foreach ([
+            'followers_count',   // from influencer_accounts (selected as alias)
+            'tiktok_followers',
+            'follower_count',
+            'followers',
+            'fans',
+            'fans_count',
+            'stats_followers',
+        ] as $k) {
+            if (isset($s->$k) && $s->$k !== null) return (int) $s->$k;
+        }
+        return null;
     }
 
     private function addressOf($s): string
