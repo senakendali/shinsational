@@ -139,12 +139,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         <select id="campaignFilter" class="form-select" style="min-width:260px">
           <option value="">— Pilih Campaign —</option>
         </select>
-        <div class="input-group" style="min-width:260px;">
-          <input class="form-control" type="search" placeholder="Cari nama / @username / link…" id="searchInput">
-          <button class="btn btn-outline-secondary d-none" type="button" id="btnClearSearch" title="Bersihkan">
-            <i class="bi bi-x-lg"></i>
-          </button>
-        </div>
+        <input class="form-control" style="min-width:260px" type="search" placeholder="Cari KOL / link…" id="searchInput">
       </div>
       <div class="d-flex align-items-center gap-2 flex-wrap">
         <button class="btn btn-outline-secondary" id="btnRefresh">
@@ -163,7 +158,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
   // ---------- DOM refs ----------
   const campaignFilter = $('#campaignFilter');
   const searchInput    = $('#searchInput');
-  const btnClearSearch = $('#btnClearSearch');
   const listWrap       = $('#list-wrap');
   const pager          = $('#pagination');
   const btnRefresh     = $('#btnRefresh');
@@ -174,16 +168,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
   let currentKeyword = '';
   let debounce = null;
   let requiredSlots = 1;
-  let reqToken = 0; // untuk cegah race condition
-
-  // ---------- restore filters from URL / query ----------
-  const url = new URL(location.href);
-  const urlCampaign = query?.campaign_id ?? url.searchParams.get('campaign_id') ?? '';
-  const urlKeyword  = query?.q ?? url.searchParams.get('q') ?? '';
-  if (urlKeyword) {
-    currentKeyword = urlKeyword;
-    searchInput.value = urlKeyword;
-  }
 
   // ---------- populate campaign filter ----------
   try {
@@ -192,25 +176,21 @@ export async function render(target, path, query = {}, labelOverride = null) {
     campaignFilter.innerHTML =
       `<option value="">— Pilih Campaign —</option>` +
       items.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-
-    if (urlCampaign && campaignFilter.querySelector(`option[value="${urlCampaign}"]`)) {
-      campaignFilter.value = String(urlCampaign);
+    const qId = query?.campaign_id || new URL(location.href).searchParams.get('campaign_id');
+    if (qId && campaignFilter.querySelector(`option[value="${qId}"]`)) {
+      campaignFilter.value = qId;
     }
     currentCampaignId = campaignFilter.value || '';
     requiredSlots = await getCampaignContentPerKol(currentCampaignId);
-  } catch {
-    // ignore
-  }
+  } catch {}
 
   // ---------- API ----------
-  async function fetchSubmissions({ page = 1, per_page = 20, campaign_id, q = '' }) {
-    // gunakan service; pastikan service mendukung param q
+  async function fetchSubmissions({ page = 1, per_page = 20, campaign_id }) {
     const res = await submissionService.getAll({
       page,
       per_page,
       include: 'campaign',
       campaign_id,
-      q, // <— kirim keyword ke backend
     });
     return res;
   }
@@ -345,7 +325,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     } catch (e) {
       showToast(e?.message || 'Gagal menyimpan detail produk.', 'error');
     } finally {
-      if (btn) { btn.disabled = false; btn.innerHTML = old || 'Simpan Data'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = old || 'Simpan Detail Produk'; }
     }
   }
 
@@ -399,8 +379,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const isShip = method === 'sent_by_brand';
 
     const plat  = rec.purchase_platform || '';
-    thePrice: {
-    }
     const price = rec.purchase_price ?? '';
 
     const courier = rec.shipping_courier || '';
@@ -441,7 +419,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
               <input type="file" class="form-control js-invoice" accept="application/pdf,image/*" style="max-width:220px">
               <a class="btn btn-outline-secondary js-invoice-view ${invUrl ? '' : 'd-none'}" ${invUrl ? `href="${invUrl}" target="_blank" rel="noopener"` : ''}>Lihat File</a>
             </div>
-            
+            <small class="text-muted">PDF/JPG/PNG</small>
           </div>
 
           <!-- SENT BY BRAND -->
@@ -461,6 +439,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
               <input type="file" class="form-control js-review" accept="application/pdf,image/*" style="max-width:220px">
               <a class="btn btn-outline-secondary js-review-view ${revUrl ? '' : 'd-none'}" ${revUrl ? `href="${revUrl}" target="_blank" rel="noopener"` : ''}>Lihat File</a>
             </div>
+            
           </div>
 
           <div class="col-12 d-flex justify-content-end">
@@ -506,6 +485,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
           view.classList.remove('d-none');
           view.textContent = 'Preview';
         } else {
+          // biarkan tetap "Lihat" kalau remote sudah ada; kalau tidak ada, hide
           if (!view.getAttribute('href')) view.classList.add('d-none');
         }
       });
@@ -555,22 +535,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     cardEl.querySelector('.js-save-acq')?.addEventListener('click', () => saveAcquisition(cardEl));
   }
 
-  // sinkronkan filter ke URL (tanpa reload)
-  function syncUrl() {
-    const u = new URL(location.href);
-    if (currentCampaignId) u.searchParams.set('campaign_id', currentCampaignId);
-    else u.searchParams.delete('campaign_id');
-
-    if ((currentKeyword || '').trim()) u.searchParams.set('q', currentKeyword.trim());
-    else u.searchParams.delete('q');
-
-    history.replaceState({}, '', u.toString());
-  }
-
   async function loadList(page = 1) {
     currentCampaignId = campaignFilter.value || '';
-    currentPage = page;
-
     if (!currentCampaignId) {
       listWrap.innerHTML = `<div class="alert alert-info">Silakan pilih <b>Campaign</b> terlebih dahulu.</div>`;
       pager.innerHTML = '';
@@ -578,39 +544,36 @@ export async function render(target, path, query = {}, labelOverride = null) {
       return;
     }
 
-    // sinkronkan URL setiap loadList
-    syncUrl();
-
-    // cegah race-condition
-    const myToken = ++reqToken;
-
     showLoader();
     try {
-      const res = await fetchSubmissions({
-        page,
-        per_page: 20,
-        campaign_id: currentCampaignId,
-        q: currentKeyword,           // <— kirim keyword ke server
-      });
-
-      // kalau ada response lama datang belakangan, abaikan
-      if (myToken !== reqToken) return;
-
+      const res = await fetchSubmissions({ page, per_page: 20, campaign_id: currentCampaignId });
       const items = res?.data || [];
 
-      if (!items.length) {
-        const msg = (currentKeyword || '').trim()
-          ? `Tidak ada data untuk kata kunci <b>${String(currentKeyword).replace(/[<>&"]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[s]))}</b>.`
-          : 'Tidak ada data.';
-        listWrap.innerHTML = `<div class="text-center text-muted">${msg}</div>`;
+      // Search
+      const kw = (currentKeyword || '').toLowerCase().trim();
+      const filtered = kw
+        ? items.filter(s => {
+            const name = kolNameOf(s);
+            const hay = [
+              name,
+              s.tiktok_user_id || '',
+              s.link_1 || '', s.link_2 || '', s.link_3 || '', s.link_4 || '', s.link_5 || '',
+            ].join(' ').toLowerCase();
+            return hay.includes(kw);
+          })
+        : items;
+
+      if (!filtered.length) {
+        listWrap.innerHTML = `<div class="text-center text-muted">Tidak ada data.</div>`;
         pager.innerHTML = '';
+        hideLoader();
         return;
       }
 
       const maxSlots = Math.max(1, Number(requiredSlots) || 1);
       const cards = [];
 
-      for (const s of items) {
+      for (const s of filtered) {
         const avatar = kolAvatarOf(s);
         const name = kolNameOf(s);
         const updated = fmtDateTime(s.updated_at || s.created_at);
@@ -666,24 +629,17 @@ export async function render(target, path, query = {}, labelOverride = null) {
       const cur  = res?.current_page ?? page;
       pager.innerHTML = '';
       if (last > 1) {
-        // previous
-        const addLi = (label, pageNum, disabled=false, active=false) => {
-          const li = document.createElement('li');
-          li.className = `page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}`;
-          li.innerHTML = `<a class="page-link" href="#">${label}</a>`;
-          if (!disabled && !active) {
-            li.addEventListener('click', (e) => {
-              e.preventDefault();
-              loadList(pageNum);
-            });
-          }
-          pager.appendChild(li);
-        };
-        addLi('«', Math.max(1, cur - 1), cur === 1, false);
         for (let i = 1; i <= last; i++) {
-          addLi(String(i), i, false, i === cur);
+          const li = document.createElement('li');
+          li.className = `page-item ${i === cur ? 'active' : ''}`;
+          li.innerHTML = `<a class="page-link" href="#">${i}</a>`;
+          li.addEventListener('click', (e) => {
+            e.preventDefault();
+            currentPage = i;
+            loadList(currentPage);
+          });
+          pager.appendChild(li);
         }
-        addLi('»', Math.min(last, cur + 1), cur === last, false);
       }
     } catch (err) {
       console.error(err);
@@ -702,32 +658,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
     loadList(currentPage);
   });
 
-  // ketik → debounce → server-side search
   searchInput.addEventListener('input', (e) => {
     currentKeyword = e.target.value;
     clearTimeout(debounce);
     debounce = setTimeout(() => {
       currentPage = 1;
       loadList(currentPage);
-    }, 300);
-  });
-
-  // enter langsung cari (tanpa nunggu debounce)
-  searchInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      clearTimeout(debounce);
-      currentPage = 1;
-      loadList(currentPage);
-    }
-  });
-
-  btnClearSearch.addEventListener('click', () => {
-    if (searchInput.value === '') return;
-    searchInput.value = '';
-    currentKeyword = '';
-    currentPage = 1;
-    loadList(currentPage);
+    }, 250);
   });
 
   btnRefresh?.addEventListener('click', () => loadList(currentPage));
