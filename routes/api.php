@@ -86,6 +86,7 @@ Route::get('/influencer-registrations/check', [InfluencerRegistrationController:
 */
 
 Route::get('/influencer-submissions',          [InfluencerSubmissionController::class, 'index']);
+Route::get('/influencer-submissions/stats', [InfluencerSubmissionController::class, 'stats'])->name('influencer-submissions.stats');
 Route::post('/influencer-submissions',         [InfluencerSubmissionController::class, 'store']);
 
 Route::get('/influencer-submissions/{id}',     [InfluencerSubmissionController::class, 'show'])->whereNumber('id');

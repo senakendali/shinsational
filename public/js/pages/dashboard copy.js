@@ -41,7 +41,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const $$ = (sel) => Array.from(target.querySelectorAll(sel));
   const fmt  = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '0');
   const safe = (x, d=0) => (x ?? d);
-  const toNum = (x) => { const n = Number(x); return Number.isFinite(n) ? n : 0; };
+  const toNum = (x) => { const n = Number(x); return Number.isFinite(n) ? n : 0; }; // ⬅️ robust numeric
 
   const parseMaybeJSON = (val) => {
     if (!val) return null;
@@ -57,7 +57,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return keys.some(k => Number.isFinite(Number(kpi?.[k])));
   }
 
-  let lastTotals = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 };
+  let lastTotals = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 }; // ⬅️ add saves
   let lastKpi = null;
 
   function getCsrfToken() {
@@ -73,15 +73,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const token = getCsrfToken();
     if (token) headers.set('X-CSRF-TOKEN', token);
     return fetch(input, { ...init, headers, credentials: 'same-origin' });
-  }
-
-  // === NEW: stats endpoint caller ===
-  async function fetchSubmissionStats(campaignId) {
-    const qs = new URLSearchParams({ campaign_id: String(campaignId) });
-    const r = await fetchWithCsrf(`/api/influencer-submissions/stats?${qs.toString()}`);
-    if (!r.ok) throw new Error('Gagal memuat stats');
-    const j = await r.json();
-    return j?.data || j;
   }
 
   target.innerHTML = `
@@ -117,6 +108,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
           <canvas id="engagementChart" class="mt-3" height="120"></canvas>
 
+         
           <div class="row mt-3 gx-3 gy-2 row-cols-2 row-cols-md-5" id="eng-summary">
             <div class="col"><div class="card h-100"><div class="card-body py-2">
               <div class="text-muted small">Views</div><div class="fs-5" id="es-views">-</div>
@@ -138,6 +130,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
               <div class="text-muted small">Saves</div><div class="fs-5" id="es-saves">-</div>
             </div></div></div>
           </div>
+
 
           <div class="mt-3" id="kpi-section">
             <div class="row gx-3 gy-2 d-none" id="kpi-targets">
@@ -268,9 +261,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     // Top KPI: total posted (link_1..5) across all submissions
     let totalPosts = 0;
     let page = 1;
-    const perPage = 500; // bigger page
+    const perPage = 200;
     let lastPage = 1;
-    const HARD_PAGE_CAP = 100;
 
     do {
       const res = await submissionService.getAll({ page, per_page: perPage });
@@ -279,7 +271,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       for (const s of subs) totalPosts += countSubmissionPosts(s);
       lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
       page += 1;
-    } while (page <= lastPage && page <= HARD_PAGE_CAP);
+    } while (page <= lastPage && page <= 10);
 
     $('#kpi-brands').textContent = fmt(totalBrands);
     $('#kpi-campaigns').textContent = fmt(totalCampaigns);
@@ -380,6 +372,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return x.toLocaleString('id-ID');
   };
 
+  // ⬇️ Tambah 'Saves' di chart
   const renderChart = (views, likes, comments, shares, saves) => {
     if (window.__ADMIN_DASHBOARD_CHART__?.destroy) {
       try { window.__ADMIN_DASHBOARD_CHART__.destroy(); } catch {}
@@ -438,6 +431,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     row.classList.remove('d-none');
     $('#kpi-donuts').style.display = '';
   }
+
 
   async function ensureCampaignKpi(campaignId) {
     if (!campaignId) return null;
@@ -538,6 +532,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     renderOneDonut('shares',   totals.shares,   kpi.shares);
   }
 
+
   async function getCampaignContentTarget(campaignId) {
     if (!campaignId) return null;
     const kpi = await ensureCampaignKpi(campaignId);
@@ -581,7 +576,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return count;
   }
 
-  // ===== Drafts helpers (tetap) =====
+  // ===== DRAFTS HELPERS =====
   async function fetchDraftPage({ campaign_id, status = '', slot = '', page = 1, per_page = 50 }) {
     const qs = new URLSearchParams({
       campaign_id: String(campaign_id),
@@ -678,7 +673,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
       if (target.dataset.dashInstance !== INSTANCE_KEY) return;
       lastKpi = kpi || null;
       applyKpiTargets(lastKpi);
-      renderKpiDonuts(lastTotals, lastKpi || {});
+      const totalsSafe = lastTotals || { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 };
+      renderKpiDonuts(totalsSafe, lastKpi || {});
     });
 
     const rowWrap  = $('#content-summary-row');
@@ -717,31 +713,67 @@ export async function render(target, path, query = {}, labelOverride = null) {
       if (lst) lst.innerHTML = `<li class="list-group-item text-muted">Menghitung…</li>`;
     }
 
-    // ===== NEW: Pakai endpoint agregasi untuk engagement totals & KOL counters
-    let stats = null;
-    try {
-      stats = await fetchSubmissionStats(campaignId);
-    } catch (e) {
-      console.error('Load stats error', e);
-      showToast('Gagal memuat stats campaign.', 'error');
-      stats = { totals: { views:0, likes:0, comments:0, shares:0, saves:0 }, done_purchased:0, done_rating_review:0, product_sent:0 };
-    }
+    // ===== Engagement totals + posted contents (jumlah link_1..5 terisi)
+    let page = 1;
+    const perPage = 100;
+    let lastPage = 1;
+    const agg = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 }; // ⬅️ add saves
 
-    lastTotals = {
-      views:    toNum(stats?.totals?.views),
-      likes:    toNum(stats?.totals?.likes),
-      comments: toNum(stats?.totals?.comments),
-      shares:   toNum(stats?.totals?.shares),
-      saves:    toNum(stats?.totals?.saves),
-    };
+    const subLinksMap = new Map();
+    const buyerSet  = new Set();
+    const ratingSet = new Set();
+    const shipSet   = new Set();
 
+    let postedContents = 0;
+
+    const kolKeyOf = (s) => String(s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id);
+
+    do {
+      const res = await submissionService.getAll({ page, per_page: perPage, include: '', campaign_id: campaignId });
+      if (target.dataset.dashInstance !== INSTANCE_KEY) return;
+
+      const subs = res?.data || [];
+      subs.forEach(s => {
+        // sum metrics across slots 1..5 (with fallback singular keys)
+        for (let i = 1; i <= 5; i++) {
+          agg.views    += toNum(s[`views_${i}`]    ?? s[`view_${i}`]);
+          agg.likes    += toNum(s[`likes_${i}`]    ?? s[`like_${i}`]);
+          agg.comments += toNum(s[`comments_${i}`] ?? s[`comment_${i}`]);
+          agg.shares   += toNum(s[`shares_${i}`]   ?? s[`share_${i}`]);
+          agg.saves    += toNum(s[`saves_${i}`]    ?? s[`save_${i}`]);
+        }
+
+        const id = s.id;
+        const pres = {};
+        for (let i = 1; i <= 5; i++) {
+          const filled = isFilled(s[`link_${i}`]);
+          pres[i] = filled;
+          if (filled) postedContents += 1;
+        }
+        subLinksMap.set(id, pres);
+
+        const key = kolKeyOf(s);
+        const invoice = getField(s, ['invoice_file_path']);
+        if (isFilled(invoice)) buyerSet.add(key);
+        const reviewProof = getField(s, ['review_proof_file_patch','review_proof_file_path']);
+        if (isFilled(reviewProof)) ratingSet.add(key);
+        const courier = getField(s, ['shipping_courir','shipping_courier']);
+        const tracking = getField(s, ['shipping_tracking_number']);
+        if (isFilled(courier) && isFilled(tracking)) shipSet.add(key);
+      });
+
+      lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
+      page += 1;
+    } while (page <= lastPage && page <= 5);
+
+    lastTotals = agg;
     renderKpiDonuts(lastTotals, lastKpi || {});
-    renderChart(lastTotals.views, lastTotals.likes, lastTotals.comments, lastTotals.shares, lastTotals.saves);
-    $('#es-views').textContent = fmt(lastTotals.views);
-    $('#es-likes').textContent = fmt(lastTotals.likes);
-    $('#es-comments').textContent = fmt(lastTotals.comments);
-    $('#es-shares').textContent = fmt(lastTotals.shares);
-    $('#es-saves').textContent = fmt(lastTotals.saves);
+    renderChart(agg.views, agg.likes, agg.comments, agg.shares, agg.saves);
+    $('#es-views').textContent = fmt(agg.views);
+    $('#es-likes').textContent = fmt(agg.likes);
+    $('#es-comments').textContent = fmt(agg.comments);
+    $('#es-shares').textContent = fmt(agg.shares);
+    $('#es-saves').textContent = fmt(agg.saves);
 
     // ===== KOL count & target per KOL
     let kolCount = 0;
@@ -757,36 +789,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const contentTarget = Number.isFinite(kpiTargetVal) ? Number(kpiTargetVal) : fallbackTarget;
     if (elTarget) elTarget.textContent = fmt(contentTarget);
 
-    // ===== Posted contents & Ready to Post (butuh link map per submission)
-    let postedContents = 0;
-    const subLinksMap = new Map();
-    {
-      let page = 1;
-      const perPage = 500;
-      let lastPage = 1;
-      const HARD_PAGE_CAP = 100;
-
-      do {
-        const res = await submissionService.getAll({ page, per_page: perPage, include: '', campaign_id: campaignId });
-        if (target.dataset.dashInstance !== INSTANCE_KEY) return;
-
-        const subs = res?.data || [];
-        subs.forEach(s => {
-          const id = s.id;
-          const pres = {};
-          for (let i = 1; i <= 5; i++) {
-            const filled = isFilled(s[`link_${i}`]);
-            pres[i] = filled;
-            if (filled) postedContents += 1;
-          }
-          subLinksMap.set(id, pres);
-        });
-
-        lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
-        page += 1;
-      } while (page <= lastPage && page <= HARD_PAGE_CAP);
-    }
-
+    // ===== Posted (card) = jumlah link terisi
     if (elMade) elMade.textContent = fmt(postedContents);
 
     // ===== Waiting for Approval = pending
@@ -817,16 +820,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
     );
     if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
 
-    // ===== Donut Progress
+    // ===== Donut Progress: posted vs target
     renderContentDonut(postedContents, contentTarget);
 
-    // ===== KOL Stats (pakai angka server-side)
-    renderKolStats(
-      toNum(stats?.done_purchased),
-      toNum(stats?.done_rating_review),
-      toNum(stats?.product_sent),
-      kolCount
-    );
+    // ===== KOL Stats
+    renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);
   }
 
   await loadCampaignEngagement(currentCampaignId);

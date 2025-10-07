@@ -5,6 +5,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   // instance guard
   const INSTANCE_KEY = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   target.dataset.brandDashInstance = INSTANCE_KEY;
+
   target.innerHTML = "";
 
   const [
@@ -15,7 +16,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     brandMod,
     campaignMod,
     submissionMod,
-    registrationMod,
+    registrationMod, // <-- NEW
   ] = await Promise.all([
     import(`/js/components/header.js?v=${v}`),
     import(`/js/components/breadcrumb.js?v=${v}`),
@@ -24,7 +25,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     import(`/js/services/brandService.js?v=${v}`),
     import(`/js/services/campaignService.js?v=${v}`),
     import(`/js/services/influencerSubmissionService.js?v=${v}`),
-    import(`/js/services/influencerRegistrationService.js?v=${v}`),
+    import(`/js/services/influencerRegistrationService.js?v=${v}`), // <-- NEW
   ]);
 
   if (target.dataset.brandDashInstance !== INSTANCE_KEY) return;
@@ -36,14 +37,13 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const { brandService } = brandMod;
   const { campaignService } = campaignMod;
   const { submissionService } = submissionMod;
-  const { influencerService } = registrationMod;
+  const { influencerService } = registrationMod; // <-- NEW
 
   // helpers
   const $  = (sel) => target.querySelector(sel);
   const $$ = (sel) => Array.from(target.querySelectorAll(sel));
-  const fmt  = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '0');
-  const safe = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
-  const toNum = (x) => { const n = Number(x); return Number.isFinite(n) ? n : 0; };
+  const fmt = (n) => (n === 0 || n ? Number(n).toLocaleString('id-ID') : '0');
+  const safe = (x) => (x ?? 0);
   const fmtShort = (n) => {
     const x = Number(n) || 0;
     if (x >= 1e9) return (x/1e9).toFixed(1) + 'B';
@@ -92,7 +92,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
           </div>
         </div>
         <div class="col-md-3">
-          <div class="dashboard-card text-center h-100 registration">
+          <div class="dashboard-card  text-center h-100 registration">
             <div class="card-body">
               <h6 class="card-title">KOL</h6>
               <p class="card-text fs-3 fw-bold" id="kpi-kols">-</p>
@@ -198,6 +198,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
               <div class="dashboard-card h-100">
                 <div class="card-body">
                   <h6 class="card-title mb-2"><i class="bi bi-card-list"></i> CONTENT SUMMARY</h6>
+
+                  <!-- Info rows -->
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <div class="small text-muted text-uppercase fs-12 fw-semibold">
                       <i class="bi bi-bullseye"></i> KPI
@@ -210,6 +212,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
                     </div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-created">-</div>
                   </div>
+
+                  <!-- Status rows -->
                   <div class="d-flex justify-content-between align-items-center py-1 border-bottom">
                     <div class="small text-muted text-uppercase fs-12 fw-semibold">
                       <i class="bi bi-hourglass-split"></i> Waiting Draft
@@ -234,6 +238,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
                     </div>
                     <div class="fs-6 fw-semibold" id="kpi-posts-ready">0</div>
                   </div>
+
                   <div class="small mt-2 text-muted" id="cap-posts-selected"></div>
                 </div>
               </div>
@@ -249,7 +254,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
             </div>
           </div>
 
-          <!-- KOL progress (campaign terpilih) -->
+          <!-- NEW: KOL progress (campaign terpilih) -->
           <div class="d-flex justify-content-between align-items-center mb-2 d-none" id="kol-stats-header">
             <h6 class="mb-0 text-uppercase fw-bold"><i class="bi bi-people"></i> KOL SUMMARY (Campaign Terpilih)</h6>
           </div>
@@ -276,25 +281,9 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
   await ensureChartJS();
   destroyChartIfExists('engagementChart');
+
   if (target.dataset.brandDashInstance !== INSTANCE_KEY) return;
-
   showLoader();
-
-  // === CSRF & fetch helper
-  function getCsrfToken() {
-    const m = document.querySelector('meta[name="csrf-token"]');
-    if (m?.content) return m.content;
-    const xsrf = document.cookie.split(';').map(s=>s.trim()).find(s=>s.startsWith('XSRF-TOKEN='));
-    if (!xsrf) return '';
-    try { return decodeURIComponent(xsrf.split('=')[1]); } catch { return ''; }
-  }
-  async function fetchWithCsrf(input, init = {}) {
-    const headers = new Headers(init.headers || {});
-    headers.set('X-Requested-With', 'XMLHttpRequest');
-    const token = getCsrfToken();
-    if (token) headers.set('X-CSRF-TOKEN', token);
-    return fetch(input, { ...init, headers, credentials: 'same-origin' });
-  }
 
   // ====== Ambil brand user yang login
   async function getMyBrand() {
@@ -312,17 +301,39 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return { id: null, name: '-' };
   }
 
-  // Stats endpoint (NEW)
-  async function fetchStats(campaignId) {
-    if (!campaignId) return null;
-    const qs = new URLSearchParams({ campaign_id: String(campaignId) });
-    const r = await fetchWithCsrf(`/api/influencer-submissions/stats?` + qs.toString());
-    if (!r.ok) throw new Error('Stats error');
-    const payload = await r.json();
-    return payload?.data ?? payload ?? null; // { done_purchased, done_rating_review, product_sent, totals:{...} }
+  // ==== destroy helper utk Chart.js
+  function destroyChartIfExists(canvasId) {
+    try {
+      if (!window.Chart) return;
+      if (typeof Chart.getChart === 'function') {
+        const canvasEl = document.getElementById(canvasId);
+        const prev = Chart.getChart(canvasId) || (canvasEl ? Chart.getChart(canvasEl) : null);
+        if (prev?.destroy) prev.destroy();
+      } else {
+        const canvasEl = document.getElementById(canvasId);
+        const list = Chart.instances ? Object.values(Chart.instances) : [];
+        const found = list.find(inst => inst?.canvas === canvasEl);
+        if (found?.destroy) found.destroy();
+      }
+    } catch {}
   }
 
-  // Draft helpers
+  // === CSRF & Draft helpers (minimal) ===
+  function getCsrfToken() {
+    const m = document.querySelector('meta[name="csrf-token"]');
+    if (m?.content) return m.content;
+    const xsrf = document.cookie.split(';').map(s=>s.trim()).find(s=>s.startsWith('XSRF-TOKEN='));
+    if (!xsrf) return '';
+    try { return decodeURIComponent(xsrf.split('=')[1]); } catch { return ''; }
+  }
+  async function fetchWithCsrf(input, init = {}) {
+    const headers = new Headers(init.headers || {});
+    headers.set('X-Requested-With', 'XMLHttpRequest');
+    const token = getCsrfToken();
+    if (token) headers.set('X-CSRF-TOKEN', token);
+    return fetch(input, { ...init, headers, credentials: 'same-origin' });
+  }
+  // Draft pagination (support status & slot)
   async function fetchDraftPage({ campaign_id, status = '', slot = '', page = 1, per_page = 50 }) {
     const qs = new URLSearchParams({
       campaign_id: String(campaign_id),
@@ -355,6 +366,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     } while (page <= lastPage);
     return total;
   }
+  // NEW: untuk Ready to Post (ambil semua approved drafts)
   async function fetchApprovedDraftsForReadyToPost(campaignId) {
     let rows = [];
     let page = 1, perPage = 50, lastPage = 1;
@@ -391,21 +403,6 @@ export async function render(target, path, query = {}, labelOverride = null) {
   const donutCharts = Object.fromEntries(donutIds.map(id => [id, null]));
   let contentDonut = null;
 
-  function destroyChartIfExists(canvasId) {
-    try {
-      if (!window.Chart) return;
-      if (typeof Chart.getChart === 'function') {
-        const canvasEl = document.getElementById(canvasId);
-        const prev = Chart.getChart(canvasId) || (canvasEl ? Chart.getChart(canvasEl) : null);
-        if (prev?.destroy) prev.destroy();
-      } else {
-        const canvasEl = document.getElementById(canvasId);
-        const list = Chart.instances ? Object.values(Chart.instances) : [];
-        const found = list.find(inst => inst?.canvas === canvasEl);
-        if (found?.destroy) found.destroy();
-      }
-    } catch {}
-  }
   function destroyDonuts() {
     for (const k of donutIds) {
       try { donutCharts[k]?.destroy?.(); donutCharts[k] = null; } catch {}
@@ -415,6 +412,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     contentDonut = null;
     destroyChartIfExists('donut-content');
   }
+
   function renderOneDonut(kind, actual, targetVal) {
     const canvas = $(`#donut-${kind}`);
     const cap = $(`#cap-${kind}`);
@@ -450,6 +448,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       options: { responsive: true, cutout: '65%', plugins: { legend: { display: false } } }
     });
   }
+
   function renderContentDonut(actual, targetVal) {
     const canvas = $('#donut-content');
     const cap = $('#cap-content');
@@ -485,6 +484,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
       options: { responsive: true, cutout: '65%', plugins: { legend: { display: false } } }
     });
   }
+
   function renderKpiDonuts(totals, kpi) {
     const wrap = $('#kpi-donuts');
     if (!wrap) return;
@@ -497,6 +497,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     renderOneDonut('comments', totals.comments, kpi.comments);
     renderOneDonut('shares',   totals.shares,   kpi.shares);
   }
+
+  // === CHART: now includes SAVES
   function renderChart(views, likes, comments, shares, saves) {
     const canvas = $('#engagementChart');
     const ctx = canvas.getContext('2d');
@@ -513,7 +515,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
             'rgba(13, 110, 253, 0.6)',
             'rgba(131, 53, 220, 0.6)',
             'rgba(255, 159, 64, 0.6)',
-            'rgba(75, 192, 192, 0.6)',
+            'rgba(75, 192, 192, 0.6)', // Saves
           ],
           borderWidth: 1,
           barThickness: 80,
@@ -527,6 +529,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     });
   }
 
+  // === helpers: fields & total konten dari link_1..link_5
   function isFilled(v) {
     if (v == null) return false;
     const s = String(v).trim();
@@ -534,10 +537,20 @@ export async function render(target, path, query = {}, labelOverride = null) {
     if (s.toUpperCase() === 'NULL') return false;
     return true;
   }
+  function getField(obj, names) {
+    if (!obj) return undefined;
+    for (const n of names) {
+      if (n in obj) return obj[n];
+    }
+    return undefined;
+  }
   function countSubmissionPosts(sub) {
     if (!sub || typeof sub !== 'object') return 0;
     let count = 0;
-    for (let i = 1; i <= 5; i++) if (isFilled(sub[`link_${i}`])) count += 1;
+    for (let i = 1; i <= 5; i++) {
+      const key = `link_${i}`;
+      if (isFilled(sub[key])) count += 1;
+    }
     return count;
   }
 
@@ -559,8 +572,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const campaigns = cs?.data || [];
     const totalCampaigns = cs?.total ?? cs?.meta?.total ?? cs?.pagination?.total ?? campaigns.length;
 
-    let totalPosts = 0;
-    const kolSet = new Set();
+    let totalPosts = 0;         // posted contents (links filled)
+    const kolSet = new Set();   // unique KOLs across submissions
 
     const capped = campaigns.slice(0, 50);
     for (const c of capped) {
@@ -570,7 +583,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
         const subs = sres?.data || [];
         subs.forEach(s => {
           totalPosts += countSubmissionPosts(s);
-          const key = String(s?.tiktok_user_id ?? s?.id);
+          const key = String(s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id);
           kolSet.add(key);
         });
         lastPage = sres?.last_page ?? sres?.meta?.last_page ?? sres?.pagination?.last_page ?? 1;
@@ -656,15 +669,17 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const show = hasKpiEngagementMetrics(kpi);
 
     if (!show) {
+      // Sembunyikan semua UI KPI engagement
       row.classList.add('d-none');
       ['kt-views','kt-likes','kt-comments','kt-shares'].forEach(id => {
         const el = $('#'+id); if (el) el.textContent = '-';
       });
       $('#kpi-donuts').style.display = 'none';
-      destroyDonuts();
+      destroyDonuts(); // pastikan chart donut di-dispose
       return;
     }
 
+    // Tampilkan & isi target ketika KPI diisi (0 pun dianggap diisi)
     const v = (x) => Number.isFinite(Number(x)) ? fmt(Number(x)) : '-';
     $('#kt-views').textContent    = v(kpi.views);
     $('#kt-likes').textContent    = v(kpi.likes);
@@ -674,6 +689,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     row.classList.remove('d-none');
     $('#kpi-donuts').style.display = '';
   }
+
   async function ensureCampaignKpi(campaignId) {
     if (!campaignId) return null;
     if (campaignKpiMap.has(String(campaignId))) return campaignKpiMap.get(String(campaignId));
@@ -686,6 +702,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
       return kpi;
     } catch { return null; }
   }
+
+  // ===== TARGET TOTAL KONTEN: dari kpi_targets.contents (fallback content)
   async function getCampaignContentTarget(campaignId) {
     if (!campaignId) return null;
     const kpi = await ensureCampaignKpi(campaignId);
@@ -694,7 +712,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     return Number.isFinite(n) ? n : null;
   }
 
-  // ===== KOL progress UI helpers
+  // ===== KOL progress UI helpers (UPDATED: + kolTotal)
   function renderKolStats(buyCount, rateCount, shipCount, kolTotal) {
     const header = $('#kol-stats-header');
     const list = $('#kol-stats-list');
@@ -742,7 +760,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
   }
 
   // sinkronisasi totals & kpi untuk donuts
-  let lastTotals = { views:0, likes:0, comments:0, shares:0, saves:0 };
+  let lastTotals = { views:0, likes:0, comments:0, shares:0, saves:0 }; // <-- includes saves
   let lastKpi = null;
 
   async function loadCampaignEngagement(campaignId) {
@@ -797,42 +815,24 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
     const targetPromise = getCampaignContentTarget(campaignId).catch(()=>null);
 
-    // ===== 1) Ambil stats dari API (primary source)
-    let stats = null;
-    try {
-      stats = await fetchStats(campaignId);
-    } catch (e) {
-      stats = null; // fallback ke agregasi manual di bawah
-    }
-
-    // Pakai totals dari stats kalau ada
-    if (stats?.totals) {
-      lastTotals = {
-        views:    safe(stats.totals.views),
-        likes:    safe(stats.totals.likes),
-        comments: safe(stats.totals.comments),
-        shares:   safe(stats.totals.shares),
-        saves:    safe(stats.totals.saves),
-      };
-      renderKpiDonuts(lastTotals, lastKpi || {});
-      renderChart(lastTotals.views, lastTotals.likes, lastTotals.comments, lastTotals.shares, lastTotals.saves);
-      $('#es-views').textContent    = fmt(lastTotals.views);
-      $('#es-likes').textContent    = fmt(lastTotals.likes);
-      $('#es-comments').textContent = fmt(lastTotals.comments);
-      $('#es-shares').textContent   = fmt(lastTotals.shares);
-      $('#es-saves').textContent    = fmt(lastTotals.saves);
-    } else {
-      // reset dulu, nanti diisi via agregasi manual
-      lastTotals = { views:0, likes:0, comments:0, shares:0, saves:0 };
-    }
-
-    // ===== 2) Tetap butuh data lain: posted links, draft counts, ready-to-post
+    // Aggregasi engagement, posted links, peta link per submission, & KOL progress
     let page = 1;
     const perPage = 100;
     let lastPage = 1;
 
+    const agg = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 }; // <-- includes saves
     let totalPostedContents = 0;
+
+    const buyerSet  = new Set();
+    const ratingSet = new Set();
+    const shipSet   = new Set();
+
+    // untuk ready-to-post
     const subLinksMap = new Map();
+
+    const kolKeyOf = (s) => String(
+      s.tiktok_user_id ?? s.influencer_id ?? s.creator_id ?? s.user_id ?? s.id
+    );
 
     do {
       const res = await submissionService.getAll({
@@ -842,6 +842,12 @@ export async function render(target, path, query = {}, labelOverride = null) {
 
       const subs = res?.data || [];
       subs.forEach(s => {
+        agg.views    += safe(Number(s.views_1))    + safe(Number(s.views_2));
+        agg.likes    += safe(Number(s.likes_1))    + safe(Number(s.likes_2));
+        agg.comments += safe(Number(s.comments_1)) + safe(Number(s.comments_2));
+        agg.shares   += safe(Number(s.shares_1))   + safe(Number(s.shares_2));
+        agg.saves    += safe(Number(s.saves_1))    + safe(Number(s.saves_2)); // <-- NEW
+
         // posted = jumlah link_1..5 terisi + simpan peta per slot
         const pres = {};
         for (let i = 1; i <= 5; i++) {
@@ -851,37 +857,34 @@ export async function render(target, path, query = {}, labelOverride = null) {
         }
         subLinksMap.set(s.id, pres);
 
-        // === Fallback: kalau stats NULL, agregasi engagement manual
-        if (!stats?.totals) {
-          for (let i = 1; i <= 5; i++) {
-            lastTotals.views    += toNum(s[`views_${i}`]);
-            lastTotals.likes    += toNum(s[`likes_${i}`]);
-            lastTotals.comments += toNum(s[`comments_${i}`]);
-            lastTotals.shares   += toNum(s[`shares_${i}`]);
-            lastTotals.saves    += toNum(s[`saves_${i}`]);
-          }
-        }
+        // progress KOL
+        const key = kolKeyOf(s);
+        const invoice = getField(s, ['invoice_file_path']);
+        if (isFilled(invoice)) buyerSet.add(key);
+        const reviewProof = getField(s, ['review_proof_file_patch','review_proof_file_path']);
+        if (isFilled(reviewProof)) ratingSet.add(key);
+        const courier = getField(s, ['shipping_courir','shipping_courier']);
+        const tracking = getField(s, ['shipping_tracking_number']);
+        if (isFilled(courier) && isFilled(tracking)) shipSet.add(key);
       });
 
       lastPage = res?.last_page ?? res?.meta?.last_page ?? res?.pagination?.last_page ?? 1;
       page += 1;
     } while (page <= lastPage && page <= 5);
 
-    // render totals bila tadi fallback
-    if (!stats?.totals) {
-      renderKpiDonuts(lastTotals, lastKpi || {});
-      renderChart(lastTotals.views, lastTotals.likes, lastTotals.comments, lastTotals.shares, lastTotals.saves);
-      $('#es-views').textContent    = fmt(lastTotals.views);
-      $('#es-likes').textContent    = fmt(lastTotals.likes);
-      $('#es-comments').textContent = fmt(lastTotals.comments);
-      $('#es-shares').textContent   = fmt(lastTotals.shares);
-      $('#es-saves').textContent    = fmt(lastTotals.saves);
-    }
+    lastTotals = agg;
+    renderKpiDonuts(lastTotals, lastKpi || {});
+    renderChart(agg.views, agg.likes, agg.comments, agg.shares, agg.saves);
+    $('#es-views').textContent    = fmt(agg.views);
+    $('#es-likes').textContent    = fmt(agg.likes);
+    $('#es-comments').textContent = fmt(agg.comments);
+    $('#es-shares').textContent   = fmt(agg.shares);
+    $('#es-saves').textContent    = fmt(agg.saves);
 
     // ==== Target, KOL count, per KOL (fallback target)
     const kpiTargetVal = await targetPromise;
 
-    let kolCount = 0; // stats ga ngembaliin kol_total → tetap hit via registrations
+    let kolCount = 0;
     try {
       const regs = await influencerService.getAll({ page: 1, per_page: 1, campaign_id: campaignId });
       kolCount = regs?.total ?? regs?.meta?.total ?? regs?.pagination?.total ?? 0;
@@ -889,7 +892,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     const perKol = await getCampaignContentPerKol(campaignId);
 
     const fallbackTarget = Number(kolCount) * Number(perKol || 1);
-    const contentTarget = Number.isFinite(Number(kpiTargetVal)) ? Number(kpiTargetVal) : fallbackTarget;
+    const contentTarget = Number.isFinite(kpiTargetVal) ? Number(kpiTargetVal) : fallbackTarget;
     if (elTarget) elTarget.textContent = fmt(contentTarget);
 
     // ==== POSTED (card) = jumlah link terisi
@@ -915,7 +918,8 @@ export async function render(target, path, query = {}, labelOverride = null) {
     }
     if (elReady) elReady.textContent = fmt(readyToPost);
 
-    // ==== Waiting Draft (RUMUS)
+    // ==== Waiting Draft (RUMUS BARU)
+    // waiting_draft = KPI_target - (posted + pending + rejected + ready_to_post)
     const waitingDraftTotal = Math.max(
       0,
       Number(contentTarget) - (
@@ -927,14 +931,11 @@ export async function render(target, path, query = {}, labelOverride = null) {
     );
     if (elWaitDraft) elWaitDraft.textContent = fmt(waitingDraftTotal);
 
-    // ==== Donut progress: posted vs target
+    // ==== Donut progress: posted vs target (tetap posted vs target)
     renderContentDonut(totalPostedContents, contentTarget);
 
-    // ===== KOL SUMMARY (pakai angka dari stats; jika null → 0)
-    const buy  = Number(stats?.done_purchased)     || 0;
-    const rate = Number(stats?.done_rating_review) || 0;
-    const ship = Number(stats?.product_sent)       || 0;
-    renderKolStats(buy, rate, ship, kolCount);
+    // ===== JUMLAH KOL JOIN (render KOL summary)
+    renderKolStats(buyerSet.size, ratingSet.size, shipSet.size, kolCount);
 
     hideLoader();
   }
@@ -960,6 +961,7 @@ export async function render(target, path, query = {}, labelOverride = null) {
     finally { hideLoader(); }
   });
 
+  // nav
   $$('.app-link').forEach(el => {
     el.addEventListener('click', (e) => {
       e.preventDefault();
@@ -981,7 +983,9 @@ async function ensureChartJS() {
   if (window.Chart) return;
   await new Promise((resolve, reject) => {
     const id = 'chartjs-cdn';
-    if (document.getElementById(id)) { document.getElementById(id).addEventListener('load', resolve); return; }
+    if (document.getElementById(id)) {
+      document.getElementById(id).addEventListener('load', resolve); return;
+    }
     const s = document.createElement('script');
     s.id = id; s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
     s.async = true; s.onload = resolve; s.onerror = reject;

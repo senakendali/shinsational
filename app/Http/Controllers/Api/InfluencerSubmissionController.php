@@ -1059,6 +1059,63 @@ protected function oembedAuthor(?string $url): ?array
         return response()->json($q->paginate($perPage));
     }
 
+    public function stats(Request $request)
+    {
+        $request->validate([
+            'campaign_id' => ['required','integer'],
+        ]);
+
+        $campaignId = (int) $request->campaign_id;
+
+        // Kunci KOL: pakai tiktok_user_id (kalau kosong -> fallback ke id)
+        // NULLIF(TRIM(...),'') biar empty string dianggap NULL
+        $kolKey = "COALESCE(NULLIF(TRIM(tiktok_user_id), ''), CAST(id AS CHAR))";
+
+        // Helper "tidak kosong"
+        $notEmpty = function (string $col) {
+            return "({$col} IS NOT NULL AND {$col} <> '')";
+        };
+
+        // Field yang bener (sesuai store())
+        $hasReviewProof = $notEmpty('review_proof_file_path');
+        $hasCourier     = $notEmpty('shipping_courier');
+        $hasTracking    = $notEmpty('shipping_tracking_number');
+
+        $row = DB::table('influencer_submissions')
+            ->where('campaign_id', $campaignId)
+            ->selectRaw("
+                COUNT(DISTINCT CASE WHEN {$notEmpty('invoice_file_path')} THEN {$kolKey} END) AS done_purchased,
+                COUNT(DISTINCT CASE WHEN {$hasReviewProof} THEN {$kolKey} END)              AS done_rating_review,
+                COUNT(DISTINCT CASE WHEN {$hasCourier} AND {$hasTracking} THEN {$kolKey} END) AS product_sent,
+
+                -- Totals KPI (slot 1..5)
+                SUM(COALESCE(views_1, 0)    + COALESCE(views_2, 0)    + COALESCE(views_3, 0)    + COALESCE(views_4, 0)    + COALESCE(views_5, 0))    AS views,
+                SUM(COALESCE(likes_1, 0)    + COALESCE(likes_2, 0)    + COALESCE(likes_3, 0)    + COALESCE(likes_4, 0)    + COALESCE(likes_5, 0))    AS likes,
+                SUM(COALESCE(comments_1, 0) + COALESCE(comments_2, 0) + COALESCE(comments_3, 0) + COALESCE(comments_4, 0) + COALESCE(comments_5, 0)) AS comments,
+                SUM(COALESCE(shares_1, 0)   + COALESCE(shares_2, 0)   + COALESCE(shares_3, 0)   + COALESCE(shares_4, 0)   + COALESCE(shares_5, 0))   AS shares,
+                SUM(COALESCE(saves_1, 0)    + COALESCE(saves_2, 0)    + COALESCE(saves_3, 0)    + COALESCE(saves_4, 0)    + COALESCE(saves_5, 0))    AS saves
+            ")
+            ->first();
+
+        $data = [
+            'campaign_id'        => $campaignId,
+            'done_purchased'     => (int) ($row->done_purchased ?? 0),
+            'done_rating_review' => (int) ($row->done_rating_review ?? 0),
+            'product_sent'       => (int) ($row->product_sent ?? 0),
+            'totals' => [
+                'views'    => (int) ($row->views ?? 0),
+                'likes'    => (int) ($row->likes ?? 0),
+                'comments' => (int) ($row->comments ?? 0),
+                'shares'   => (int) ($row->shares ?? 0),
+                'saves'    => (int) ($row->saves ?? 0),
+            ],
+        ];
+
+        return response()->json(['data' => $data]);
+    }
+
+
+
 
     public function index_(Request $request)
     {
