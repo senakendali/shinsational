@@ -27,6 +27,9 @@ export function renderHeaderKol(targetId = "header") {
               <li class="nav-item">
                 <a class="nav-link " href="#guidelines" id="guidelines-link">Guidelines</a>
               </li>
+              <li class="nav-item">
+                <a class="nav-link " href="/admin/login">Login</a>
+              </li>
             </ul>
           </div>
         </div>

@@ -4,11 +4,9 @@ namespace App\Exports;
 
 use App\Models\InfluencerSubmission;
 use App\Models\InfluencerRegistration;
-use App\Models\InfluencerAccount; // <-- NEW
+use App\Models\InfluencerAccount;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Storage;
-// use Illuminate\Support\Facades\DB; // (opsional, tak dipakai)
 use Maatwebsite\Excel\Concerns\FromQuery;
 use Maatwebsite\Excel\Concerns\WithMapping;
 use Maatwebsite\Excel\Concerns\WithHeadings;
@@ -60,7 +58,6 @@ class InfluencerSubmissionsExport implements
                 'tiktok_username'  => $subReg('tiktok_username'),
                 'profile_pic_url'  => $subReg('profile_pic_url'),
                 'address'          => $subReg('address'),
-                // NEW: followers dari influencer_accounts
                 'followers_count'  => $subFollowers,
             ])
             ->with(['campaign:id,name'])
@@ -70,7 +67,7 @@ class InfluencerSubmissionsExport implements
         if ($this->keyword !== null && $this->keyword !== '') {
             $kw = '%'.mb_strtolower($this->keyword).'%';
 
-            // Jangan pakai alias di WHERE → pakai subquery inlined
+            // Tetap support search lama (termasuk user_id), meski kolomnya tidak di-export
             $q->where(function (Builder $w) use ($kw, $is, $ir) {
                 $fullNameSql = "LOWER(COALESCE((SELECT r.full_name
                                 FROM $ir r
@@ -105,13 +102,16 @@ class InfluencerSubmissionsExport implements
 
     public function headings(): array
     {
-        // Avatar URL dihapus, Followers ditambahkan setelah KOL Name
+        // UPDATED: Hilangkan "TikTok User ID", tambah kolom baru setelah Address
         $cols = [
             'Campaign',
             'KOL Name',
             'Followers',
-            'TikTok User ID',
             'Address',
+            'Purchase Platform',
+            'Price',
+            'Invoice',
+            'Review',
         ];
 
         // Kolom per slot
@@ -134,11 +134,17 @@ class InfluencerSubmissionsExport implements
     {
         $camp   = $s->campaign->name ?? ('campaign_'.$s->campaign_id);
         $name   = $this->kolNameOf($s);
-        $openId = (string) ($s->tiktok_user_id ?? '');
         $addr   = $this->addressOf($s);
         $folls  = $this->followersOf($s);
 
-        $row = [$camp, $name, $folls, $openId, $addr];
+        // NEW: purchase fields + file links ke /files?p=...
+        $purchasePlatform = (string) ($s->purchase_platform ?? '');
+        $price            = $s->purchase_price ?? ''; // biarin raw agar bebas format di Excel
+        $invoiceUrl       = $this->fileLink($s->invoice_file_path ?? null) ?? '';
+        $reviewUrl        = $this->fileLink($s->review_proof_file_path ?? null) ?? '';
+
+        // Nilai cell G/H diisi URL mentah (nanti dibikin hyperlink di AfterSheet)
+        $row = [$camp, $name, $folls, $addr, $purchasePlatform, $price, $invoiceUrl, $reviewUrl];
 
         for ($slot = 1; $slot <= self::MAX_SLOTS; $slot++) {
             $link   = $s->{"link_{$slot}"} ?? '';
@@ -157,9 +163,9 @@ class InfluencerSubmissionsExport implements
             $savesN    = (int) ($saves ?? 0);
             $totalEng  = $likesN + $commentsN + $sharesN + $savesN;
 
-            $viewsN = (int) ($views ?? 0);
+            $viewsN  = (int) ($views ?? 0);
             $erRatio = $viewsN > 0 ? ($totalEng / $viewsN) : null;
-            $erPct = $erRatio === null ? '' : (string) (round($erRatio * 100)).'%';
+            $erPct   = $erRatio === null ? '' : (string) (round($erRatio * 100)).'%';
 
             $row[] = $link ?: '';
             $row[] = $pdate ?: '';
@@ -180,30 +186,71 @@ class InfluencerSubmissionsExport implements
         return 500;
     }
 
-    /** Tambahkan border untuk seluruh tabel */
+    /** Tambahkan border untuk seluruh tabel + PAKSA hyperlink G/H */
     public function registerEvents(): array
     {
         return [
             AfterSheet::class => function (AfterSheet $event) {
-                $dimension = $event->sheet->calculateWorksheetDimension();
-                $event->sheet->getDelegate()->getStyle($dimension)->getBorders()->getAllBorders()
-                    ->setBorderStyle(Border::BORDER_THIN);
+                $sheet = $event->sheet->getDelegate();
 
+                // Border seluruh area + header bold
+                $dimension = $event->sheet->calculateWorksheetDimension();
+                $sheet->getStyle($dimension)->getBorders()->getAllBorders()
+                    ->setBorderStyle(Border::BORDER_THIN);
                 $event->sheet->getStyle('A1:' . $event->sheet->getHighestColumn() . '1')
                     ->getFont()->setBold(true);
+
+                // Paksa hyperlink untuk kolom G (Invoice) & H (Review)
+                $lastRow = $sheet->getHighestRow();
+                if ($lastRow >= 2) {
+                    for ($row = 2; $row <= $lastRow; $row++) {
+                        foreach (['G', 'H'] as $col) {
+                            $addr = "{$col}{$row}";
+                            $cell = $sheet->getCell($addr);
+                            // Ambil value dari cell (URL yang kita taruh di map)
+                            $url = trim((string) $cell->getValue());
+
+                            if ($url !== '') {
+                                // Set hyperlink ke URL
+                                $cell->getHyperlink()->setUrl($url);
+
+                                // Opsional: kalau mau text-nya pendek saja, contoh "Open"
+                                // $cell->setValue('Open');
+
+                                // Style biru + underline biar kelihatan link
+                                $sheet->getStyle($addr)->applyFromArray([
+                                    'font' => [
+                                        'underline' => true,
+                                        'color' => ['rgb' => '0563C1'], // warna hyperlink default Excel
+                                    ],
+                                ]);
+                            }
+                        }
+                    }
+                }
             },
         ];
     }
 
     // ===== helpers =====
-    private function publicUrl($pathOrUrl): ?string
+    private function fileLink($pathOrUrl): ?string
     {
         if (!$pathOrUrl) return null;
+
+        // Kalau sudah http(s) biarin aja (bisa jadi sudah /files?p=...)
         $str = (string) $pathOrUrl;
         if (preg_match('~^https?://~i', $str)) return $str;
-        $str = ltrim($str, '/');
-        if (str_starts_with($str, 'storage/')) $str = substr($str, 8);
-        return Storage::disk('public')->url($str);
+
+        // Normalisasi path yang tersimpan di DB
+        $p = ltrim($str, '/');
+        if (str_starts_with($p, 'public/'))  $p = substr($p, 7);
+        if (str_starts_with($p, 'storage/')) $p = substr($p, 8);
+
+        // Base URL dari APP_URL (fallback relative)
+        $base = rtrim(config('app.url', ''), '/'); // contoh: http://127.0.0.1:8005
+
+        $suffix = '/files?p=' . rawurlencode($p);
+        return $base ? ($base . $suffix) : $suffix;
     }
 
     private function kolNameOf($s): string
