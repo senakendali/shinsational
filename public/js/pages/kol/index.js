@@ -12,8 +12,8 @@ export function render(target, params, query = {}, labelOverride = null) {
           <div class="col-lg-8 col-md-8">
             <div class="text-center">
               <h1 class="display-1 fw-bold text-uppercase">
-                <span>Welcome</span>
-                <span>Creator</span>
+                <span>Beauty Tech Lab </span>
+                <span>by Group M</span>
               </h1>
               <p >
                 Connect your TikTok account to start tracking your post performance<br/>
