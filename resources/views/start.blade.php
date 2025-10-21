@@ -32,6 +32,54 @@
       .ps-loading{ transition:none; }
       .ps-start-banner{ transition:none; transform:none; opacity:1; }
     }
+
+    /* ==== PATCH: turunin banner sedikit & bikin Next tepat di bawahnya ==== */
+
+    /* Sedikit lebih rendah dari sebelumnya */
+    :root { --start-banner-lift: -18px; }
+
+    /* iPhone 13/14 profile */
+    @media (max-width: 600px) and (max-height: 900px){
+      :root { --start-banner-lift: -36px; }
+    }
+    @media (max-width: 600px) and (max-height: 780px){
+      :root { --start-banner-lift: -48px; }
+    }
+
+    /* Naik-turunnya banner */
+    .ps-start-banner{
+      margin-top: var(--start-banner-lift);
+    }
+
+    /* Batasi tinggi banner supaya tombol nggak terdorong ke luar layar */
+    .ps-start-banner img{
+      max-width: min(520px, 88vw);
+      max-height: calc(56vh - env(safe-area-inset-bottom, 0px));
+      height: auto;
+    }
+
+    /* === Tombol Next tepat di bawah banner (flow biasa, bukan fixed) === */
+    /* HTML kamu: .ps-center > .ps-start-banner + div > a > img.ps-next */
+    .ps-center > .ps-start-banner + div .ps-next{
+      position: static;              /* bukan fixed */
+      display: block;
+      margin: 12px auto 0;           /* nempel di bawah banner */
+      width: 120px;
+      height: auto;
+    }
+
+    /* Kasih ruang bawah secukupnya supaya aman dari safe-area, tanpa mengubah posisi tombol */
+    .ps-center{
+      padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* Kalau masih terlalu tinggi di device pendek, kompres banner dikit lagi */
+    @media (max-width: 600px) and (max-height: 780px){
+      .ps-start-banner img{
+        max-height: calc(52vh - env(safe-area-inset-bottom, 0px));
+      }
+    }
+
   </style>
 </head>
 <body>
