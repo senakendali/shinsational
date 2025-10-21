@@ -147,19 +147,62 @@
   }
 
   // Validasi ringan
+  // Validasi untuk form dengan dropdown Gender & Umur
   function validateForm({ name, gender, age }) {
     const errors = {};
-    if (!name || name.trim().length < 2) errors.name = 'Nama minimal 2 karakter.';
-    if (!gender) errors.gender = 'Pilih gender.';
-    if (!age || age.trim().length < 1) errors.age = 'Isi umur.';
 
-    // format contoh: "18", "18-25", "18–25", "36+", "18 tahun"
-    const re = /^[0-9]{1,2}(\s*[-–]\s*[0-9]{1,2}|(\s*\+))?(\s*tahun)?$/i;
-    if (age && !re.test(age.trim())) {
-      errors.age = 'Format umur: 18, 18-25, 36+, atau tambahkan "tahun".';
+    // --- Nama ---
+    if (!name || name.trim().length < 2) {
+      errors.name = 'Nama minimal 2 karakter.';
     }
+
+    // --- Gender (dropdown) ---
+    const GENDER_ALLOWED = new Set(['male', 'female']);
+    const genderNorm = String(gender || '').toLowerCase();
+    if (!GENDER_ALLOWED.has(genderNorm)) {
+      errors.gender = 'Pilih gender.';
+    }
+
+    // --- Umur (dropdown) ---
+    // Terima value kode maupun label lama, lalu normalisasi ke kode
+    const AGE_ALLOWED = new Set(['18-25', '26-35', 'gt-35']);
+    const ageCode = normalizeAgeToCode(age);
+
+    if (!ageCode || !AGE_ALLOWED.has(ageCode)) {
+      errors.age = 'Pilih umur.';
+    }
+
     return errors;
   }
+
+  /* Helper: normalisasi input "age" ke kode dropdown:
+    - '18-25'      -> '18-25'
+    - '26-35'      -> '26-35'
+    - 'gt-35'      -> 'gt-35'
+    - '18–25 tahun' / '18 - 25' -> '18-25'
+    - '> 35 tahun' / '>35' / '35+' -> 'gt-35'
+  */
+  function normalizeAgeToCode(age) {
+    if (age == null) return null;
+    let v = String(age).trim();
+
+    // Sudah berupa kode?
+    if (v === '18-25' || v === '26-35' || v === 'gt-35') return v;
+
+    // Normalisasi label bebas
+    v = v.toLowerCase()
+        .replace(/–/g, '-')         // en dash -> hyphen
+        .replace(/\s*tahun/g, '')   // buang kata "tahun"
+        .replace(/\s+/g, ' ')       // rapikan spasi
+        .trim();
+
+    if (v === '18-25' || v === '18 - 25') return '18-25';
+    if (v === '26-35' || v === '26 - 35') return '26-35';
+    if (/^>?\s*35\s*\+?$/.test(v) || v === '> 35' || v === '>35') return 'gt-35';
+
+    return null;
+  }
+
 
   function setSubmitState(btn, loading) {
     if (!btn) return;
