@@ -41,7 +41,7 @@
     .movie-frame{
       position:absolute; left:50%; bottom:0;
       width:100%; max-width:720px; height:auto;
-      padding:20px;
+      padding-right:20px;
 
       background-image:url('/images/question-frame.png');
       background-size:cover; background-repeat:no-repeat;

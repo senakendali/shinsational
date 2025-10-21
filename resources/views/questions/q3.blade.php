@@ -12,55 +12,75 @@
   <link rel="stylesheet" href="{{ asset('css/app.css?v=' . time() . '#') }}">
 
   <style>
-    /* --- Section wrapper (biar konten fleksibel) --- */
+    html, body { margin:0; height:100%; }
+
+    /* Loader (optional) */
+    .ps-loading{
+      position:fixed; inset:0; display:grid; place-items:center;
+      background:#fff; z-index:9999; transition:opacity .35s ease, visibility .35s ease;
+    }
+    .ps-loading.is-hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+
+    /* Section wrapper */
     .ps-phone{
-      min-height: 100svh; min-height: 100vh;
+      min-height: 100svh;
       display:flex; flex-direction:column;
     }
     .ps-header{ flex:0 0 auto; }
 
-    /* --- Area center sebagai anchor absolute --- */
+    /* Area tengah (anchor & spacer) */
     .ps-center{
       flex:1 1 auto;
-      position:relative; /* anchor utk .movie-frame (absolute bottom) */
+      position:relative;
       display:flex; flex-direction:column;
       align-items:center; justify-content:center;
       gap:min(3vh, 5px);
-      text-align:center; margin-top:0;
+      text-align:center;
+      margin-top:0;
 
-      /* ruang untuk frame bawah yang absolute */
-      padding-bottom:200px;
-    }
-    @media (max-width:520px){
-      .ps-center{ padding-bottom:160px; }
+      /* default: tanpa spacer; spacer ditambahkan khusus mobile saat .movie-frame fixed */
+      padding-bottom: 0;
     }
 
-    /* --- Movie frame: center X + rise up Y --- */
+    /* ==== Movie frame (desktop/tablet default): absolute, center X + rise-up ==== */
     .movie-frame{
       position:absolute; left:50%; bottom:0;
-      width:100%; max-width:720px; height:auto;
+      width:100%; max-width:720px;
       padding:20px;
+      padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); /* isi konten aman dari home indicator */
 
       background-image:url('/images/question-frame-red.png');
       background-size:cover; background-repeat:no-repeat;
-      background-position:center top; /* jangan 2px top biar center rapi */
+      background-position:center top;
       background-color:transparent;
-
       border-top-left-radius:30px; border-top-right-radius:30px;
 
-      /* RISE-UP + horizontal centering */
       opacity:0;
       transform: translate(-50%, 18px);
       transition: opacity .55s ease, transform .55s ease;
       will-change: transform, opacity;
     }
-    .movie-frame.is-visible{
-      opacity:1;
-      transform: translate(-50%, 0);
+    .movie-frame.is-visible{ opacity:1; transform: translate(-50%, 0); }
+
+    /* ==== MOBILE FIX: pakai fixed supaya nempel 100% ke bawah viewport ==== */
+    @media (max-width: 600px) {
+      .movie-frame{
+        position: fixed;
+        left: 0; right: 0; bottom: 0;      /* benar-benar nempel tepi bawah */
+        width: 100vw; max-width: none;
+        transform: translate(0, 18px);      /* rise-up hanya Y */
+      }
+      .movie-frame.is-visible{ transform: translate(0, 0); }
+
+      /* Spacer di konten atas supaya gak ketiban frame */
+      .ps-center{
+        padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+        /* 140px ~ tinggi kira-kira frame; sesuaikan jika perlu */
+      }
     }
 
     @media (prefers-reduced-motion: reduce){
-      .movie-frame{ transition:none; transform:translate(-50%,0); opacity:1; }
+      .movie-frame{ transition:none; transform: translate(0,0); opacity:1; }
     }
 
     .poll-title{
@@ -68,7 +88,7 @@
       font-size:clamp(18px,2.6vw,28px); text-align:center; margin:0 0 14px; color:#2b2b2b;
     }
 
-    /* === 2 opsi, vertikal, center === */
+    /* Grid opsi */
     .poll-grid{
       display:grid;
       grid-template-columns:1fr;
@@ -93,8 +113,7 @@
     .opt:focus-visible{ box-shadow:0 0 0 3px #ffd54a; }
 
     .yellow-label{
-      background:#FFE100;
-      width:200px; height:30px; border-radius:10px;
+      background:#FFE100; width:200px; height:30px; border-radius:10px;
       display:flex; align-items:center; justify-content:center;
       font-family:'Kanit','Prompt',sans-serif; color:#F91315; font-weight:600;
     }
@@ -112,10 +131,9 @@
       <img src="/images/loader.gif" alt="Memuat">
     </div>
   </div>
+
   <div class="ps-root">
     <section class="ps-phone">
-     
-
       <div class="ps-header w-100">
         <div class="ps-logos d-flex justify-content-between w-100 align-items-center" aria-hidden="true">
           <img class="nongshim" src="/images/nongshim.png" alt="Nongshim">
@@ -203,7 +221,7 @@
       });
     })();
 
-    /* Trigger rise-up setelah halaman siap */
+    /* Overlay fade + trigger rise-up */
     window.addEventListener('load', function(){
       const overlay = document.getElementById('psLoading');
       const banner  = document.querySelector('.movie-frame');

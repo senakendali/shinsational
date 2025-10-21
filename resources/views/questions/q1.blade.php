@@ -50,7 +50,7 @@
       width:100%;
       max-width: 720px;           /* batasi agar nggak terlalu lebar */
       height:auto;
-      padding:20px;
+      padding-right:20px;
 
       /* Background frame */
       background-image:url('/images/question-frame.png');
