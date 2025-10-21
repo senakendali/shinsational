@@ -65,11 +65,11 @@
           <form class="ps-form" id="psRegForm" action="#" method="post" onsubmit="return false;">
             @csrf
             <div class="ps-form-row">
-              <div class="ps-field">
+              <div class="ps-field-small">
                 <input id="regName" name="name" type="text" placeholder="Nama:" autocomplete="name">
               </div>
 
-              <div class="ps-field">
+              <div class="ps-field-small">
                 <select id="regGender" name="gender" required>
                   <option value="" selected disabled>Gender:</option>
                   <option value="male">Laki-laki</option>
