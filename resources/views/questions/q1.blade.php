@@ -87,7 +87,7 @@
       transform: none;
     }
 
-    /* === Mobile (≤600px): fixed + spacer supaya konten gak ketiban === */
+    /* === Mobile (≤600px): fixed + cap tinggi supaya aman di iPhone === */
     @media (max-width: 600px){
       .movie-frame{
         position: fixed;
@@ -95,17 +95,25 @@
         bottom: 0;
         transform: translateX(-50%);
 
-        /* tinggi frame proporsional dari lebar layar */
-        width: 100vw;
-        aspect-ratio: 1052 / 1543; /* tinggi auto */
+        /* Jaga rasio, scale by width tapi dibatasi supaya tinggi ≤ 76vh (svh/dvh/vh) */
+        aspect-ratio: 1052 / 1543;
+        width: min(
+          100vw,
+          calc( min(76svh, 76dvh, 76vh) * (1052 / 1543) )
+        );
         height: auto;
         max-width: 100vw;
       }
 
       .ps-center{
-        /* spacer = tinggi frame = 100vw * (1543/1052) */
+        /* spacer = tinggi frame = width * (1543/1052)
+           width bisa < 100vw saat di-cap; calc di bawah mengikuti width aktual */
         padding-bottom: calc(
-          100vw * (1543 / 1052) + env(safe-area-inset-bottom, 0px)
+          min(
+            100vw,
+            calc( min(76svh, 76dvh, 76vh) * (1052 / 1543) )
+          ) * (1543 / 1052)
+          + env(safe-area-inset-bottom, 0px)
         );
       }
     }
