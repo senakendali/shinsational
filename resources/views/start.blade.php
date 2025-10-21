@@ -53,7 +53,7 @@
           <img class="halal" src="/images/halal.png" alt="Halal">
         </div>
         <div class="ps-title">
-          <img class="frame-2-title" src="/images/f-2-title.png" alt="Nongshim">
+          <img class="frame-2-title" src="/images/f-2-title.png" alt="Nongshim" style="margin-top:-25px;">
         </div>
       </div>
 

@@ -30,6 +30,8 @@
       transform:none;
     }
 
+    
+
     /* Hormati user yang memilih reduce motion */
     @media (prefers-reduced-motion: reduce){
       .ps-loading{ transition:none; }
@@ -55,7 +57,7 @@
           <img class="halal" src="/images/halal.png" alt="Halal">
         </div>
         <div class="ps-title">
-          <img class="frame-2-title" src="/images/f-2-title.png" alt="Nongshim">
+          <img class="frame-2-title" src="/images/f-2-title.png" alt="Nongshim" style="margin-top:-25px;">
         </div>
       </div>
 
@@ -66,7 +68,7 @@
             @csrf
             <div class="ps-form-row">
               <div class="ps-field-small">
-                <input id="regName" name="name" type="text" placeholder="Nama:" autocomplete="name">
+                <input id="regName" name="name" type="text" placeholder="Nama:" autocomplete="name" required>
               </div>
 
               <div class="ps-field-small">
@@ -78,17 +80,14 @@
               </div>
             </div>
 
-            <!-- Umur input text -->
+            <!-- Umur dropdown -->
             <div class="ps-field ps-field--full ps-field--outline">
-              <input
-                id="regAge"
-                name="age"
-                type="text"
-                class="ps-age"
-                placeholder="Umur:"
-                inputmode="numeric"
-                aria-label="Umur (contoh: 18–25 tahun)"
-              >
+              <select id="regAge" name="age" class="ps-age" required aria-label="Umur">
+                <option value="" selected disabled>Umur:</option>
+                <option value="18-25">18-25 tahun</option>
+                <option value="26-35">26-35 tahun</option>
+                <option value="gt-35">&gt; 35 tahun</option>
+              </select>
             </div>
 
             <!-- Button submit -->
@@ -96,6 +95,7 @@
               <button type="submit" class="ps-btn-submit" id="psSubmitBtn">Next</button>
             </div>
           </form>
+
         </div>
       </div>
 

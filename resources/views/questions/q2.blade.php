@@ -35,70 +35,63 @@
       align-items:center; justify-content:center;
       gap:min(3vh,5px);
       text-align:center; margin-top:0;
-      padding-bottom:0;            /* <— buang padding yg bikin jeda bawah */
+      padding-bottom:0;            /* spacer dipakai di mobile */
     }
 
-    /* ====== Konfigurasi frame ======
-       Rasio gambar: 1052x1543 (W x H) → aspect-ratio: 1052/1543
-       - --frame-h  : tinggi target (desktop & mobile)
-       - --bg-nudge : dorong background turun utk nutup PNG transparan bawah
-    */
+    /* ====== Konfigurasi ====== */
     :root{
-      --frame-h: 720px;            /* UBAH INI untuk set tinggi frame */
-      --bg-nudge: 12px;            /* naikin kalau masih terlihat “melayang” */
+      /* Mobile */
+      --bg-nudge: 12px;                 /* naikkan kalau PNG tampak “melayang” */
+
+      /* Desktop/Tablet shell (9:16), biar tidak full-height */
+      --shell-scale: 0.8;               /* 80% tinggi viewport */
+      --shell-max-h: 860px;             /* pagar atas */
+      --shell-min-h: 640px;             /* pagar bawah */
+
+      /* Target tinggi frame di desktop (relatif viewport) */
+      --frame-scale-desktop: 0.72;      /* 72% dari tinggi viewport */
+      --frame-min-h-desktop: 560px;     /* pagar bawah frame */
+      --frame-max-h-desktop: 820px;     /* pagar atas frame */
     }
 
-    /* ====== Movie frame (container) ======
-       Container tidak dianimasikan (biar nempel presisi),
-       animasi ada di .movie-frame__inner.
-    */
+    /* ====== Movie frame (container) ====== */
     .movie-frame{
-      position:absolute; left:50%; bottom:0;       /* desktop/tablet */
-      transform:translateX(-50%);                  /* center X saja */
-
-      /* ukuran proporsional dari tinggi target */
-      aspect-ratio: 1052 / 1543;
-      --w-from-h: calc(var(--frame-h) * (1052 / 1543));
-      width: min(100vw, var(--w-from-h));
-      height: auto;                                 /* tinggi ikut rasio */
-      max-width: 100vw;
-
       /* background memenuhi kontainer (kontainer sudah rasio sama) */
       background-image:url('/images/question-frame.png');
       background-size: 100% 100%;
       background-repeat:no-repeat;
-      /* dorong sedikit kebawah utk nutup ruang transparan PNG */
       background-position: center calc(100% + var(--bg-nudge));
       background-color:transparent;
 
+      aspect-ratio: 1052 / 1543;        /* rasio PNG */
       border-top-left-radius:30px; border-top-right-radius:30px;
-      padding:0;                                     /* jangan padding di container */
-      z-index:10;
+      padding:0; z-index:10;
     }
 
-    /* Konten & animasi */
+    /* Konten & animasi (container tidak dianimasikan) */
     .movie-frame__inner{
       padding-top: 20px;
-      padding-left: 15px;
       padding-right: 20px;
+      padding-left: 15px;
       padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
       opacity:0;
       transform:translateY(18px);
       transition:opacity .55s ease, transform .55s ease;
       will-change: transform, opacity;
     }
-    .movie-frame.is-visible .movie-frame__inner{
-      opacity:1; transform:none;
-    }
+    .movie-frame.is-visible .movie-frame__inner{ opacity:1; transform:none; }
 
-    /* MOBILE: pakai fixed supaya benar2 nempel viewport, tambah spacer konten */
+    /* ===== MOBILE: fixed nempel bawah + spacer ===== */
     @media (max-width:600px){
       .movie-frame{
         position:fixed; left:50%; bottom:0; transform:translateX(-50%);
+        width:100vw;               /* tinggi auto dari aspect-ratio */
+        aspect-ratio:1052/1543;
+        height:auto; max-width:100vw;
       }
       .ps-center{
-        /* spacer agar konten atas tidak ketiban frame */
-        padding-bottom: calc(var(--frame-h) + env(safe-area-inset-bottom, 0px));
+        /* Spacer = tinggi frame mobile */
+        padding-bottom: calc(100vw * (1543 / 1052) + env(safe-area-inset-bottom, 0px));
       }
     }
     /* iOS celah 1px di bawah */
@@ -108,16 +101,45 @@
       }
     }
 
+    /* ===== DESKTOP/TABLET (≥601px): shell 9:16 + frame dibatasi tinggi ===== */
+    @media (min-width:601px){
+      .ps-red{
+        /* Shell 9:16 (lebih pendek dari 100vh) */
+        --shell-h: calc(100dvh * var(--shell-scale));
+        height: clamp(var(--shell-min-h), var(--shell-h), var(--shell-max-h));
+        width: min(100vw, calc(clamp(var(--shell-min-h), var(--shell-h), var(--shell-max-h)) * 0.5625)); /* 9:16 */
+        margin: 0 auto; position: relative;
+      }
+
+      .movie-frame{
+        position:absolute; left:50%; bottom:0; transform:translateX(-50%);
+
+        /* Hitung tinggi target desktop, lalu derive LEBAR dari tinggi itu (agar tidak terlalu tinggi) */
+        --_h-target: clamp(
+          var(--frame-min-h-desktop),
+          calc(100dvh * var(--frame-scale-desktop)),
+          var(--frame-max-h-desktop)
+        );
+
+        width: min(100%, calc(var(--_h-target) * (1052 / 1543)));
+        aspect-ratio: 1052 / 1543;
+        height:auto; max-width:100%;
+      }
+
+      .ps-center{ padding-bottom:0; }
+    }
+
+    /* Reduce motion */
     @media (prefers-reduced-motion: reduce){
       .ps-loading{ transition:none; }
       .movie-frame__inner{ transition:none; transform:none; opacity:1; }
     }
 
+    /* Poll grid */
     .poll-title{
       font-family:"Baloo 2",system-ui,sans-serif; font-weight:700;
       font-size:clamp(18px,2.6vw,28px); text-align:center; margin:0 0 14px; color:#2b2b2b;
     }
-
     .poll-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:4px; }
 
     .opt{

@@ -11,142 +11,201 @@
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ asset('css/app.css?v=' . time() . '#') }}">
 
-  <style>
-    html, body { margin:0; height:100%; }
+  <style> 
+  html, body { margin:0; height:100%; }
 
-    /* Loader (optional) */
-    .ps-loading{
-      position:fixed; inset:0; display:grid; place-items:center;
-      background:#fff; z-index:9999; transition:opacity .35s ease, visibility .35s ease;
-    }
-    .ps-loading.is-hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  /* Loader (optional) */
+  .ps-loading{
+    position:fixed; inset:0; display:grid; place-items:center;
+    background:#fff; z-index:9999; transition:opacity .35s ease, visibility .35s ease;
+  }
+  .ps-loading.is-hidden{ opacity:0; visibility:hidden; pointer-events:none; }
 
-    /* Section wrapper */
-    .ps-phone{
-      min-height: 100svh;
-      display:flex; flex-direction:column;
-    }
-    .ps-header{ flex:0 0 auto; }
+  /* Section wrapper */
+  .ps-phone{
+    min-height: 100svh; /* mobile/umum */
+    display:flex; flex-direction:column;
+  }
+  .ps-header{ flex:0 0 auto; }
 
-    /* Area tengah (anchor, tanpa spacer default) */
-    .ps-center{
-      flex:1 1 auto;
-      position:relative;
-      display:flex; flex-direction:column;
-      align-items:center; justify-content:center;
-      gap:min(3vh, 5px);
-      text-align:center;
-      margin-top:0;
-      padding-bottom:0; /* spacer ditambah khusus di mobile saat frame fixed */
-    }
+  /* Area tengah (anchor & tanpa spacer default) */
+  .ps-center{
+    flex:1 1 auto;
+    position:relative;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap:min(3vh, 5px);
+    text-align:center;
+    margin-top:0;
+    padding-bottom:0; /* spacer ditambah di mobile saat frame di-fixed */
+  }
 
-    /* ========= Global frame config (samain di semua halaman) ========= */
-    :root{
-      --frame-h: 720px;   /* <<< tinggi frame global */
-      --bg-nudge: 12px;   /* dorong bg ke bawah (atasi PNG transparan di bawah) */
-    }
+  /* ===== Konfigurasi ukuran (global) ===== */
+  :root{
+    --bg-nudge: 12px;                /* naikin kalau PNG tampak “melayang” */
 
-    /* ========= Movie frame (container TIDAK dianimasikan) =========
-       - Proporsional 1052/1543
-       - Lebar dari tinggi target; cap ke 100vw
-       - Background 100% 100% (kontainer = rasio sama, jadi aman)
-    */
+    /* Shell 9:16 untuk desktop/tablet (dibikin lebih pendek) */
+    --shell-scale: 0.72;             /* dari 0.8 -> 0.72 */
+    --shell-max-h: 800px;            /* dari 860 -> 800 */
+    --shell-min-h: 640px;            /* pagar bawah */
+
+    /* Target tinggi frame desktop (lebih pendek) */
+    --frame-scale-desktop: 0.60;     /* dari 0.72 -> 0.60 */
+    --frame-min-h-desktop: 560px;    /* pagar bawah frame */
+    --frame-max-h-desktop: 700px;    /* dari 820 -> 700 */
+  }
+
+  /* ===== Movie frame (container: tidak dianimasikan) ===== */
+  .movie-frame{
+    background-image:url('/images/question-frame-red.png');
+    background-size: 100% 100%;
+    background-repeat:no-repeat;
+    background-position: center calc(100% + var(--bg-nudge));
+    background-color:transparent;
+
+    aspect-ratio: 1052 / 1543; /* rasio PNG */
+    border-top-left-radius:30px; border-top-right-radius:30px;
+    padding:0; z-index:10;
+  }
+
+  /* Konten & animasi di inner */
+  .movie-frame__inner{
+    padding:20px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    opacity:0;
+    transform:translateY(18px);
+    transition: opacity .55s ease, transform .55s ease;
+    will-change: transform, opacity;
+  }
+  .movie-frame.is-visible .movie-frame__inner{
+    opacity:1; transform:none;
+  }
+
+  /* ===== MOBILE: frame di-fixed nempel bawah + spacer konten ===== */
+  @media (max-width: 600px){
     .movie-frame{
-      position:absolute; left:50%; bottom:0;  /* desktop/tablet */
-      transform:translateX(-50%);
-
-      aspect-ratio: 1052 / 1543;
-      --w-from-h: calc(var(--frame-h) * (1052 / 1543));
-      width: min(100vw, var(--w-from-h));
-      height: auto;
-      max-width: 100vw;
-
-      background-image:url('/images/question-frame-red.png');
-      background-size: 100% 100%;
-      background-repeat:no-repeat;
-      background-position: center calc(100% + var(--bg-nudge));
-      background-color:transparent;
-
-      border-top-left-radius:30px; border-top-right-radius:30px;
-      padding:0;   /* jangan padding di container */
-      z-index:10;
+      position: fixed;
+      left:50%; bottom:0;
+      transform: translateX(-50%);
+      width:100vw;                  /* tinggi auto dari aspect-ratio */
+      aspect-ratio:1052/1543;
+      height:auto; max-width:100vw;
     }
-
-    /* Isi & animasi (rise-up di inner) */
-    .movie-frame__inner{
-      padding:20px;
-      padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-      opacity:0;
-      transform:translateY(18px);
-      transition: opacity .55s ease, transform .55s ease;
-      will-change: transform, opacity;
+    .ps-center{
+      /* spacer agar konten atas tidak ketiban frame */
+      padding-bottom: calc(100vw * (1543 / 1052) + env(safe-area-inset-bottom, 0px));
     }
-    .movie-frame.is-visible .movie-frame__inner{
-      opacity:1; transform:none;
-    }
-
-    /* ========= Mobile: fixed biar nempel bawah + spacer konten ========= */
+  }
+  /* iOS celah 1px di bawah */
+  @supports (-webkit-touch-callout: none){
     @media (max-width: 600px){
-      .movie-frame{
-        position:fixed; left:50%; bottom:0; transform:translateX(-50%);
-      }
-      .ps-center{
-        padding-bottom: calc(var(--frame-h) + env(safe-area-inset-bottom, 0px));
-      }
+      .movie-frame{ bottom:-1px; }
     }
-    /* iOS garis 1px di bawah */
-    @supports (-webkit-touch-callout: none){
-      @media (max-width: 600px){
-        .movie-frame{ bottom:-1px; }
-      }
+  }
+
+  /* ===== DESKTOP/TABLET: shell 9:16 + frame dibatasi tinggi ===== */
+  @media (min-width: 601px){
+    .ps-phone{
+      /* Shell 9:16 (lebih pendek dari 100vh) */
+      --shell-h: calc(100dvh * var(--shell-scale));
+      height: clamp(var(--shell-min-h), var(--shell-h), var(--shell-max-h));
+      width: min(
+        100vw,
+        calc(clamp(var(--shell-min-h), var(--shell-h), var(--shell-max-h)) * 0.5625) /* 9:16 */
+      );
+      margin: 0 auto; position: relative;
     }
 
-    @media (prefers-reduced-motion: reduce){
-      .ps-loading{ transition:none; }
-      .movie-frame__inner{ transition:none; transform:none; opacity:1; }
+    .movie-frame{
+      position:absolute; left:50%; bottom:0; transform:translateX(-50%);
+
+      /* Target tinggi dari variabel global */
+      --_h-target: clamp(
+        var(--frame-min-h-desktop),
+        calc(100dvh * var(--frame-scale-desktop)),
+        var(--frame-max-h-desktop)
+      );
+
+      /* ===== CAP LOKAL: atur di sini kalau masih ketinggian ===== */
+      --_h-cap: 640px;                   /* UBAH angka ini sesuai selera (mis. 660px / 620px) */
+      --_h-eff: min(var(--_h-target), var(--_h-cap));
+
+      /* Lebar diturunkan dari tinggi efektif, rasio tetap */
+      width: min(100%, calc(var(--_h-eff) * (1052 / 1543)));
+      aspect-ratio: 1052 / 1543;
+      height:auto; 
+      max-width:100%;
+      max-height: var(--_h-eff);        /* pastikan gak melebihi cap */
     }
 
-    .poll-title{
-      font-family:"Baloo 2",system-ui,sans-serif; font-weight:700;
-      font-size:clamp(18px,2.6vw,28px); text-align:center; margin:0 0 14px; color:#2b2b2b;
-    }
+    .ps-center{ padding-bottom:0; }
+  }
 
-    /* Grid opsi */
-    .poll-grid{
-      display:grid;
-      grid-template-columns:1fr;
-      gap:16px;
-      max-width:520px;
-      width:92%;
-      margin:0 auto;
+  /* ===== Profil ekstra untuk layar desktop yang pendek ===== */
+  @media (min-width: 601px) and (max-height: 900px){
+    :root{
+      --shell-scale: 0.68;
+      --shell-max-h: 760px;
+      --frame-scale-desktop: 0.56;
+      --frame-max-h-desktop: 660px;
     }
+  }
 
-    .opt{
-      position:relative;
-      display:flex; align-items:center; justify-content:center;
-      width:100%;
-      padding:0; border:0; background:transparent; cursor:pointer;
-      border-radius:16px; overflow:hidden;
-      transition: transform .15s ease, box-shadow .15s ease;
-      outline:none; gap:15px;
+  /* Bonus: monitor 1366×768 / 1280×720, kompres sedikit lagi */
+  @media (min-width: 601px) and (max-height: 820px){
+    :root{
+      --shell-scale: 0.64;
+      --frame-scale-desktop: 0.52;
+      --frame-max-h-desktop: 620px;
     }
-    .opt img{
-      max-width:85%; height:auto; display:block; margin:0 auto; object-fit:contain;
-    }
-    .opt:focus-visible{ box-shadow:0 0 0 3px #ffd54a; }
+  }
 
-    .yellow-label{
-      background:#FFE100; width:200px; height:30px; border-radius:10px;
-      display:flex; align-items:center; justify-content:center;
-      font-family:'Kanit','Prompt',sans-serif; color:#F91315; font-weight:600;
-    }
+  @media (prefers-reduced-motion: reduce){
+    .ps-loading{ transition:none; }
+    .movie-frame__inner{ transition:none; transform:none; opacity:1; }
+  }
 
-    @media (max-width:520px){
-      .poll-grid{ gap:5px; width:94%; }
-      .opt{ border-radius:14px; }
-      .opt img{ max-width:90%; }
-    }
-  </style>
+  .poll-title{
+    font-family:"Baloo 2",system-ui,sans-serif; font-weight:700;
+    font-size:clamp(18px,2.6vw,28px); text-align:center; margin:0 0 14px; color:#2b2b2b;
+  }
+
+  /* Grid opsi */
+  .poll-grid{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:16px;            /* <- perbaiki typo jika sebelumnya .gap */
+    max-width:520px;
+    width:92%;
+    margin:0 auto;
+  }
+
+  .opt{
+    position:relative;
+    display:flex; align-items:center; justify-content:center;
+    width:100%;
+    padding:0; border:0; background:transparent; cursor:pointer;
+    border-radius:16px; overflow:hidden;
+    transition: transform .15s ease, box-shadow .15s ease;
+    outline:none; gap:15px;
+  }
+  .opt img{
+    max-width:85%; height:auto; display:block; margin:0 auto; object-fit:contain;
+  }
+  .opt:focus-visible{ box-shadow:0 0 0 3px #ffd54a; }
+
+  .yellow-label{
+    background:#FFE100; width:200px; height:30px; border-radius:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Kanit','Prompt',sans-serif; color:#F91315; font-weight:600;
+  }
+
+  @media (max-width:520px){
+    .poll-grid{ gap:5px; width:94%; }
+    .opt{ border-radius:14px; }
+    .opt img{ max-width:90%; }
+  }
+</style>
 </head>
 <body>
   <div id="psLoading" class="ps-loading" aria-hidden="true">
@@ -182,11 +241,11 @@
               <!-- 2 pilihan, gambar otomatis center -->
               <div class="poll-grid" id="grid">
                 <button type="button" class="opt d-flex justify-content-center flex-column" data-value="A" aria-label="A">
-                  <img src="/images/q-{{ $number ?? 3 }}-a.png" alt="A" style="width:150px; margin-top:10px;">
+                  <img src="/images/q-{{ $number ?? 3 }}-a.png" alt="A" style="width:135px; margin-top:10px;">
                 </button>
 
                 <button type="button" class="opt d-flex justify-content-center flex-column" data-value="B" aria-label="B">
-                  <img src="/images/q-{{ $number ?? 3 }}-b.png" alt="B" style="width:150px;">
+                  <img src="/images/q-{{ $number ?? 3 }}-b.png" alt="B" style="width:135px;">
                 </button>
               </div>
             </div>
