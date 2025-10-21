@@ -13,150 +13,184 @@
   <style>
     html, body { margin:0; height:100%; }
 
-    /* Overlay */
+    /* === Overlay === */
     .ps-loading{
       position:fixed; inset:0; display:grid; place-items:center;
       background:#fff; z-index:9999; transition:opacity .35s ease, visibility .35s ease;
     }
     .ps-loading.is-hidden{ opacity:0; visibility:hidden; pointer-events:none; }
 
-    /* Section */
+    /* === Section wrapper === */
     .ps-red{
-      min-height: 100svh; min-height: 100vh;
-      display:flex; flex-direction:column;
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
     }
-    .ps-header{ flex:0 0 auto; }
+    .ps-header{ flex: 0 0 auto; }
 
-    /* Area tengah sebagai anchor absolute/fixed */
     .ps-center{
-      flex:1 1 auto;
-      position:relative;
+      flex: 1 1 auto;
+      min-height: 0;
+      position: relative; /* anchor untuk movie-frame absolute/fixed */
       display:flex; flex-direction:column;
       align-items:center; justify-content:center;
-      gap:min(3vh,5px);
-      text-align:center; margin-top:0;
-      padding-bottom:0;            /* spacer dipakai di mobile */
+      gap: min(3vh, 5px);
+      text-align:center;
+      margin-top: 0;
+      padding-bottom: 0; /* spacer hanya dipakai di mobile */
     }
 
-    /* ====== Konfigurasi ====== */
+    /* ================== VARS ================== */
     :root{
-      /* Mobile */
-      --bg-nudge: 12px;                 /* naikkan kalau PNG tampak “melayang” */
+      --frame-h: 750px;         /* (mobile) target tinggi, dipakai jika perlu */
+      --bg-nudge: 10px;         /* dorong background ke bawah (atasi PNG transparan) */
 
-      /* Desktop/Tablet shell (9:16), biar tidak full-height */
-      --shell-scale: 0.8;               /* 80% tinggi viewport */
-      --shell-max-h: 860px;             /* pagar atas */
-      --shell-min-h: 640px;             /* pagar bawah */
+      /* Desktop/Tablet shell (9:16), biar gak full-height */
+      --shell-scale: 0.8;       /* 0.8 = 80% tinggi viewport (lebih pendek) */
+      --shell-max-h: 860px;     /* pagar atas */
+      --shell-min-h: 640px;     /* pagar bawah */
 
-      /* Target tinggi frame di desktop (relatif viewport) */
-      --frame-scale-desktop: 0.72;      /* 72% dari tinggi viewport */
-      --frame-min-h-desktop: 560px;     /* pagar bawah frame */
-      --frame-max-h-desktop: 820px;     /* pagar atas frame */
+      /* Tinggi target frame di desktop (relatif viewport) */
+      --frame-scale-desktop: 0.72; /* 72% dari tinggi viewport */
+      --frame-min-h-desktop: 560px;
+      --frame-max-h-desktop: 820px;
     }
 
-    /* ====== Movie frame (container) ====== */
+    /* ================== MOVIE-FRAME ================== */
     .movie-frame{
-      /* background memenuhi kontainer (kontainer sudah rasio sama) */
-      background-image:url('/images/question-frame.png');
+      background-image: url('/images/question-frame.png');
       background-size: 100% 100%;
-      background-repeat:no-repeat;
+      background-repeat: no-repeat;
       background-position: center calc(100% + var(--bg-nudge));
-      background-color:transparent;
+      background-color: transparent;
 
-      aspect-ratio: 1052 / 1543;        /* rasio PNG */
-      border-top-left-radius:30px; border-top-right-radius:30px;
-      padding:0; z-index:10;
+      aspect-ratio: 1052 / 1543;  /* rasio PNG */
+      border-top-left-radius: 30px;
+      border-top-right-radius: 30px;
+      padding: 0;
+      z-index: 10;
     }
 
-    /* Konten & animasi (container tidak dianimasikan) */
+    /* Animasi di inner saja (container jangan dianimasikan) */
     .movie-frame__inner{
       padding-top: 20px;
       padding-right: 20px;
       padding-left: 15px;
       padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-      opacity:0;
-      transform:translateY(18px);
-      transition:opacity .55s ease, transform .55s ease;
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity .55s ease, transform .55s ease;
       will-change: transform, opacity;
     }
-    .movie-frame.is-visible .movie-frame__inner{ opacity:1; transform:none; }
+    .movie-frame.is-visible .movie-frame__inner{
+      opacity: 1;
+      transform: none;
+    }
 
-    /* ===== MOBILE: fixed nempel bawah + spacer ===== */
-    @media (max-width:600px){
+    /* === Mobile (≤600px): fixed + cap tinggi supaya aman di iPhone === */
+    @media (max-width: 600px){
       .movie-frame{
-        position:fixed; left:50%; bottom:0; transform:translateX(-50%);
-        width:100vw;               /* tinggi auto dari aspect-ratio */
-        aspect-ratio:1052/1543;
-        height:auto; max-width:100vw;
+        position: fixed;
+        left: 50%;
+        bottom: 0;
+        transform: translateX(-50%);
+
+        /* Jaga rasio, scale by width tapi dibatasi supaya tinggi ≤ 76vh (svh/dvh/vh) */
+        aspect-ratio: 1052 / 1543;
+        width: min(
+          100vw,
+          calc( min(76svh, 76dvh, 76vh) * (1052 / 1543) )
+        );
+        height: auto;
+        max-width: 100vw;
       }
+
       .ps-center{
-        /* Spacer = tinggi frame mobile */
-        padding-bottom: calc(100vw * (1543 / 1052) + env(safe-area-inset-bottom, 0px));
+        /* spacer = tinggi frame = width * (1543/1052)
+           width bisa < 100vw saat di-cap; calc di bawah mengikuti width aktual */
+        padding-bottom: calc(
+          min(
+            100vw,
+            calc( min(76svh, 76dvh, 76vh) * (1052 / 1543) )
+          ) * (1543 / 1052)
+          + env(safe-area-inset-bottom, 0px)
+        );
       }
     }
-    /* iOS celah 1px di bawah */
     @supports (-webkit-touch-callout: none){
       @media (max-width:600px){
-        .movie-frame{ bottom:-1px; }
+        .movie-frame{ bottom:-1px; } /* hairline iOS */
       }
     }
 
-    /* ===== DESKTOP/TABLET (≥601px): shell 9:16 + frame dibatasi tinggi ===== */
+    /* === Desktop / Tablet (≥601px): shell 9:16 yang tidak full-height === */
     @media (min-width:601px){
       .ps-red{
-        /* Shell 9:16 (lebih pendek dari 100vh) */
+        /* Hitung tinggi shell: scale * dvh, lalu clamp ke min/max */
         --shell-h: calc(100dvh * var(--shell-scale));
         height: clamp(var(--shell-min-h), var(--shell-h), var(--shell-max-h));
-        width: min(100vw, calc(clamp(var(--shell-min-h), var(--shell-h), var(--shell-max-h)) * 0.5625)); /* 9:16 */
-        margin: 0 auto; position: relative;
+
+        /* Lebar shell 9:16 → min(100vw, shell-h * 9/16) */
+        width: min(100vw, calc(clamp(var(--shell-min-h), var(--shell-h), var(--shell-max-h)) * 0.5625));
+        margin: 0 auto;
+        position: relative;
       }
 
       .movie-frame{
-        position:absolute; left:50%; bottom:0; transform:translateX(-50%);
+        position: absolute;
+        left: 50%;
+        bottom: 0;
+        transform: translateX(-50%);
 
-        /* Hitung tinggi target desktop, lalu derive LEBAR dari tinggi itu (agar tidak terlalu tinggi) */
+        /* Hitung tinggi target desktop (pakai dvh biar stabil), lalu CLAMP */
         --_h-target: clamp(
           var(--frame-min-h-desktop),
           calc(100dvh * var(--frame-scale-desktop)),
           var(--frame-max-h-desktop)
         );
 
-        width: min(100%, calc(var(--_h-target) * (1052 / 1543)));
+        /* Set LEBAR dari tinggi target → lebar = h * (w/h) = h * (1052/1543)
+           Batasi supaya tidak melebihi lebar shell (100%) */
+        width: min( 100%, calc(var(--_h-target) * (1052 / 1543)) );
+
+        /* Dengan aspect-ratio aktif, tinggi otomatis = width * (1543/1052)
+           → hasilnya <= target & <= batas shell */
         aspect-ratio: 1052 / 1543;
-        height:auto; max-width:100%;
+        height: auto;
+        max-width: 100%;
       }
 
-      .ps-center{ padding-bottom:0; }
+      .ps-center{ padding-bottom: 0; }
     }
 
-    /* Reduce motion */
+    /* === Reduce motion === */
     @media (prefers-reduced-motion: reduce){
       .ps-loading{ transition:none; }
       .movie-frame__inner{ transition:none; transform:none; opacity:1; }
     }
 
-    /* Poll grid */
+    /* === Poll Grid & Buttons (tetap) === */
     .poll-title{
       font-family:"Baloo 2",system-ui,sans-serif; font-weight:700;
-      font-size:clamp(18px,2.6vw,28px); text-align:center; margin:0 0 14px; color:#2b2b2b;
+      font-size:clamp(18px,2.6vw,28px); text-align:center;
+      margin:0 0 14px; color:#2b2b2b;
     }
     .poll-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:4px; }
-
     .opt{
       position:relative; display:block; width:100%; aspect-ratio:1/1;
       padding:0; border:0; background:transparent; cursor:pointer;
       transition: transform .15s ease, box-shadow .15s ease; outline:none;
     }
     .opt img{ width:100%; height:100%; display:block; }
-
-    .opt:hover{ transform:translateY(-2px); }
-    .opt:focus-visible{ box-shadow:0 0 0 3px #ffd54a; }
+    .opt:hover{ transform: translateY(-2px); }
+    .opt:focus-visible{ box-shadow: 0 0 0 3px #ffd54a; }
     .opt.is-selected{
-      box-shadow:0 0 0 3px #ffd54a, 0 6px 18px rgba(0,0,0,.18);
-      transform:translateY(-2px);
+      box-shadow: 0 0 0 3px #ffd54a, 0 6px 18px rgba(0,0,0,.18);
+      transform: translateY(-2px);
     }
     @media (max-width:520px){ .opt{ border-radius:10px; } }
   </style>
+
 </head>
 <body>
   <div id="psLoading" class="ps-loading" aria-hidden="true">
@@ -182,13 +216,15 @@
           <div class="movie-frame__inner">
             <div class="poll-wrap">
               <div class="mt-3 mb-3">
-                <img src="/images/q-2-title.png" alt="Nongshim" style="width:200px;">
+                <img src="/images/q-1-title.png" alt="Nongshim" style="width:200px;">
               </div>
 
+              <!-- info halaman -->
               <input type="hidden" id="qNumber" value="{{ $number ?? 1 }}">
               <input type="hidden" id="nextUrl" value="{{ $nextUrl ?? '' }}">
               <input type="hidden" id="prevUrl" value="{{ $prevUrl ?? '' }}">
 
+              <!-- 2x2 gambar (teks ada di gambar) -->
               <div class="poll-grid" id="grid">
                 <button type="button" class="opt" data-value="A" aria-label="A">
                   <img src="/images/q-{{ $number ?? 1 }}-a.png" alt="A">
@@ -205,8 +241,9 @@
               </div>
             </div>
 
-            <div class="d-flex justify-content-start mt-3 mb-1">
+            <div class="d-flex justify-content-between mt-3 mb-1 align-items-center">
               <img src="/images/campaign-title.png" alt="Shinsational" style="width:140px;">
+              <img src="/images/40.png" alt="Shinsational" style="width:70px;">
             </div>
           </div>
         </div>
@@ -214,6 +251,7 @@
     </section>
   </div>
 
+  <!-- JS: simpan ke localStorage + auto-next -->
   <script>
     const QUIZ_KEY = 'ps-quiz-v1';
     function loadAns(){ try{ return JSON.parse(localStorage.getItem(QUIZ_KEY)) || {}; }catch(_){ return {}; } }
@@ -265,9 +303,11 @@
 
       requestAnimationFrame(() => {
         overlay?.classList.add('is-hidden');
+        // jeda kecil agar overlay fade dulu lalu rise-up inner
         setTimeout(() => { frame?.classList.add('is-visible'); }, 120);
       });
     });
   </script>
+
 </body>
 </html>

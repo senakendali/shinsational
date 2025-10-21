@@ -81,19 +81,32 @@
     opacity:1; transform:none;
   }
 
-  /* ===== MOBILE: frame di-fixed nempel bawah + spacer konten ===== */
+  /* ===== MOBILE: frame di-fixed nempel bawah + CAP tinggi aman iPhone ===== */
   @media (max-width: 600px){
     .movie-frame{
       position: fixed;
       left:50%; bottom:0;
       transform: translateX(-50%);
-      width:100vw;                  /* tinggi auto dari aspect-ratio */
       aspect-ratio:1052/1543;
-      height:auto; max-width:100vw;
+
+      /* Lebar aman (tanpa notch) vs batas tinggi 76vh → pilih yang lebih kecil */
+      --safe-w: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+      --by-height: calc(min(76svh, 76dvh, 76vh) * (1052 / 1543));
+      --target-w: min(var(--safe-w), var(--by-height));
+
+      width: var(--target-w);
+      height:auto; 
+      max-width:100vw;
     }
     .ps-center{
-      /* spacer agar konten atas tidak ketiban frame */
-      padding-bottom: calc(100vw * (1543 / 1052) + env(safe-area-inset-bottom, 0px));
+      /* Spacer = tinggi frame aktual + safe bottom */
+      --safe-w: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+      --by-height: calc(min(76svh, 76dvh, 76vh) * (1052 / 1543));
+      --target-w: min(var(--safe-w), var(--by-height));
+
+      padding-bottom: calc(
+        var(--target-w) * (1543 / 1052) + env(safe-area-inset-bottom, 0px)
+      );
     }
   }
   /* iOS celah 1px di bawah */
@@ -127,7 +140,7 @@
       );
 
       /* ===== CAP LOKAL: atur di sini kalau masih ketinggian ===== */
-      --_h-cap: 640px;                   /* UBAH angka ini sesuai selera (mis. 660px / 620px) */
+      --_h-cap: 640px;                   /* Ubah sesuai kebutuhan (mis. 660px / 620px) */
       --_h-eff: min(var(--_h-target), var(--_h-cap));
 
       /* Lebar diturunkan dari tinggi efektif, rasio tetap */
@@ -135,7 +148,7 @@
       aspect-ratio: 1052 / 1543;
       height:auto; 
       max-width:100%;
-      max-height: var(--_h-eff);        /* pastikan gak melebihi cap */
+      max-height: var(--_h-eff);
     }
 
     .ps-center{ padding-bottom:0; }
@@ -174,7 +187,7 @@
   .poll-grid{
     display:grid;
     grid-template-columns:1fr;
-    gap:16px;            /* <- perbaiki typo jika sebelumnya .gap */
+    gap:16px;
     max-width:520px;
     width:92%;
     margin:0 auto;
@@ -206,6 +219,7 @@
     .opt img{ max-width:90%; }
   }
 </style>
+
 </head>
 <body>
   <div id="psLoading" class="ps-loading" aria-hidden="true">
@@ -250,8 +264,9 @@
               </div>
             </div>
 
-            <div class="d-flex justify-content-start mt-3 mb-1">
+            <div class="d-flex justify-content-between mt-3 mb-1 align-items-center">
               <img src="/images/small-product.png" alt="Shinsational" style="width:140px;">
+              <img src="/images/100.png" alt="Shinsational" style="width:70px;">
             </div>
           </div>
         </div>

@@ -241,8 +241,9 @@
               </div>
             </div>
 
-            <div class="d-flex justify-content-start mt-3 mb-1">
+            <div class="d-flex justify-content-between mt-3 mb-1 align-items-center">
               <img src="/images/campaign-title.png" alt="Shinsational" style="width:140px;">
+              <img src="/images/20.png" alt="Shinsational" style="width:70px;">
             </div>
           </div>
         </div>
