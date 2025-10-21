@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="{{ asset('css/app.css?v=' . time() . '#') }}">
 
   <style>
+    html, body { margin:0; height:100%; }
+
     /* Overlay */
     .ps-loading{
       position:fixed; inset:0; display:grid; place-items:center;
@@ -27,56 +29,102 @@
     .ps-header{ flex: 0 0 auto; }
     .ps-center{
       flex: 1 1 auto;
-      min-height: 0;              /* biar fleksibel */
-      position: relative;         /* anchor absolute child di bawah */
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;     /* vertical center area */
+      min-height: 0;
+      position: relative; /* anchor absolute/fixed child */
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
       gap: min(3vh, 5px);
       text-align:center;
       margin-top: 0;
-      padding-bottom: 200px;      /* ruang untuk frame bawah */
-    }
-    @media (max-width:520px){
-      .ps-center{ padding-bottom: 160px; }
+      padding-bottom: 0;   /* jangan pakai padding-bottom di parent */
     }
 
-    /* ===== Frame bawah (animated + absolute) ===== */
+    /* ====== FRAME CONFIG ======
+       Rasio gambar: 1052 x 1543 (W x H) → aspect-ratio: 1052/1543
+       - --frame-h  : tinggi target (desktop & mobile)
+       - --bg-nudge : dorong background turun (atasi PNG yg ada ruang transparan di bawah)
+    */
+    :root{
+      --frame-h: 750px;           /* UBAH INI untuk set tinggi frame */
+      --bg-nudge: 10px;           /* kalau masih "melayang", naikin (mis. 12–16px) */
+    }
+
+    /* ====== MOVIE-FRAME ======
+       Container TIDAK dianimasikan (biar nempel presisi).
+       Animasi ada di .movie-frame__inner.
+    */
     .movie-frame{
-      position:absolute;
-      left:50%;
-      bottom:0;
-      width:100%;
-      max-width: 720px;           /* batasi agar nggak terlalu lebar */
-      height:auto;
-      padding-right:20px;
+      position: absolute;       /* default (desktop/tablet) */
+      left: 50%;
+      bottom: 0;
+      transform: translateX(-50%); /* center X saja */
 
-      /* Background frame */
+      /* Rasio gambar 1052x1543 */
+      aspect-ratio: 1052 / 1543;
+
+      /* Lebar dihitung dari tinggi target; cap di 100vw agar tidak overflow */
+      --w-from-h: calc(var(--frame-h) * (1052 / 1543));
+      width: min(100vw, var(--w-from-h));
+      height: auto;               /* tinggi ikut aspect-ratio */
+      max-width: 100vw;
+
+      /* Background mengisi kontainer tanpa distorsi
+         + nudged ke bawah untuk nutup ruang transparan PNG */
       background-image:url('/images/question-frame.png');
-      background-size:cover;
+      background-size: 100% 100%;
       background-repeat:no-repeat;
-      background-position:center top; /* jangan dobel/konflik */
-
+      background-position: center calc(100% + var(--bg-nudge));
+      /* kalau ingin nudge kecil:  center bottom; (ubah sesuai kebutuhan) */
       background-color:transparent;
+
       border-top-left-radius:30px;
       border-top-right-radius:30px;
 
-      /* RISE-UP: gabungkan X dan Y */
-      opacity:0;
-      transform: translate(-50%, 18px);
+      padding: 0; /* jangan ada padding di container */
+      z-index:10;
+    }
+
+    /* Konten & animasi di wrapper dalam (bukan container) */
+    .movie-frame__inner{
+      padding-top: 20px;
+      padding-left: 15px;
+      padding-right: 20px;
+      padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+      opacity: 0;
+      transform: translateY(18px);
       transition: opacity .55s ease, transform .55s ease;
       will-change: transform, opacity;
     }
-    .movie-frame.is-visible{
-      opacity:1;
-      transform: translate(-50%, 0);
+    .movie-frame.is-visible .movie-frame__inner{
+      opacity: 1;
+      transform: none;
     }
 
-    /* Hormati reduce motion */
+    /* ===== MOBILE: fixed supaya benar2 nempel viewport; tambah spacer konten ===== */
+    @media (max-width: 600px){
+      .movie-frame{
+        position: fixed;
+        left: 50%;
+        bottom: 0;
+        transform: translateX(-50%);  /* tetap tanpa translateY */
+      }
+      /* Spacer agar konten atas tidak ketiban frame */
+      .ps-center{
+        padding-bottom: calc(var(--frame-h) + env(safe-area-inset-bottom, 0px));
+      }
+    }
+
+    /* iOS garis 1px di bawah */
+    @supports (-webkit-touch-callout: none){
+      @media (max-width: 600px){
+        .movie-frame{ bottom: -1px; }
+      }
+    }
+
+    /* Reduce motion */
     @media (prefers-reduced-motion: reduce){
       .ps-loading{ transition:none; }
-      .movie-frame{ transition:none; transform: translate(-50%, 0); opacity:1; }
+      .movie-frame__inner{ transition:none; transform:none; opacity:1; }
     }
 
     .poll-title{
@@ -90,23 +138,15 @@
     /* BUTTON KARTU GAMBAR */
     .opt{
       position:relative; display:block; width:100%; aspect-ratio:1/1; padding:0; border:0; background:transparent;
-      cursor:pointer;
-      transition: transform .15s ease, box-shadow .15s ease;
-      outline: none;
+      cursor:pointer; transition: transform .15s ease, box-shadow .15s ease; outline: none;
     }
-    .opt img{ width:100%; height:100%; display:block;  }
+    .opt img{ width:100%; height:100%; display:block; }
 
     .opt:hover{ transform: translateY(-2px); }
     .opt:focus-visible{ box-shadow: 0 0 0 3px #ffd54a; }
+    .opt.is-selected{ box-shadow: 0 0 0 3px #ffd54a, 0 6px 18px rgba(0,0,0,.18); transform: translateY(-2px); }
 
-    .opt.is-selected{
-      box-shadow: 0 0 0 3px #ffd54a, 0 6px 18px rgba(0,0,0,.18);
-      transform: translateY(-2px);
-    }
-
-    @media (max-width:520px){
-      .opt{ border-radius:10px; }
-    }
+    @media (max-width:520px){ .opt{ border-radius:10px; } }
   </style>
 </head>
 <body>
@@ -130,35 +170,37 @@
 
       <div class="ps-center">
         <div class="movie-frame">
-          <div class="poll-wrap">
-            <div class="mt-1 mb-3">
-              <img src="/images/q-1-title.png" alt="Nongshim" style="width:200px;">
+          <div class="movie-frame__inner">
+            <div class="poll-wrap">
+              <div class="mt-3 mb-3">
+                <img src="/images/q-1-title.png" alt="Nongshim" style="width:200px;">
+              </div>
+
+              <!-- info halaman -->
+              <input type="hidden" id="qNumber" value="{{ $number ?? 1 }}">
+              <input type="hidden" id="nextUrl" value="{{ $nextUrl ?? '' }}">
+              <input type="hidden" id="prevUrl" value="{{ $prevUrl ?? '' }}">
+
+              <!-- 2x2 gambar (teks ada di gambar) -->
+              <div class="poll-grid" id="grid">
+                <button type="button" class="opt" data-value="A" aria-label="A">
+                  <img src="/images/q-{{ $number ?? 1 }}-a.png" alt="A">
+                </button>
+                <button type="button" class="opt" data-value="B" aria-label="B">
+                  <img src="/images/q-{{ $number ?? 1 }}-b.png" alt="B">
+                </button>
+                <button type="button" class="opt" data-value="C" aria-label="C">
+                  <img src="/images/q-{{ $number ?? 1 }}-c.png" alt="C">
+                </button>
+                <button type="button" class="opt" data-value="D" aria-label="D">
+                  <img src="/images/q-{{ $number ?? 1 }}-d.png" alt="D">
+                </button>
+              </div>
             </div>
 
-            <!-- info halaman -->
-            <input type="hidden" id="qNumber" value="{{ $number ?? 1 }}">
-            <input type="hidden" id="nextUrl" value="{{ $nextUrl ?? '' }}">
-            <input type="hidden" id="prevUrl" value="{{ $prevUrl ?? '' }}">
-
-            <!-- 2x2 gambar (teks ada di gambar) -->
-            <div class="poll-grid" id="grid">
-              <button type="button" class="opt" data-value="A" aria-label="A">
-                <img src="/images/q-{{ $number ?? 1 }}-a.png" alt="A">
-              </button>
-              <button type="button" class="opt" data-value="B" aria-label="B">
-                <img src="/images/q-{{ $number ?? 1 }}-b.png" alt="B">
-              </button>
-              <button type="button" class="opt" data-value="C" aria-label="C">
-                <img src="/images/q-{{ $number ?? 1 }}-c.png" alt="C">
-              </button>
-              <button type="button" class="opt" data-value="D" aria-label="D">
-                <img src="/images/q-{{ $number ?? 1 }}-d.png" alt="D">
-              </button>
+            <div class="d-flex justify-content-start mt-3 mb-1">
+              <img src="/images/campaign-title.png" alt="Shinsational" style="width:140px;">
             </div>
-          </div>
-
-          <div class="d-flex justify-content-start mt-3 mb-1">
-            <img src="/images/campaign-title.png" alt="Shinsational" style="width:120px;">
           </div>
         </div>
       </div>
@@ -188,45 +230,40 @@
         if (btn) btn.classList.add('is-selected');
       }
 
-      // klik gambar => simpan -> efek -> delay 2 detik -> pindah
+      // klik gambar => simpan -> efek -> delay -> pindah
       grid.addEventListener('click', (e) => {
         const btn = e.target.closest('.opt');
         if (!btn || navigating) return;
 
         const value = btn.dataset.value;
-        setAns(qNum, value); // simpan ke localStorage
+        setAns(qNum, value);
 
-        // efek selected & lock UI
         grid.querySelectorAll('.opt').forEach(el => el.classList.remove('is-selected'));
         btn.classList.add('is-selected');
         navigating = true;
 
-        // (opsional) feedback kursor
         document.body.style.cursor = 'wait';
-
         setTimeout(() => {
           document.body.style.cursor = '';
           if (qNum < 5 && nextUrl) {
             location.assign(nextUrl);
           } else if (qNum === 5) {
-            location.assign('/result'); // ganti jika route hasil beda
+            location.assign('/result');
           } else {
-            navigating = false; // fallback
+            navigating = false;
           }
-        }, 1000); // delay 2 detik
+        }, 1000);
       });
     })();
 
     window.addEventListener('load', function(){
       const overlay = document.getElementById('psLoading');
-      const banner  = document.querySelector('.movie-frame');
+      const frame   = document.querySelector('.movie-frame');
 
       requestAnimationFrame(() => {
         overlay?.classList.add('is-hidden');
-        // jeda kecil agar overlay fade dulu lalu rise-up
-        setTimeout(() => {
-          banner?.classList.add('is-visible');
-        }, 120);
+        // jeda kecil agar overlay fade dulu lalu rise-up inner
+        setTimeout(() => { frame?.classList.add('is-visible'); }, 120);
       });
     });
   </script>
