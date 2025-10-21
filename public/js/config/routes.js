@@ -41,7 +41,7 @@ export const routes = [
   {
     path: "/",
     label: "Home",
-    component: () => import("../pages/kol/index.js?v=" + BUILD_ID),
+    component: () => import("../pages/home/index.js?v=" + BUILD_ID),
   },
 
   // ===== Dashboard (auto-pick: admin vs brand) =====

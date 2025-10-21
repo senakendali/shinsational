@@ -1,270 +1,388 @@
-:root {
-    /* Primary Brand Color */
-    --color-primary: #0d6efd; /* Biru utama - Total Saldo */
-    --color-primary-light: #e7f1ff;
+/* === MOBILE-ONLY CANVAS, BACKGROUND 1080x1920 (9:16) === */
+:root{ --frame-radius:24px; }
 
-    /* Success - Pemasukan */
-    --color-income: #198754; /* Hijau - Pendapatan */
-    --color-income-light: #d1e7dd;
+*{ box-sizing:border-box; }
+html,body{ margin:0; height:100%; }
 
-    /* Danger - Pengeluaran */
-    --color-expense: #dc3545; /* Merah - Pengeluaran */
-    --color-expense-light: #f8d7da;
-
-    /* Warning - Laba / Laba Rugi */
-    --color-profit: #ffc107; /* Kuning - Laba */
-    --color-profit-light: #fff3cd;
-
-    /* Secondary / Rugi / Netral */
-    --color-neutral: #6c757d; /* Abu - Rugi / info umum */
-    --color-neutral-light: #f1f3f5;
-
-    /* Info / Tambahan */
-    --color-info: #0dcaf0;
-    --color-info-light: #cff4fc;
-
-    /* Background & Text Base */
-    --color-background: #f8f9fa;
-    --color-text: #212529;
+/* Frame desktop (hanya untuk preview mobile) */
+.ps-root{
+  min-height:100dvh;
+  display:grid;
+  place-items:center;
+  background:#FFFFFF;
 }
 
-html {
-    scroll-behavior: smooth;
+/* Kanvas ponsel */
+.ps-home{
+  position:relative;
+  height:100dvh;                                      /* selalu setinggi layar */
+  width:min(100vw, calc(100dvh * 0.5625));            /* 9:16 -> 1080x1920 */
+  margin:0 auto;
+  overflow:hidden;
+  background-image:url('/images/bg-with-product.png');
+  background-repeat:no-repeat;
+  background-position:center center;
+  background-size:cover;
+  box-shadow:0 10px 40px rgba(0,0,0,.35);
 }
 
-body {
-    background-color: #F1F5FB;
-   /* background-color: #F8FAFB;*/
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+.ps-phone{
+  position:relative;
+  height:100dvh;                                      /* selalu setinggi layar */
+  width:min(100vw, calc(100dvh * 0.5625));            /* 9:16 -> 1080x1920 */
+  margin:0 auto;
+  overflow:hidden;
+  background-image:url('/images/bg-app.png');
+  background-repeat:no-repeat;
+  background-position:center center;
+  background-size:cover;
+  box-shadow:0 10px 40px rgba(0,0,0,.35);
 }
 
-.table th{
-    color:#444444;
-    text-transform: uppercase;
-    font-size: 14px;
-    font-weight: 700;
-   
+.ps-red{
+  position:relative;
+  height:100dvh;                                      /* selalu setinggi layar */
+  width:min(100vw, calc(100dvh * 0.5625));            /* 9:16 -> 1080x1920 */
+  margin:0 auto;
+  overflow:hidden;
+  background-image:url('/images/red-bg.png');
+  background-repeat:no-repeat;
+  background-position:center center;
+  background-size:cover;
+  box-shadow:0 10px 40px rgba(0,0,0,.35);
 }
+
+.movie-frame{
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 0;
+    width: 95%;
+    background-color: #FABA10;
+    border-top-left-radius: 40px;
+    border-top-right-radius: 40px;
+    padding:15px;
+
+    /* tipis: kurangi offset, blur, dan opacity */
+    filter:
+      drop-shadow(-8px 0 16px rgba(0,0,0,0.18))
+      drop-shadow( 8px 0 16px rgba(0,0,0,0.18));
+  }
 
 
 
-
-.card-income {
-    background-color: var(--color-income);
-    color: white;
-}
-.card-expense {
-    background-color: var(--color-expense);
-    color: white;
-}
-.card-profit {
-    background-color: var(--color-profit);
-    color: white;
-}
-.card-total {
-    background-color: var(--color-primary);
-    color: white;
+/* Layer 2 (ornamen) */
+.ps-ornament{
+  position:absolute; inset:0;
+  background-image:url('/images/home-ornament.png');
+  background-repeat:no-repeat;
+  background-position:top center;
+  top: 10%;
+  background-size:95%;
+  pointer-events:none;
+  z-index:1;
 }
 
-#header {
-    background-color: #FFFFFF;
-   
-    text-transform: uppercase;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+.ps-loading {
+  position: fixed;
+  inset: 0;
+  background: #fff;
+  border-top: 6px solid #FFE100;  /* garis kuning di atas */
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  transition: opacity .35s ease, visibility .35s ease;
+  opacity: 1;
+  visibility: visible;
+}
+.ps-loading.is-hidden{
+  opacity: 0;
+  visibility: hidden;
+}
+/* Spinner kecil (opsional) */
+.ps-loading .spinner {
+  width: 40px; height: 40px;
+  border: 3px solid #f0f0f0;
+  border-top-color: #111;
+  border-radius: 50%;
+  animation: ps-spin 1s linear infinite;
+  margin-top: 10px;
+}
+@keyframes ps-spin { to { transform: rotate(360deg); } }
+
+/* ==== Duo Logo Atas ==== */
+.ps-logos{
+  padding-top: 20px;
+  padding-right: 20px;
+  padding-left: 20px;
+  z-index:3;
 }
 
-.page-section {
-    padding-top: 180px;
+.nongshim{ height:25px; }
+.halal{ width:35px; }
+
+/* (Opsional) Title atas tetap seperti semula */
+.ps-title{
+  width:100%;
+  z-index:3;
+  text-align:center;
 }
 
-.page-section p {
-    font-size: 15px;
+.frame-2-title{
+    width:300px;
 }
+.ps-app-title{ width:200px; }
 
-.page-section ul li {
-    font-size: 15px;
-}
-
-/* css */
-
-/* navbar state */
-.navbar.is-solid {
-    background: #000 !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-.navbar.is-transparent {
-    background: transparent !important;
-    border-bottom: none !important;
-}
-
-/* lock solid untuk non-/kol supaya nggak berubah saat scroll */
-.navbar.is-locked-solid {
-    background: #000 !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-}
-
-.invoice-header-border {
-    border-bottom: 3px solid #000000;
-    margin-top: 10px;
-    margin-bottom: 20px;
-}
-
-.navbar {
-    background-color: #FFFFFF;
-}
-
-.navbar-expand-lg .navbar-nav .nav-link {
-    font-size: 14px;
-    color: #000000;
-}
-
-.dropdown-item {
-    font-size: 14px;
-}
-
-#header.app-header .navbar-brand {
-    height: 100px;
+.ps-header{
     display: flex;
+    flex-direction: column;
     align-items: center;
+    position: relative;
+}
+
+/* ======== PUSAT KONTEN (SELALU DI TENGAH VERTIKAL) ======== */
+.ps-center{
+  
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;              /* <-- inilah yang bikin vertikal center */
+  gap: min(3vh, 5px);                 /* jarak antar elemen responsif */                          /* di atas ornament */
+  text-align:center;
+  margin-top: 20px;
+}
+
+/* Buang ABSOLUTE + TOP dari elemen-elemen ini */
+/* dan jadikan ukuran responsif agar tidak lari */
+.ps-campaign-title img{
+  width: clamp(180px, 60%, 300px);
+  height:auto;
+}
+.ps-cta img{
+  width: clamp(180px, 90%, 350px);
+  height:auto;
+}
+.ps-start img{
+  width: clamp(100px, 28%, 160px);
+  height:auto;
+}
+.ps-products img{
+  width: clamp(220px, 100%, 380px);
+  height:auto;
+}
+
+/* Badge / mark kanan bawah tetap absolute */
+.ps-mark{
+  position:absolute;
+  left:0; right:0;
+  bottom:0;
+  z-index:3;
+}
+
+.ps-mark .left{
+  position:absolute;
+  left:20px;
+  bottom:15px;
+  
+  gap: 10px;
+}
+
+.ps-mark .right{
+  position:absolute;
+  right:20px;
+  bottom:15px;
+  
+  gap: 10px;
+}
+
+
+.ps-start-banner{
+    padding: 15px;
+    width: 100%;
+}
+
+.ps-next{
+    width: 100px;
+}
+
+.ps-registration{
+    background-color: #FABA10;
+    padding: 15px;
+    width: 95%;
+    border: 6px solid #6A0400;
+}
+
+/* ===== Registration form ===== */
+.ps-registration{
+  width: 95%;
+  padding: 12px 16px;
+  position: relative;
+  z-index: 3; /* di atas ornament */
+}
+
+/* Grid dua kolom (otomatis turun jadi 1 kolom kalau layar sempit) */
+.ps-form-row{
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* Kotak merah */
+.ps-field{
+  background: #E53935;              /* merah */
+  border-radius: 14px;
+  padding: 10px 12px;
+  color: #fff;
+  /*box-shadow: 0 4px 0 rgba(122, 0, 0, .25);*/
+  border: 2px solid rgba(90, 0, 0, .25);
+}
+
+/* Field full width (umur) */
+.ps-field--full{
+  margin-top: 12px;
+}
+
+/* Outline putih bagian dalam (sesuai contoh umur) */
+.ps-field--outline{
+  box-shadow:
+    inset 0 0 0 3px #fff;      /* bayangan bawah */
+}
+
+/* Label di atas input */
+.ps-field > label{
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  color: #ffd6d6;
+  margin-bottom: 4px;
+}
+
+/* Input & select transparan (tulisan putih) */
+.ps-field input,
+.ps-field select{
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.2;
+  padding: 2px 0;
+  appearance: none;                 /* reset default select */
 }
 
 
 
-.logo {
+/* Placeholder warna muda */
+.ps-field input::placeholder{
+  color: #B20103;
+  opacity: .85;
+  font-weight: 500;
+}
+
+/* Dropdown caret custom sederhana (SVG putih) */
+.ps-field select{
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='white'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.25rem center;
+  padding-right: 26px;
+}
+
+/* Warna teks di kotak select (closed state) */
+.ps-field select{
+  color:#B20103 !important;        
+  border-radius:10px;
+  padding:8px 28px 8px 12px;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24' fill='%23222'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat:no-repeat;
+  background-position:right .25rem center;
+}
+
+/* Warna teks saat dropdown terbuka (list options) */
+.ps-field select option{
+  color:#B20103 !important;          /* pastikan tidak putih */
+  background:#fff;
+}
+
+/* Placeholder (opsi disabled) tampak abu-abu sampai user pilih) */
+.ps-field select:invalid { color:#9aa0a6; }
+.ps-field select option[disabled] { color:#9aa0a6; }
+
+
+/* Gaya teks ‘badge’ untuk umur: kuning + outline cokelat */
+
+
+/* ===== Submit button ===== */
+.ps-submit{
+  margin-top: 16px;
+  text-align: center;
+}
+
+.ps-btn-submit{
+  width: 100%;
+  background: #E53935;             /* merah khas Nongshim */
+  border: 3px solid #ffffff;
+  border-radius: 14px;
+  color: #ffe066;                  /* kuning */
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: .5px;
+  padding: 10px 0;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all .15s ease-in-out;
+
+  -webkit-text-stroke: 1px #5b1b00;
+  text-shadow:
+    1px 0 #5b1b00, -1px 0 #5b1b00,
+    0 1px #5b1b00,  0 -1px #5b1b00,
+    1px 1px #5b1b00, -1px -1px #5b1b00,
+    -1px 1px #5b1b00, 1px -1px #5b1b00;
+}
+
+/* Efek hover / tap */
+.ps-btn-submit:active{
+  background: #c62828;
+  transform: translateY(2px);
+  box-shadow: 0 3px 0 rgba(90,0,0,.25) inset;
+}
+
+
+/* Responsif: kalau ruang sempit, susun 1 kolom */
+@media (max-width: 380px){
+  .ps-form-row{
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Dark text caret terlihat di background merah */
+.ps-field input, .ps-field select{
+  caret-color: #fff;
+}
+
+
+
+.ps-footer{
+ width: 100%; 
+}
+
+.ps-footer img{
     width: 300px;
 }
 
-#app .breadcrumb {
-    list-style: none;
-}
+/* Real phones (hilangkan frame) */
+@media (max-width:480px){
+  .ps-root{ background:#000; }
+  .ps-phone{
+    width:100vw;
+    height:100dvh;
+    box-shadow:none;
+  }
+  .ps-title{ top:100px; } /* sedikit turun di device kecil */
 
-#app .breadcrumb .breadcrumb-item a {
-    color: #6b8d21;
-    text-decoration: none;
-}
+  .ps-center{
 
-.fixed-top.app-header {
-    background-color: #ffffff;
-}
-
-.step-icon {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background-color: #f8f9fa;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2rem;
-    margin-bottom: 1rem;
-}
-.step-card {
-    height: 100%;
-    transition: all 0.3s ease;
-}
-.step-card:hover {
-    transform: translateY(-10px);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
-}
-
-.login-input {
-    padding: 11px;
-    width: 320px;
-}
-
-.dashboard-card{
-    background-color: #FFFFFF;
-    border-radius: 5px;
-    
-    padding: 10px;
-    margin-bottom: 10px;
-    cursor: pointer
-}
-
-.dashboard-card.brand{
-    border-top: 1px solid #5C34B9;
-    border-right: 1px solid #5C34B9;
-    border-left: 1px solid #5C34B9;
-    border-bottom: 5px solid #5C34B9;
-    color: #5C34B9;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-
-.dashboard-card.campaign{
-    border-top: 1px solid #FFA914;
-    border-right: 1px solid #FFA914;
-    border-left: 1px solid #FFA914;
-    border-bottom: 5px solid #FFA914;
-    color: #FFA914;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-
-.dashboard-card.registration{
-    border-top: 1px solid #09A8A4;
-    border-right: 1px solid #09A8A4;
-    border-left: 1px solid #09A8A4;
-    border-bottom: 5px solid #09A8A4;
-    color: #09A8A4;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-
-.dashboard-card.content{
-    border-top: 1px solid #D2548D;
-    border-right: 1px solid #D2548D;
-    border-left: 1px solid #D2548D;
-    border-bottom: 5px solid #D2548D;
-    color: #D2548D;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-
-.campaign-posts{
-    background-color: #FFFFFF;
-    border-radius: 5px;
-    
-    padding: 10px;
-    margin-bottom: 10px;
-    cursor: pointer;
-    border-top: 1px solid #3D7EB6;
-    border-right: 1px solid #3D7EB6;
-    border-left: 1px solid #3D7EB6;
-    border-bottom: 5px solid #3D7EB6;
-    color: #3D7EB6;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-}
-
-h6{
-    color:#444444;
-}
-
-.fs-12{
-    font-size: 12px;
-    color:#444444;
-}
-
-.is-draft-locked {
-  background-color: #f8f9fa;
-  cursor: not-allowed;
-}
-
-.bg-profile{
-    background-color: #F1F5FB;
+    margin-top: 70px;
+    }
 }
