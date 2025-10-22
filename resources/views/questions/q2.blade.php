@@ -216,7 +216,7 @@
           <div class="movie-frame__inner">
             <div class="poll-wrap">
               <div class="mt-3 mb-3">
-                <img src="/images/q-1-title.png" alt="Nongshim" style="width:200px;">
+                <img src="/images/q-2-title.png" alt="Nongshim" style="width:200px;">
               </div>
 
               <!-- info halaman -->
