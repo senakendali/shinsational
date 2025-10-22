@@ -172,17 +172,20 @@
       </div>
 
       <div class="tools">
+        <a href="{{ url('/') }}">
+          <img src="images/home.png" alt="" style="width:70px;">
+        </a>
         <button id="btnRetake" class="d-none" style="background:none; border:none;">
-          <img src="images/retake.png" alt="" style="width:100px;">
+          <img src="images/retake.png" alt="" style="width:70px;">
         </button>
 
         <a id="btnDownload" class="d-none" download="pedasnya-shinsational-story.png" role="button">
-          <img src="images/download.png" alt="" style="width:100px;">
+          <img src="images/download.png" alt="" style="width:70px;">
         </a>
       </div>
 
       <!-- Status simpan -->
-      <div id="saveBadge" class="save-badge">Menyimpan…</div>
+      <div id="saveBadge" class="save-badge d-none">Menyimpan…</div>
 
       <!-- Error -->
       <div id="errBox" class="alert alert-danger err d-none" role="alert"></div>
@@ -396,10 +399,10 @@
         // === Kirim ke server (majority + counts + image opsional) ===
         if(isSaving) return;
         isSaving = true;
-        setSaveBadge('saving','Menyimpan…');
+        //setSaveBadge('saving','Menyimpan…');
         try{
           const saved = await sendResultToServer(compositeURL); // kirim image; kalau tak perlu: null
-          setSaveBadge('saved','Tersimpan');
+          //setSaveBadge('saved','Tersimpan');
 
           // Tampilkan hasil dari server biar konsisten
           if(saved && saved.result){
@@ -408,7 +411,7 @@
           }
         }catch(e){
           console.error(e);
-          setSaveBadge('failed', e.message || 'Gagal menyimpan');
+          //setSaveBadge('failed', e.message || 'Gagal menyimpan');
           showErr(e.message || 'Gagal menyimpan result. Coba lagi.');
         }finally{
           isSaving = false;
