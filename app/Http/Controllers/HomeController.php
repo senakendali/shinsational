@@ -163,84 +163,178 @@ class HomeController extends Controller
     }
 
     public function storeResult(Request $request)
-{
-    $regId = $request->session()->get('reg_id');
-    if (! $regId) {
-        return response()->json(['ok'=>false,'message'=>'Session habis. Registrasi dulu ya.'], 419);
-    }
+    {
+        $regId = $request->session()->get('reg_id');
+        if (! $regId) {
+            return response()->json(['ok'=>false,'message'=>'Session habis. Registrasi dulu ya.'], 419);
+        }
 
-    // Frontend kirim majority &/atau counts. Image opsional (dataURL PNG).
-    $data = $request->validate([
-        'majority'   => ['nullable','in:A,B,C,D'],     // pemenang langsung dari FE (opsional)
-        'counts'     => ['nullable','array'],          // {A: int, B: int, C: int, D: int}
-        'counts.A'   => ['nullable','integer','min:0'],
-        'counts.B'   => ['nullable','integer','min:0'],
-        'counts.C'   => ['nullable','integer','min:0'],
-        'counts.D'   => ['nullable','integer','min:0'],
-        'image'      => ['nullable','string'],         // data:image/png;base64,...
-    ]);
+        // Frontend kirim majority &/atau counts. Image opsional (dataURL PNG/JPEG).
+        $data = $request->validate([
+            'majority'   => ['nullable','in:A,B,C,D'],
+            'counts'     => ['nullable','array'],
+            'counts.A'   => ['nullable','integer','min:0'],
+            'counts.B'   => ['nullable','integer','min:0'],
+            'counts.C'   => ['nullable','integer','min:0'],
+            'counts.D'   => ['nullable','integer','min:0'],
+            'image'      => ['nullable','string'], // data:image/png;base64,... | data:image/jpeg;base64,...
+        ]);
 
-    // Minimal harus ada majority ATAU counts
-    if (empty($data['majority']) && empty($data['counts'])) {
+        if (empty($data['majority']) && empty($data['counts'])) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Tidak ada data result. Kirim majority (A/B/C/D) atau counts.',
+            ], 422);
+        }
+
+        $counts = [
+            'A' => (int)($data['counts']['A'] ?? 0),
+            'B' => (int)($data['counts']['B'] ?? 0),
+            'C' => (int)($data['counts']['C'] ?? 0),
+            'D' => (int)($data['counts']['D'] ?? 0),
+        ];
+
+        $winner = $data['majority'] ?? (function($c){
+            $order = ['A','B','C','D'];
+            $max = max($c);
+            foreach ($order as $opt) if (($c[$opt] ?? 0) === $max) return $opt;
+            return 'A';
+        })($counts);
+
+        // ====== Simpan image (opsional) — kompres agar <= 2 MB ======
+        $imagePath = null;
+        if (!empty($data['image']) && preg_match('/^data:image\/(png|jpeg);base64,/', $data['image'], $m)) {
+            $binary = base64_decode(substr($data['image'], strpos($data['image'], ',') + 1), true);
+            if ($binary === false) {
+                return response()->json(['ok'=>false,'message'=>'Format gambar tidak valid.'], 422);
+            }
+
+            // Kompres ke <= 2MB (prefer JPEG)
+            [$compressedBytes, $ext] = $this->compressImageToUnder2MB($binary, $m[1] ?? 'png');
+
+            if ($compressedBytes === null) {
+                return response()->json(['ok'=>false,'message'=>'Gagal memproses gambar.'], 422);
+            }
+
+            $filename = 'results/'.$regId.'-'.now()->format('Ymd_His').'.'.$ext; // .jpg
+            Storage::disk('public')->put($filename, $compressedBytes);
+            $imagePath = 'storage/'.$filename;
+        }
+
+        // Langsung masukin ke tabel registrations
+        DB::table('registrations')->where('id', $regId)->update([
+            'result_option' => $winner,
+            'result_counts' => json_encode($counts),
+            'result_image'  => $imagePath,   // bisa null kalau gak kirim gambar
+            'updated_at'    => now(),
+        ]);
+
         return response()->json([
-            'ok' => false,
-            'message' => 'Tidak ada data result. Kirim majority (A/B/C/D) atau counts.',
-        ], 422);
+            'ok'      => true,
+            'result'  => $winner,
+            'counts'  => $counts,
+            'image'   => $imagePath,
+            'message' => 'Result tersimpan.',
+        ]);
     }
 
-    // Normalisasi counts (default 0 biar aman)
-    $counts = [
-        'A' => (int)($data['counts']['A'] ?? 0),
-        'B' => (int)($data['counts']['B'] ?? 0),
-        'C' => (int)($data['counts']['C'] ?? 0),
-        'D' => (int)($data['counts']['D'] ?? 0),
-    ];
+    /**
+     * Kompres gambar ke <= 2MB.
+     * - Load dari binary (png/jpeg) dengan GD.
+     * - (Opsional) resize kalau di atas batas dimensi.
+     * - Encode ke JPEG dengan quality step-down sampai <= 2MB.
+     *
+     * @param string $binary  Raw image bytes
+     * @param string $formatHint 'png'|'jpeg'
+     * @return array{0:?string,1:?string} [bytes|null, ext|null]
+     */
+    private function compressImageToUnder2MB(string $binary, string $formatHint = 'png'): array
+    {
+        // Pastikan GD tersedia
+        if (!function_exists('imagecreatefromstring')) {
+            return [null, null];
+        }
 
-    // Tentukan winner:
-    // - kalau majority ada, pakai itu
-    // - kalau tidak, hitung dari counts (tie → pilih urutan A→B→C→D)
-    $winner = $data['majority'] ?? (function($c){
-        $order = ['A','B','C','D'];
-        $max = max($c);
-        foreach ($order as $opt) {
-            if (($c[$opt] ?? 0) === $max) return $opt;
+        $img = @imagecreatefromstring($binary);
+        if (!$img) {
+            return [null, null];
         }
-        return 'A';
-    })($counts);
 
-    // Simpan image (opsional)
-    $imagePath = null;
-    if (!empty($data['image']) && preg_match('/^data:image\/png;base64,/', $data['image'])) {
-        // Batas ukuran ~2.5MB (opsional)
-        $raw = substr($data['image'], strpos($data['image'], ',') + 1);
-        if (strlen($raw) > 3_300_000) { // ~2.5MB base64
-            return response()->json(['ok'=>false,'message'=>'Gambar terlalu besar (maks 2.5MB).'], 413);
+        // Dimensi asli
+        $origW = imagesx($img);
+        $origH = imagesy($img);
+
+        // Batas dimensi: karena hasil canvas kamu 1080x1920, kita jaga di sini
+        $maxW = 1080;
+        $maxH = 1920;
+
+        $w = $origW; $h = $origH;
+        $scale = min($maxW / $origW, $maxH / $origH, 1); // hanya kecilin (<=1)
+        if ($scale < 1) {
+            $w = (int)floor($origW * $scale);
+            $h = (int)floor($origH * $scale);
+
+            $resampled = imagecreatetruecolor($w, $h);
+            // Isi putih sebagai background (biar saat convert dari PNG transparan, background jadi putih)
+            $white = imagecolorallocate($resampled, 255, 255, 255);
+            imagefill($resampled, 0, 0, $white);
+
+            // Resample
+            imagecopyresampled($resampled, $img, 0, 0, 0, 0, $w, $h, $origW, $origH);
+            imagedestroy($img);
+            $img = $resampled;
         }
-        $binary = base64_decode($raw, true);
-        if ($binary === false) {
-            return response()->json(['ok'=>false,'message'=>'Format gambar tidak valid.'], 422);
+
+        // Encode ke JPEG dan turunkan quality sampai <= 2MB
+        $target = 2 * 1024 * 1024; // 2 MB
+        $quality = 85;             // start
+        $minQuality = 50;          // jangan terlalu ancur
+
+        // Helper untuk capture bytes dari imagejpeg()
+        $encode = function($im, $q): string {
+            ob_start();
+            imagejpeg($im, null, $q);
+            return tap(ob_get_clean(), function(){}); // return string bytes
+        };
+
+        $bytes = $encode($img, $quality);
+        while (strlen($bytes) > $target && $quality > $minQuality) {
+            $quality -= 5;
+            $bytes = $encode($img, $quality);
         }
-        $filename = 'results/'.$regId.'-'.now()->format('Ymd_His').'.png';
-        Storage::disk('public')->put($filename, $binary);
-        $imagePath = 'storage/'.$filename; // akses via public/storage
+
+        imagedestroy($img);
+
+        // Kalau masih >2MB walau quality 50, terakhir coba kecilin lagi dimensi 20% dan ulang
+        if (strlen($bytes) > $target) {
+            $tmp = imagecreatefromstring($bytes); // load kembali; kalau gagal ya sudah
+            if ($tmp) {
+                $w2 = (int)floor(imagesx($tmp) * 0.8);
+                $h2 = (int)floor(imagesy($tmp) * 0.8);
+                $res2 = imagecreatetruecolor($w2, $h2);
+                $white = imagecolorallocate($res2, 255, 255, 255);
+                imagefill($res2, 0, 0, $white);
+                imagecopyresampled($res2, $tmp, 0, 0, 0, 0, $w2, $h2, imagesx($tmp), imagesy($tmp));
+                imagedestroy($tmp);
+
+                // reset quality ke 85 untuk percobaan kedua
+                $quality = 85;
+                $bytes = $encode($res2, $quality);
+                while (strlen($bytes) > $target && $quality > $minQuality) {
+                    $quality -= 5;
+                    $bytes = $encode($res2, $quality);
+                }
+                imagedestroy($res2);
+            }
+        }
+
+        if (strlen($bytes) > $target) {
+            // masih kebesaran, gagal
+            return [null, null];
+        }
+
+        return [$bytes, 'jpg'];
     }
-
-    // Langsung masukin ke tabel registrations
-    DB::table('registrations')->where('id', $regId)->update([
-        'result_option' => $winner,
-        'result_counts' => json_encode($counts),
-        'result_image'  => $imagePath,   // bisa null kalau gak kirim gambar
-        'updated_at'    => now(),
-    ]);
-
-    return response()->json([
-        'ok'      => true,
-        'result'  => $winner,
-        'counts'  => $counts,
-        'image'   => $imagePath,
-        'message' => 'Result tersimpan.',
-    ]);
-}
 
 
 
