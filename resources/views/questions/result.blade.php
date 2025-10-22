@@ -22,26 +22,19 @@
     /* PERSIS area kamera 9:16 */
     .ps-result{
       position:relative;
-      height:100dvh;                                      /* full tinggi layar */
-      width:min(100vw, calc(100dvh * 0.5625));            /* 9:16 box di tengah */
+      height:100dvh;
+      width:min(100vw, calc(100dvh * 0.5625));
       margin:0 auto;
       overflow:hidden;
       box-shadow:0 10px 40px rgba(0,0,0,.35);
-      background:#000;                                    /* frame dipasang sebagai <img.frame> */
+      background:#000;
     }
 
-    /* Layering:
-       1) video (kamera)     z=1
-       2) overlay bidik      z=2
-       3) frame overlay      z=3
-       4) hasil komposit     z=4
-       5) tombol & label     z=5+
-    */
     .ps-result video{
       position:absolute; inset:0;
       width:100%; height:100%;
-      object-fit:cover;           /* full area tanpa letterbox */
-      transform:scaleX(-1);       /* mirror front camera */
+      object-fit:cover;
+      transform:scaleX(-1);
       z-index:1;
       background:#000;
     }
@@ -54,8 +47,6 @@
       content:"";
       width:min(82%, 760px);
       height:min(60%, 1000px);
-      
-      
     }
 
     .ps-result img.frame{
@@ -74,13 +65,12 @@
       z-index:4;
     }
 
-    /* Tombol di TENGAH VERTIKAL, sejajar, kecil, warna #FFE100 */
     .ctrls{
       position:absolute;
       top:50%; left:50%;
       transform:translate(-50%,-50%);
       display:flex; gap:10px; justify-content:center; align-items:center;
-      flex-wrap:nowrap;         /* sejajar satu baris */
+      flex-wrap:nowrap;
       z-index:5;
     }
     .btn-ps{
@@ -106,7 +96,6 @@
       .ctrls{ flex-wrap:wrap; row-gap:8px; }
     }
 
-    /* Label kecil (opsional) */
     .majority-label{
       position:absolute; top:12px; right:12px; z-index:6;
       background:#FFE100; color:#F91315; padding:6px 12px;
@@ -122,16 +111,34 @@
     }
 
     .tools{
-        position:absolute;
-        z-index: 99999;
-        bottom:10px;
-        left:10%;
+      position:absolute;
+      z-index:99999;
+      bottom:10px;
+      left:10%;
+      display:flex; align-items:center;
     }
 
     .err{
       position:absolute; left:50%; transform:translateX(-50%);
       top:14px; z-index:7; width:min(94%, 560px); padding:8px 12px
     }
+
+    /* Badge kecil status simpan */
+    .save-badge{
+      position:absolute;
+      bottom:16px;
+      right:16px;
+      z-index:7;
+      display:none;
+      padding:6px 10px;
+      border-radius:8px;
+      font-weight:700;
+      background:#111;
+      color:#fff;
+    }
+    .save-badge.saving{ background:#0d6efd; }   /* biru: proses */
+    .save-badge.saved{ background:#198754; }    /* hijau: sukses */
+    .save-badge.failed{ background:#dc3545; }   /* merah: gagal */
   </style>
 </head>
 <body>
@@ -150,34 +157,32 @@
       <img id="shot" class="result" alt="Hasil">
 
       <!-- Info kecil (opsional) -->
-      <div class="majority-label" id="majority">Memuat…</div>
+      <div class="majority-label d-none" id="majority">Memuat…</div>
       <div class="badge-wrap" id="counts"></div>
 
-      <!-- Kontrol: tengah vertikal, sejajar, kecil, #FFE100, pakai Bootstrap Icons -->
+      <!-- Kontrol -->
       <div class="ctrls">
-        <button id="btnCapture" style="background:none; border:none; ">
+        <button id="btnCapture" style="background:none; border:none;">
           <img src="images/capture.png" alt="" style="width:100px;">
         </button>
-        
+
         <button id="btnReset" class="btn btn-sm btn-ps d-none">
           <i class="bi bi-trash"></i> Reset
         </button>
-
-        <!-- Download: disembunyikan sampai selesai capture -->
-        
       </div>
-
 
       <div class="tools">
-            <button id="btnRetake" class="d-none" style="background:none; border:none; ">
-                <img src="images/retake.png" alt="" style="width:100px;">
-                </button>
+        <button id="btnRetake" class="d-none" style="background:none; border:none;">
+          <img src="images/retake.png" alt="" style="width:100px;">
+        </button>
 
-            <a id="btnDownload" class="d-none" download="pedasnya-shinsational-story.png" role="button">
-                <img src="images/download.png" alt="" style="width:100px;">
-                </a>
+        <a id="btnDownload" class="d-none" download="pedasnya-shinsational-story.png" role="button">
+          <img src="images/download.png" alt="" style="width:100px;">
+        </a>
       </div>
-      
+
+      <!-- Status simpan -->
+      <div id="saveBadge" class="save-badge">Menyimpan…</div>
 
       <!-- Error -->
       <div id="errBox" class="alert alert-danger err d-none" role="alert"></div>
@@ -189,9 +194,9 @@
       const QUIZ_KEY='ps-quiz-v1';
 
       // Elemen utama
-      const cam   = document.getElementById('cam');
-      const shot  = document.getElementById('shot');
-      const frameFg = document.getElementById('frameFg');
+      const cam        = document.getElementById('cam');
+      const shot       = document.getElementById('shot');
+      const frameFg    = document.getElementById('frameFg');
 
       const btnCapture = document.getElementById('btnCapture');
       const btnRetake  = document.getElementById('btnRetake');
@@ -201,10 +206,12 @@
 
       const majorityEl = document.getElementById('majority');
       const countsEl   = document.getElementById('counts');
+      const saveBadge  = document.getElementById('saveBadge');
 
       let mediaStream=null;
       let frameURL='/images/frame-og.png';
       let compositeURL='';
+      let isSaving=false;
 
       // ===== Majority dari localStorage -> pilih frame =====
       function loadAns(){ try{ return JSON.parse(localStorage.getItem(QUIZ_KEY)) || {}; }catch(_){ return {}; } }
@@ -219,7 +226,6 @@
         return {counts,max,modes};
       }
       function frameBy(opt){
-        // file 1080x1920
         switch(opt){
           case 'A': return '/images/frame-og.png';
           case 'B': return '/images/frame-spicy.png';
@@ -228,11 +234,26 @@
           default:  return '/images/frame-og.png';
         }
       }
+      function getResultPayload(){
+        const data = loadAns(); // {q1:'A', ...}
+        const { counts, max, modes } = summarize(data);
+        const order = ['A','B','C','D'];
+        let winner = order[0];
+        if (modes && modes.length) {
+          for (const o of order) { if (modes.includes(o)) { winner = o; break; } }
+        }
+        const safeCounts = {
+          A: counts?.A || 0,
+          B: counts?.B || 0,
+          C: counts?.C || 0,
+          D: counts?.D || 0,
+        };
+        return { majority: winner, counts: safeCounts };
+      }
       function applyFrame(){
         const data=loadAns();
         const {counts,max,modes}=summarize(data);
 
-        // label majority (opsional)
         if(!Object.keys(data).length || max===0 || modes.length===0){
           majorityEl.textContent='Belum ada jawaban';
         }else if(modes.length===1){
@@ -241,7 +262,6 @@
           majorityEl.textContent='Imbang: '+modes.join(' & ');
         }
 
-        // badge mini (opsional)
         countsEl.innerHTML='';
         ['A','B','C','D'].forEach(opt=>{
           const el=document.createElement('span');
@@ -250,10 +270,9 @@
           countsEl.appendChild(el);
         });
 
-        // pilih frame
-        const winner=modes[0]||'A';
+        const winner=(modes && modes.length? modes[0] : 'A');
         frameURL=frameBy(winner);
-        frameFg.src=frameURL;                // frame overlay tetap di atas kamera
+        frameFg.src=frameURL;
         frameFg.style.display='block';
       }
 
@@ -264,12 +283,10 @@
           cam.srcObject = mediaStream;
           cam.classList.remove('d-none');
 
-          // state tombol
           shot.style.display='none';
           compositeURL='';
           btnCapture.disabled=false;
-          //btnRetake.disabled=true;
-          btnDownload.classList.add('d-none');   // download disembunyiin
+          btnDownload.classList.add('d-none');
           hideErr();
         }catch(e){
           showErr('Gagal akses kamera. Gunakan HTTPS (kecuali localhost) atau izinkan kamera di browser.');
@@ -285,12 +302,52 @@
       function hideErr(){ errBox.classList.add('d-none'); }
       function loadImage(src){
         return new Promise((res,rej)=>{
-          const img=new Image(); img.crossOrigin='anonymous';
-          img.onload=()=>res(img); img.onerror=rej; img.src=src;
+          const img=new Image();
+          try {
+            const u = new URL(src, window.location.origin);
+            if (u.origin !== window.location.origin) img.crossOrigin='anonymous';
+          } catch(_){}
+          img.onload=()=>res(img);
+          img.onerror=()=>rej(new Error('Gagal load frame: '+src));
+          img.src=src;
         });
       }
+      function setSaveBadge(state, text){
+        // state: 'saving' | 'saved' | 'failed' | 'hide'
+        saveBadge.classList.remove('saving','saved','failed');
+        if(state==='hide'){ saveBadge.style.display='none'; return; }
+        saveBadge.textContent = text || (state==='saving' ? 'Menyimpan…' : state==='saved' ? 'Tersimpan' : 'Gagal menyimpan');
+        saveBadge.classList.add(state);
+        saveBadge.style.display='inline-block';
+      }
 
-      // ===== Capture: komposit 1080x1920 -> tampilkan =====
+      // ===== API: kirim result ke server (majority + counts + image opsional) =====
+      async function sendResultToServer(imageDataUrl){
+        const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const { majority, counts } = getResultPayload();
+
+        const res = await fetch('{{ route('api.result') }}', {
+          method: 'POST',
+          headers: {
+            'X-CSRF-TOKEN': token,
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            majority,
+            counts,
+            image: imageDataUrl || null
+          })
+        });
+
+        const json = await res.json().catch(()=>({ ok:false, message:'Respon tidak valid' }));
+        if(!res.ok || !json.ok){
+          throw new Error(json.message || 'Gagal simpan result');
+        }
+        return json; // {ok:true, result, counts, image}
+      }
+
+      // ===== Capture: komposit 1080x1920 -> tampilkan + KIRIM KE SERVER =====
       async function capture(){
         const W=1080, H=1920; // IG Story
         const vw=cam.videoWidth, vh=cam.videoHeight;
@@ -300,7 +357,6 @@
         canvas.width=W; canvas.height=H;
         const ctx=canvas.getContext('2d');
 
-        // cover fit + mirror (sesuai preview)
         const scale=Math.max(W/vw, H/vh);
         const dw=vw*scale, dh=vh*scale;
         const dx=(W-dw)/2, dy=(H-dh)/2;
@@ -311,24 +367,55 @@
         ctx.drawImage(cam, dx, dy, dw, dh);
         ctx.restore();
 
-        // frame di atas
-        const frame=await loadImage(frameURL);
-        ctx.drawImage(frame, 0, 0, W, H);
+        // frame di atas (kalau gagal tetap lanjut)
+        try {
+          const frame=await loadImage(frameURL);
+          ctx.drawImage(frame, 0, 0, W, H);
+        } catch(e) {
+          console.warn('[frame] gagal load:', e?.message || e);
+        }
 
-        // tampilkan hasil & siap download
-        compositeURL=canvas.toDataURL('image/png');
-        shot.src=compositeURL;
-        shot.style.display='block';
+        // preview untuk user (server tetap bisa tanpa image kalau mau)
+        try{
+          compositeURL=canvas.toDataURL('image/png');
+          shot.src=compositeURL;
+          shot.style.display='block';
+          cam.classList.add('d-none');
+          frameFg.style.display='none';
 
-        cam.classList.add('d-none');   // sembunyikan live
-        frameFg.style.display='none';  // karena hasil sudah include frame
-
-        btnRetake.classList.remove('d-none');
-        btnDownload.href=compositeURL;
-        btnDownload.classList.remove('d-none');  // tampilkan 
-        btnCapture.classList.add('d-none'); 
+          btnRetake.classList.remove('d-none');
+          btnDownload.href=compositeURL;
+          btnDownload.classList.remove('d-none');
+          btnCapture.classList.add('d-none');
+        }catch(te){
+          console.warn('toDataURL gagal, tapi tetap lanjut kirim majority+counts:', te);
+        }
 
         stopCam();
+
+        // === Kirim ke server (majority + counts + image opsional) ===
+        if(isSaving) return;
+        isSaving = true;
+        setSaveBadge('saving','Menyimpan…');
+        try{
+          const saved = await sendResultToServer(compositeURL); // kirim image; kalau tak perlu: null
+          setSaveBadge('saved','Tersimpan');
+
+          // Tampilkan hasil dari server biar konsisten
+          if(saved && saved.result){
+            majorityEl.style.display='block';
+            majorityEl.textContent = 'Winner (server): ' + saved.result;
+          }
+        }catch(e){
+          console.error(e);
+          setSaveBadge('failed', e.message || 'Gagal menyimpan');
+          showErr(e.message || 'Gagal menyimpan result. Coba lagi.');
+        }finally{
+          isSaving = false;
+          if(saveBadge.classList.contains('saved')){
+            setTimeout(()=>setSaveBadge('hide'), 2500);
+          }
+        }
       }
 
       // ===== Events =====
@@ -336,10 +423,11 @@
       btnRetake.addEventListener('click', ()=>{
         shot.style.display='none';
         cam.classList.remove('d-none');
-        frameFg.style.display='block';         // frame overlay muncul lagi
-        btnDownload.classList.add('d-none');   // sembunyikan download lagi
+        frameFg.style.display='block';
+        btnDownload.classList.add('d-none');
         btnRetake.classList.add('d-none');
-        btnCapture.classList.remove('d-none'); 
+        btnCapture.classList.remove('d-none');
+        setSaveBadge('hide');
         startCam();
       });
       btnReset.addEventListener('click', ()=>{
@@ -348,8 +436,8 @@
       });
 
       // ===== Init =====
-      applyFrame();   // pilih frame dari majority A/B/C/D
-      startCam();     // langsung buka kamera
+      applyFrame();
+      startCam();
       window.addEventListener('pagehide', stopCam);
       window.addEventListener('beforeunload', stopCam);
     })();

@@ -15,3 +15,5 @@ Route::get('/result', [HomeController::class, 'result'])->name('result');
 
 Route::get('/registration', [HomeController::class, 'register'])->name('registration');
 Route::post('/api/registration', [HomeController::class, 'submitDataParticipant'])->name('api.registration');
+
+Route::post('/api/result', [HomeController::class, 'storeResult'])->name('api.result');
