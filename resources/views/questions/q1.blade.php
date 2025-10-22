@@ -227,16 +227,16 @@
               <!-- 2x2 gambar (teks ada di gambar) -->
               <div class="poll-grid" id="grid">
                 <button type="button" class="opt" data-value="A" aria-label="A">
-                  <img src="/images/q-{{ $number ?? 1 }}-a.png" alt="A">
+                  <img src="/images/q-{{ $number ?? 1 }}-a.png?v={{ time() }}" alt="A">
                 </button>
                 <button type="button" class="opt" data-value="B" aria-label="B">
-                  <img src="/images/q-{{ $number ?? 1 }}-b.png" alt="B">
+                  <img src="/images/q-{{ $number ?? 1 }}-b.png?v={{ time() }}" alt="B">
                 </button>
                 <button type="button" class="opt" data-value="C" aria-label="C">
-                  <img src="/images/q-{{ $number ?? 1 }}-c.png" alt="C">
+                  <img src="/images/q-{{ $number ?? 1 }}-c.png?v={{ time() }}" alt="C">
                 </button>
                 <button type="button" class="opt" data-value="D" aria-label="D">
-                  <img src="/images/q-{{ $number ?? 1 }}-d.png" alt="D">
+                  <img src="/images/q-{{ $number ?? 1 }}-d.png?v={{ time() }}" alt="D">
                 </button>
               </div>
             </div>
